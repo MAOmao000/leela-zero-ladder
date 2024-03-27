@@ -1,3 +1,10 @@
+# Leela Zero with ladder protection
+This is a new Leela Zero with ladder protection to fork Leela Zero.
+It also supports converted weights in MiniGo v17.
+We use some of the Ray sources below to detect ladders.
+https://github.com/kobanium/Ray
+The following is the readme for the original Leela Zero.
+
 [![Linux Build Status](https://travis-ci.org/leela-zero/leela-zero.svg?branch=next)](https://travis-ci.org/leela-zero/leela-zero)
 [![Windows Build Status](https://ci.appveyor.com/api/projects/status/dcvp31x1e0yavrtf/branch/next?svg=true)](https://ci.appveyor.com/project/gcp/leela-zero-8arv1/branch/next)
 

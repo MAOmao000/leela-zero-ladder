@@ -50,6 +50,11 @@
 #include "Network.h"
 #include "Utils.h"
 
+#ifdef USE_LADDER
+#include "GoBoard.h"
+#include "Ladder.h"
+#endif
+
 using namespace Utils;
 
 UCTNode::UCTNode(const int vertex, const float policy)
@@ -60,7 +65,7 @@ bool UCTNode::first_visit() const {
 }
 
 bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
-                              const GameState& state, float& eval,
+                              const GameState& state, float& eval, const bool is_root,
                               const float min_psa_ratio) {
     // no successors in final state
     if (state.get_passes() >= 2) {
@@ -77,6 +82,26 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         expand_done();
         return false;
     }
+
+#ifdef USE_LADDER
+    char ladder[BOARD_MAX] = {};
+    if ((cfg_ladder_defense || cfg_ladder_attack) && cfg_ladder_check) {
+        game_info_t *game = AllocateGame();
+        InitializeBoard(game);
+        for (int row = 0; row < 19; ++row) {
+            for (int col = 0; col < 19; ++col) {
+                auto vertex = state.board.get_vertex(col, row);
+                auto stone = state.board.get_state(vertex);
+                if (stone < 2)
+                {
+                    PutStone(game, POS(col + BOARD_START, row + BOARD_START), stone ? S_WHITE : S_BLACK);
+                }
+            }
+        }
+        LadderExtension(game, state.board.black_to_move() ? S_BLACK : S_WHITE, ladder);
+        FreeGame(game);
+    }
+#endif
 
     NNCache::Netresult raw_netlist;
     try {
@@ -105,10 +130,24 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
+
+#ifdef USE_LADDER
+        auto xy = state.board.get_xy(vertex);
+        if (state.is_move_legal(to_move, vertex)) {
+            if (ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)] == LADDER_LIKE) {
+                nodelist.emplace_back(raw_netlist.policy[i] * 0.1f, vertex);
+                legal_sum += raw_netlist.policy[i] * 0.01f;
+            } else if (ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)] != LADDER){
+                nodelist.emplace_back(raw_netlist.policy[i], vertex);
+                legal_sum += raw_netlist.policy[i];
+            }
+        }
+#else
         if (state.is_move_legal(to_move, vertex)) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
+#endif
     }
 
     // Always try passes if we're not trying to be clever.
@@ -317,7 +356,6 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             }
         }
     }
-
     const auto numerator = std::sqrt(
         double(parentvisits)
         * std::log(cfg_logpuct * double(parentvisits) + cfg_logconst));
@@ -344,9 +382,81 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        const auto psa = child.get_policy();
-        const auto denom = 1.0 + child.get_visits();
+        auto stdev = static_cast<float>(0.25f);
+        if (child.get_visits() > 1) {
+            stdev = std::sqrt(child.get_eval_variance(0.25f));
+        }
+        // maximum stdev is 0.5 so double it to get something of
+        // order 1; still this term will increase the relative
+        // weight of winrate, so also consider increasing cfg_puct
+        const auto psa = child.get_policy() * 2.0f * stdev;
+        const auto denom = 1.0f + child.get_visits();
         const auto puct = cfg_puct * psa * (numerator / denom);
+        const auto value = winrate + puct;
+        assert(value > std::numeric_limits<double>::lowest());
+
+        if (value > best_value) {
+            best_value = value;
+            best = &child;
+        }
+    }
+
+    assert(best != nullptr);
+    best->inflate();
+    return best->get();
+}
+
+// See https://github.com/tensorflow/minigo/blob/master/mcts.py
+UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
+    wait_expanded();
+
+    // Count parentvisits manually to avoid issues with transpositions.
+    auto total_visited_policy = 0.0f;
+    auto parentvisits = size_t{0};
+    for (const auto& child : m_children) {
+        if (child.valid()) {
+            parentvisits += child.get_visits();
+            if (child.get_visits() > 0) {
+                total_visited_policy += child.get_policy();
+            }
+        }
+    }
+    const auto numerator = std::sqrt(double(parentvisits));
+    const auto fpu_reduction =
+        (is_root ? cfg_fpu_root_reduction : cfg_fpu_reduction)
+        * std::sqrt(total_visited_policy);
+    // Estimated eval for unknown nodes = parent (not NN) eval - reduction
+    const auto fpu_eval = get_raw_eval(color) - fpu_reduction;
+
+    auto best = static_cast<UCTNodePointer*>(nullptr);
+    auto best_value = std::numeric_limits<double>::lowest();
+
+    for (auto& child : m_children) {
+        if (!child.active()) {
+            continue;
+        }
+
+        auto cpuct = cfg_puct_init
+                   + std::log((1.0 + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
+        auto winrate = fpu_eval;
+        if (child.is_inflated()
+            && child->m_expand_state.load() == ExpandState::EXPANDING) {
+            // Someone else is expanding this node, never select it
+            // if we can avoid so, because we'd block on it.
+            winrate = -1.0f - fpu_reduction;
+        } else if (child.get_visits() > 0) {
+            winrate = child.get_eval(color);
+        }
+        auto stdev = static_cast<float>(0.25f);
+        if (child.get_visits() > 1) {
+            stdev = std::sqrt(child.get_eval_variance(0.25f));
+        }
+        // maximum stdev is 0.5 so double it to get something of
+        // order 1; still this term will increase the relative
+        // weight of winrate, so also consider increasing cfg_puct
+        const auto psa = child.get_policy() * 2.0f * stdev;
+        const auto denom = 1.0f + child.get_visits();
+        const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 

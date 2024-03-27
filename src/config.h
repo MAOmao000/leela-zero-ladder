@@ -110,10 +110,15 @@ static constexpr auto KOMI = 7.5f;
  * USE_TUNER: Expose some extra command line parameters that allow tuning the
  * search algorithm.
  */
-//#define USE_TUNER
+#define USE_TUNER
 
-static constexpr auto PROGRAM_NAME = "Leela Zero";
-static constexpr auto PROGRAM_VERSION = "0.17";
+/*
+ * USE_LADDER: Protect the ladder.
+ */
+#define USE_LADDER
+
+static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
+static constexpr auto PROGRAM_VERSION = "1.0";
 
 /*
  * OpenBLAS limitation: the default configuration on some Linuxes

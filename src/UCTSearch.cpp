@@ -259,7 +259,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             // Careful: create_children() can throw a NetworkHaltException when
             // another thread requests draining the search.
             const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
+                m_network, m_nodes, currstate, eval, node == m_root.get(), get_min_psa_ratio());
             if (!had_children && success) {
                 result = SearchResult::from_eval(eval);
                 new_node = true;
@@ -268,14 +268,26 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(color, node == m_root.get());
-        auto move = next->get_move();
+        if (m_network.get_network_type() == MINIGO_SE) {
+            auto next = node->minigo_uct_select_child(color, node == m_root.get());
+            auto move = next->get_move();
 
-        currstate.play_move(move);
-        if (move != FastBoard::PASS && currstate.superko()) {
-            next->invalidate();
+            currstate.play_move(move);
+            if (move != FastBoard::PASS && currstate.superko()) {
+                next->invalidate();
+            } else {
+                result = play_simulation(currstate, next);
+            }
         } else {
-            result = play_simulation(currstate, next);
+            auto next = node->uct_select_child(color, node == m_root.get());
+            auto move = next->get_move();
+
+            currstate.play_move(move);
+            if (move != FastBoard::PASS && currstate.superko()) {
+                next->invalidate();
+            } else {
+                result = play_simulation(currstate, next);
+            }
         }
     }
 
@@ -439,7 +451,8 @@ bool UCTSearch::should_resign(const passflag_t passflag, const float besteval) {
 
     const auto is_default_cfg_resign = cfg_resignpct < 0;
     const auto resign_threshold =
-        0.01f * (is_default_cfg_resign ? 10 : cfg_resignpct);
+//        0.01f * (is_default_cfg_resign ? 10 : cfg_resignpct);
+        0.01f * (is_default_cfg_resign ? 5 : cfg_resignpct);
     if (besteval > resign_threshold) {
         // eval > cfg_resign
         return false;

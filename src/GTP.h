@@ -110,6 +110,8 @@ extern precision_t cfg_precision;
 extern float cfg_puct;
 extern float cfg_logpuct;
 extern float cfg_logconst;
+extern float cfg_puct_init;
+extern float cfg_puct_base;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern float cfg_fpu_root_reduction;
@@ -122,6 +124,14 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
+
+#ifdef USE_LADDER
+extern bool cfg_ladder_check;
+extern int cfg_ladder_defense;
+extern int cfg_ladder_attack;
+extern int cfg_ladder_depth;
+#endif
+
 extern AnalyzeTags cfg_analyze_tags;
 
 static constexpr size_t MiB = 1024LL * 1024LL;

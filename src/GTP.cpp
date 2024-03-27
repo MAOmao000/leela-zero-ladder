@@ -87,6 +87,8 @@ precision_t cfg_precision;
 float cfg_puct;
 float cfg_logpuct;
 float cfg_logconst;
+float cfg_puct_init;
+float cfg_puct_base;
 float cfg_softmax_temp;
 float cfg_fpu_reduction;
 float cfg_fpu_root_reduction;
@@ -99,6 +101,14 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
+
+#ifdef USE_LADDER
+bool cfg_ladder_check;
+int cfg_ladder_defense;
+int cfg_ladder_attack;
+int cfg_ladder_depth;
+#endif
+
 AnalyzeTags cfg_analyze_tags;
 
 /* Parses tags for the lz-analyze GTP command and friends */
@@ -343,9 +353,11 @@ void GTP::setup_default_parameters() {
     cfg_precision = precision_t::AUTO;
 #endif
 #endif
-    cfg_puct = 0.5f;
+    cfg_puct = 1.0f;
     cfg_logpuct = 0.015f;
     cfg_logconst = 1.7f;
+    cfg_puct_init = 1.25f;
+    cfg_puct_base = 19652.0f;
     cfg_softmax_temp = 1.0f;
     cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign
@@ -365,6 +377,13 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = true;
 #else
     cfg_cpu_only = false;
+#endif
+
+#ifdef USE_LADDER
+    cfg_ladder_check = true;
+    cfg_ladder_defense = 10;
+    cfg_ladder_attack = 20;
+    cfg_ladder_depth = 200;
 #endif
 
     cfg_analyze_tags = AnalyzeTags{};
@@ -1246,8 +1265,10 @@ std::pair<bool, std::string> GTP::set_max_memory(
 
     assert(cache_size_ratio_percent >= 1);
     assert(cache_size_ratio_percent <= 99);
-    auto max_cache_size =
-        max_memory_for_search * cache_size_ratio_percent / 100;
+//    auto max_cache_size =
+//        max_memory_for_search * cache_size_ratio_percent / 100;
+// for 32bit os
+    auto max_cache_size = max_memory_for_search / 100 * cache_size_ratio_percent;
 
     auto max_cache_count =
         (int)(remove_overhead(max_cache_size) / NNCache::ENTRY_SIZE);

@@ -31,6 +31,7 @@
 #define FORWARDPIPE_H_INCLUDED
 
 #include "config.h"
+#include "OpenCL.h"
 
 #include <memory>
 #include <vector>
@@ -45,17 +46,22 @@ public:
         std::vector<std::vector<float>> m_batchnorm_means;
         std::vector<std::vector<float>> m_batchnorm_stddevs;
 
+		// Minigo v17 SE Layer
+		std::vector<std::vector<float>> m_se_weights;
+		std::vector<std::vector<float>> m_se_biases;
+
         // Policy head
         std::vector<float> m_conv_pol_w;
         std::vector<float> m_conv_pol_b;
 
+		// Value head
         std::vector<float> m_conv_val_w;
         std::vector<float> m_conv_val_b;
     };
 
     virtual ~ForwardPipe() = default;
 
-    virtual void initialize(int channels) = 0;
+    virtual void initialize(const int channels, const NetworkType net_type) = 0;
     virtual bool needs_autodetect() {
         return false;
     };

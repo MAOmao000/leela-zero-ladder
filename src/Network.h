@@ -116,6 +116,10 @@ public:
     // Flag the network to be open for business.
     virtual void resume_evals();
 
+    NetworkType get_network_type() {
+        return m_net_type;
+    }
+
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
@@ -182,5 +186,7 @@ private:
     std::array<float, VALUE_LAYER> m_ip2_val_w;
     std::array<float, 1> m_ip2_val_b;
     bool m_value_head_not_stm;
+
+	NetworkType m_net_type{ LEELA_ZERO };
 };
 #endif

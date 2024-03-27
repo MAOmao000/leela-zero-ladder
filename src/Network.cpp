@@ -251,12 +251,20 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // 1 format id, 1 input layer (4 x weights), 14 ending weights,
     // the rest are residuals, every residual has 8 x weight lines
     auto residual_blocks = linecount - (1 + 4 + 14);
-    if (residual_blocks % 8 != 0) {
+    if (residual_blocks % 8 == 0) {
+        m_net_type = LEELA_ZERO;
+        residual_blocks /= 8;
+        myprintf("%d blocks (Leela Zero).\n", residual_blocks);
+    }
+    else if (residual_blocks % 12 == 0) {
+        m_net_type = MINIGO_SE;
+        residual_blocks /= 12;
+        myprintf("%d blocks (MiniGo SE).\n", residual_blocks);
+    }
+    else {
         myprintf("\nInconsistent number of weights in the file.\n");
         return {0, 0};
     }
-    residual_blocks /= 8;
-    myprintf("%d blocks.\n", residual_blocks);
 
     // Re-read file and process
     wtfile.clear();
@@ -265,88 +273,196 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // Get the file format id out of the way
     std::getline(wtfile, line);
 
-    const auto plain_conv_layers = 1 + (residual_blocks * 2);
-    const auto plain_conv_wts = plain_conv_layers * 4;
-    linecount = 0;
-    while (std::getline(wtfile, line)) {
-        std::vector<float> weights;
-        auto it_line = line.cbegin();
-        const auto ok =
-            phrase_parse(it_line, line.cend(), *x3::float_, x3::space, weights);
-        if (!ok || it_line != line.cend()) {
-            myprintf("\nFailed to parse weight file. Error on line %d.\n",
-                     linecount + 2); //+1 from version line, +1 from 0-indexing
-            return {0, 0};
-        }
-        if (linecount < plain_conv_wts) {
-            if (linecount % 4 == 0) {
-                m_fwd_weights->m_conv_weights.emplace_back(weights);
-            } else if (linecount % 4 == 1) {
-                // Redundant in our model, but they encode the
-                // number of outputs so we have to read them in.
-                m_fwd_weights->m_conv_biases.emplace_back(weights);
-            } else if (linecount % 4 == 2) {
-                m_fwd_weights->m_batchnorm_means.emplace_back(weights);
-            } else if (linecount % 4 == 3) {
-                process_bn_var(weights);
-                m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
+    // ----------------- Leela Zero -------------------
+    if (m_net_type == LEELA_ZERO)
+    {
+        const auto plain_conv_layers = 1 + (residual_blocks * 2);
+        const auto plain_conv_wts = plain_conv_layers * 4;
+        linecount = 0;
+        while (std::getline(wtfile, line)) {
+            std::vector<float> weights;
+            auto it_line = line.cbegin();
+            const auto ok =
+                phrase_parse(it_line, line.cend(), *x3::float_, x3::space, weights);
+            if (!ok || it_line != line.cend()) {
+                myprintf("\nFailed to parse weight file. Error on line %d.\n",
+                         linecount + 2); //+1 from version line, +1 from 0-indexing
+                return {0, 0};
             }
-        } else {
-            switch (linecount - plain_conv_wts) {
-                case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
-                case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
-                case 2:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_bn_pol_w1));
-                    break;
-                case 3:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_bn_pol_w2));
-                    break;
-                case 4:
-                    if (weights.size()
-                        != OUTPUTS_POLICY * NUM_INTERSECTIONS
-                               * POTENTIAL_MOVES) {
-                        myprintf("The weights file is not for %dx%d boards.\n",
-                                 BOARD_SIZE, BOARD_SIZE);
-                        return {0, 0};
-                    }
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip_pol_w));
-                    break;
-                case 5:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip_pol_b));
-                    break;
-                case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
-                case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
-                case 8:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_bn_val_w1));
-                    break;
-                case 9:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_bn_val_w2));
-                    break;
-                case 10:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip1_val_w));
-                    break;
-                case 11:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip1_val_b));
-                    break;
-                case 12:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip2_val_w));
-                    break;
-                case 13:
-                    std::copy(cbegin(weights), cend(weights),
-                              begin(m_ip2_val_b));
-                    break;
+            if (linecount < plain_conv_wts) {
+                if (linecount % 4 == 0) {
+                    m_fwd_weights->m_conv_weights.emplace_back(weights);
+                } else if (linecount % 4 == 1) {
+                    // Redundant in our model, but they encode the
+                    // number of outputs so we have to read them in.
+                    m_fwd_weights->m_conv_biases.emplace_back(weights);
+                } else if (linecount % 4 == 2) {
+                    m_fwd_weights->m_batchnorm_means.emplace_back(weights);
+                } else if (linecount % 4 == 3) {
+                    process_bn_var(weights);
+                    m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
+                }
+            } else {
+                switch (linecount - plain_conv_wts) {
+                    case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
+                    case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
+                    case 2:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_pol_w1));
+                        break;
+                    case 3:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_pol_w2));
+                        break;
+                    case 4:
+                        if (weights.size()
+                            != OUTPUTS_POLICY * NUM_INTERSECTIONS
+                                   * POTENTIAL_MOVES) {
+                            myprintf("The weights file is not for %dx%d boards.\n",
+                                     BOARD_SIZE, BOARD_SIZE);
+                            return {0, 0};
+                        }
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip_pol_w));
+                        break;
+                    case 5:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip_pol_b));
+                        break;
+                    case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
+                    case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
+                    case 8:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_val_w1));
+                        break;
+                    case 9:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_val_w2));
+                        break;
+                    case 10:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip1_val_w));
+                        break;
+                    case 11:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip1_val_b));
+                        break;
+                    case 12:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip2_val_w));
+                        break;
+                    case 13:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip2_val_b));
+                        break;
+                }
             }
+            linecount++;
         }
-        linecount++;
+    }
+    else if (m_net_type == MINIGO_SE)
+        // ----------------- MiniGo v17 -------------------
+    {
+        const auto res_conv_layers = residual_blocks * 2;
+        const auto plain_conv_wts = 4 + res_conv_layers * 6;
+        linecount = 0;
+        while (std::getline(wtfile, line)) {
+            std::vector<float> weights;
+            auto it_line = line.cbegin();
+            const auto ok =
+                phrase_parse(it_line, line.cend(), *x3::float_, x3::space, weights);
+            if (!ok || it_line != line.cend()) {
+                myprintf("\nFailed to parse weight file. Error on line %d.\n",
+                         linecount + 2); //+1 from version line, +1 from 0-indexing
+                return {0, 0};
+            }
+            if (linecount < 4) {
+                if (linecount % 4 == 0) {
+                    m_fwd_weights->m_conv_weights.emplace_back(weights);
+                } else if (linecount % 4 == 1) {
+                    // Redundant in our model, but they encode the
+                    // number of outputs so we have to read them in.
+                    m_fwd_weights->m_conv_biases.emplace_back(weights);
+                } else if (linecount % 4 == 2) {
+                    m_fwd_weights->m_batchnorm_means.emplace_back(weights);
+                } else if (linecount % 4 == 3) {
+                    process_bn_var(weights);
+                    m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
+                }
+            } else if (linecount < plain_conv_wts) {
+                const auto tmp = linecount - 4;
+
+                if (tmp % 6 == 0) {
+                    m_fwd_weights->m_conv_weights.emplace_back(weights);
+                } else if (tmp % 6 == 1) {
+                    m_fwd_weights->m_conv_biases.emplace_back(weights);
+                } else if (tmp % 6 == 2) {
+                    m_fwd_weights->m_batchnorm_means.emplace_back(weights);
+                } else if (tmp % 6 == 3) {
+                    process_bn_var(weights);
+                    m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
+                } else if (tmp % 6 == 4) {
+                    m_fwd_weights->m_se_weights.emplace_back(weights);
+                } else if (tmp % 6 == 5) {
+                    m_fwd_weights->m_se_biases.emplace_back(weights);
+                }
+            } else {
+                switch (linecount - plain_conv_wts) {
+                    case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
+                    case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
+                    case 2:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_pol_w1));
+                        break;
+                    case 3:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_pol_w2));
+                        break;
+                    case 4:
+                        if (weights.size()
+                            != OUTPUTS_POLICY * NUM_INTERSECTIONS
+                                   * POTENTIAL_MOVES) {
+                            myprintf("The weights file is not for %dx%d boards.\n",
+                                     BOARD_SIZE, BOARD_SIZE);
+                            return {0, 0};
+                        }
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip_pol_w));
+                        break;
+                    case 5:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip_pol_b));
+                        break;
+                    case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
+                    case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
+                    case 8:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_val_w1));
+                        break;
+                    case 9:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_bn_val_w2));
+                        break;
+                    case 10:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip1_val_w));
+                        break;
+                    case 11:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip1_val_b));
+                        break;
+                    case 12:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip2_val_w));
+                        break;
+                    case 13:
+                        std::copy(cbegin(weights), cend(weights),
+                                  begin(m_ip2_val_b));
+                        break;
+                }
+            }
+            linecount++;
+        }
     }
     process_bn_var(m_bn_pol_w2);
     process_bn_var(m_bn_val_w2);
@@ -407,7 +523,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
 std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
-    pipe->initialize(channels);
+	pipe->initialize(channels, m_net_type);
     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 
     return std::move(pipe);

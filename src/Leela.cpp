@@ -50,15 +50,21 @@
 #include "Utils.h"
 #include "Zobrist.h"
 
+#ifdef USE_LADDER
+#include "GoBoard.h"
+#include "ZobristHash.h"
+#endif
+
 using namespace Utils;
 
 static void license_blurb() {
     printf(
-        "Leela Zero %s  Copyright (C) 2017-2019  Gian-Carlo Pascutto and contributors\n"
+        "Leela Zero 0.17  Copyright (C) 2017-2019  Gian-Carlo Pascutto and contributors\n"
+        "%s %s  Copyright (C) 2024  MAOmao000 \n"
         "This program comes with ABSOLUTELY NO WARRANTY.\n"
         "This is free software, and you are welcome to redistribute it\n"
         "under certain conditions; see the COPYING file for details.\n\n",
-        PROGRAM_VERSION);
+        PROGRAM_NAME, PROGRAM_VERSION);
 }
 
 static void calculate_thread_count_cpu(
@@ -151,7 +157,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                         "Safety margin for time usage in centiseconds.")
         ("resignpct,r", po::value<int>()->default_value(cfg_resignpct),
                         "Resign when winrate is less than x%.\n"
-                        "-1 uses 10% but scales for handicap.")
+                        "-1 uses 5% but scales for handicap.")
+//                        "-1 uses 10% but scales for handicap.")
         ("weights,w", po::value<std::string>()->default_value(cfg_weightsfile),
                       "File with network weights.")
         ("logfile,l", po::value<std::string>(),
@@ -170,6 +177,17 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifndef USE_CPU_ONLY
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #endif
+
+#ifdef USE_LADDER
+        ("no_ladder_check", "Disable ladder check.")
+        ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
+                      "Ladder defense check minimum depth.")
+        ("ladder_attack", po::value<int>()->default_value(cfg_ladder_attack),
+                      "Ladder attack check minimum depth.")
+        ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
+                      "Ladder check maximum depth.")
+#endif
+
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -205,6 +223,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("puct", po::value<float>())
         ("logpuct", po::value<float>())
         ("logconst", po::value<float>())
+        ("puct_init", po::value<float>())
+        ("puct_base", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
         ("ci_alpha", po::value<float>());
@@ -279,12 +299,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_TUNER
     if (vm.count("puct")) {
         cfg_puct = vm["puct"].as<float>();
-    }
+   }
     if (vm.count("logpuct")) {
         cfg_logpuct = vm["logpuct"].as<float>();
     }
     if (vm.count("logconst")) {
         cfg_logconst = vm["logconst"].as<float>();
+    }
+    if (vm.count("puct_init")) {
+        cfg_puct_init = vm["puct_init"].as<float>();
+    }
+    if (vm.count("puct_base")) {
+        cfg_puct_base = vm["puct_base"].as<float>();
     }
     if (vm.count("softmax_temp")) {
         cfg_softmax_temp = vm["softmax_temp"].as<float>();
@@ -482,6 +508,24 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // the best if we have introduced noise there exactly to explore more.
     cfg_fpu_root_reduction = cfg_noise ? 0.0f : cfg_fpu_reduction;
 
+#ifdef USE_LADDER
+    if (vm.count("no_ladder_check")) {
+        cfg_ladder_check = false;
+    }
+
+    if (vm.count("ladder_defense")) {
+        cfg_ladder_defense = vm["ladder_defense"].as<int>();
+    }
+
+    if (vm.count("ladder_attack")) {
+        cfg_ladder_attack = vm["ladder_attack"].as<int>();
+    }
+
+    if (vm.count("ladder_depth")) {
+        cfg_ladder_depth = vm["ladder_depth"].as<int>();
+    }
+#endif
+
     auto out = std::stringstream{};
     for (auto i = 1; i < argc; i++) {
         out << " " << argv[i];
@@ -550,6 +594,14 @@ int main(int argc, char* argv[]) {
     }
 
     init_global_objects();
+
+#ifdef USE_LADDER
+    if (cfg_ladder_check && cfg_ladder_defense + cfg_ladder_attack) {
+        InitializeConst();
+        InitializeHash();
+        InitializeUctHash();
+    }
+#endif
 
     auto maingame = std::make_unique<GameState>();
 

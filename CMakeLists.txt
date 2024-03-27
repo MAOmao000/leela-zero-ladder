@@ -12,13 +12,13 @@
 # You should have received a copy of the GNU General Public License
 # along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 include(GNUInstallDirs)
 
 project(leelaz)
-add_subdirectory(gtest EXCLUDE_FROM_ALL) # We don't want to install gtest, exclude it from `all`
+#add_subdirectory(gtest EXCLUDE_FROM_ALL) # We don't want to install gtest, exclude it from `all`
 
 # Required Packages
 set(Boost_MIN_VERSION "1.58.0")
@@ -47,7 +47,7 @@ if(USE_BLAS)
 else()
 message(STATUS "Using built-in matrix library.")
 endif()
-find_package(Qt5Core)
+#find_package(Qt5Core)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
@@ -117,46 +117,46 @@ target_link_libraries(leelaz ${ZLIB_LIBRARIES})
 target_link_libraries(leelaz ${CMAKE_THREAD_LIBS_INIT})
 install(TARGETS leelaz DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-if(Qt5Core_FOUND)
-    if(NOT Qt5Core_VERSION VERSION_LESS "5.3.0")
-        add_subdirectory(autogtp)
-        add_subdirectory(validation)
-    else()
-        message(WARNING "Qt ${Qt5Core_VERSION} is found but does not met required version 5.3.0, \
-        build target for `autogtp` and `validation` is disabled.")
-    endif()
-else()
-    message(WARNING "Qt is not found, build for `autogtp` and `validation` is disabled")
-endif()
+#if(Qt5Core_FOUND)
+#    if(NOT Qt5Core_VERSION VERSION_LESS "5.3.0")
+#        add_subdirectory(autogtp)
+#        add_subdirectory(validation)
+#    else()
+#        message(WARNING "Qt ${Qt5Core_VERSION} is found but does not met required version 5.3.0, \
+#        build target for `autogtp` and `validation` is disabled.")
+#    endif()
+#else()
+#    message(WARNING "Qt is not found, build for `autogtp` and `validation` is disabled")
+#endif()
 
 # Google Test below
-file(GLOB tests_SRC "${SrcPath}/tests/*.cpp")
+#file(GLOB tests_SRC "${SrcPath}/tests/*.cpp")
 
-add_executable(tests ${tests_SRC} $<TARGET_OBJECTS:objs>)
-if(GccSpecificFlags)
-  target_compile_options(tests PRIVATE "-Wno-unused-variable")
-endif()
+#add_executable(tests ${tests_SRC} $<TARGET_OBJECTS:objs>)
+#if(GccSpecificFlags)
+#  target_compile_options(tests PRIVATE "-Wno-unused-variable")
+#endif()
 
-target_link_libraries(tests ${Boost_LIBRARIES})
-target_link_libraries(tests ${BLAS_LIBRARIES})
-target_link_libraries(tests ${OpenCL_LIBRARIES})
-target_link_libraries(tests ${ZLIB_LIBRARIES})
-target_link_libraries(tests gtest_main ${CMAKE_THREAD_LIBS_INIT})
+#target_link_libraries(tests ${Boost_LIBRARIES})
+#target_link_libraries(tests ${BLAS_LIBRARIES})
+#target_link_libraries(tests ${OpenCL_LIBRARIES})
+#target_link_libraries(tests ${ZLIB_LIBRARIES})
+#target_link_libraries(tests gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
-include(GetGitRevisionDescription)
-git_describe(VERSION --tags)
-string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" MAJOR_VERSION "${VERSION}")
-string(REGEX REPLACE "^v[0-9]+\\.([0-9]+).*" "\\1" MINOR_VERSION "${VERSION}")
+#include(GetGitRevisionDescription)
+#git_describe(VERSION --tags)
+#string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" MAJOR_VERSION "${VERSION}")
+#string(REGEX REPLACE "^v[0-9]+\\.([0-9]+).*" "\\1" MINOR_VERSION "${VERSION}")
 
-SET(CPACK_GENERATOR "DEB")
-SET(CPACK_DEBIAN_PACKAGE_NAME "leelaz")
-SET(CPACK_DEBIAN_PACKAGE_VERSION "${MAJOR_VERSION}.${MINOR_VERSION}")
-SET(CPACK_DEBIAN_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
-SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Gian-Carlo Pascutto https://github.com/gcp/leela-zero")
-SET(CPACK_DEBIAN_PACKAGE_DESCRIPTION "Go engine with no human-provided knowledge, modeled after the AlphaGo Zero paper.")
-SET(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-SET(CPACK_DEBIAN_PACKAGE_SECTION "games")
-SET(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-SET(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${MAJOR_VERSION}.${MINOR_VERSION}")
+#SET(CPACK_GENERATOR "DEB")
+#SET(CPACK_DEBIAN_PACKAGE_NAME "leelaz")
+#SET(CPACK_DEBIAN_PACKAGE_VERSION "${MAJOR_VERSION}.${MINOR_VERSION}")
+#SET(CPACK_DEBIAN_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
+#SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Gian-Carlo Pascutto https://github.com/gcp/leela-zero")
+#SET(CPACK_DEBIAN_PACKAGE_DESCRIPTION "Go engine with no human-provided knowledge, modeled after the AlphaGo Zero paper.")
+#SET(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+#SET(CPACK_DEBIAN_PACKAGE_SECTION "games")
+#SET(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+#SET(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${MAJOR_VERSION}.${MINOR_VERSION}")
 
-INCLUDE(CPack)
+#INCLUDE(CPack)
