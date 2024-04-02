@@ -64,6 +64,7 @@ unsigned int cfg_num_threads;
 unsigned int cfg_batch_size;
 int cfg_max_playouts;
 int cfg_max_visits;
+int cfg_min_visits;
 size_t cfg_max_memory;
 size_t cfg_max_tree_size;
 int cfg_max_cache_ratio_percent;
@@ -89,6 +90,7 @@ float cfg_logpuct;
 float cfg_logconst;
 float cfg_puct_init;
 float cfg_puct_base;
+float cfg_puct_stdev_coef;
 float cfg_softmax_temp;
 float cfg_fpu_reduction;
 float cfg_fpu_root_reduction;
@@ -101,6 +103,7 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
+bool cfg_use_stdev_uct;
 
 #ifdef USE_LADDER
 bool cfg_ladder_check;
@@ -338,10 +341,11 @@ void GTP::setup_default_parameters() {
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
     cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
+    cfg_min_visits = 10; // 1600;
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
     cfg_max_cache_ratio_percent = 10;
-    cfg_timemanage = TimeManagement::AUTO;
+    cfg_timemanage = TimeManagement::OFF; // AUTO;
     cfg_lagbuffer_cs = 100;
     cfg_weightsfile = leelaz_file("best-network");
 #ifdef USE_OPENCL
@@ -353,11 +357,12 @@ void GTP::setup_default_parameters() {
     cfg_precision = precision_t::AUTO;
 #endif
 #endif
-    cfg_puct = 1.0f;
+    cfg_puct = 1.31f;
     cfg_logpuct = 0.015f;
     cfg_logconst = 1.7f;
-    cfg_puct_init = 1.25f;
-    cfg_puct_base = 19652.0f;
+    cfg_puct_init = 1.0f; // 1.25f;
+    cfg_puct_base = 500.0f; // 19652.0f;
+    cfg_puct_stdev_coef = 2.175f;
     cfg_softmax_temp = 1.0f;
     cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign
@@ -378,6 +383,7 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
+    cfg_use_stdev_uct = true;
 
 #ifdef USE_LADDER
     cfg_ladder_check = true;

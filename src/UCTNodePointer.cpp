@@ -165,6 +165,6 @@ int UCTNodePointer::get_move() const {
 
 float UCTNodePointer::get_eval_variance(const float default_var) const {
     auto v = m_data.load();
-    assert(is_inflated(v));
-    return read_ptr(v)->get_eval_variance(default_var);
+    if (is_inflated(v)) return read_ptr(v)->get_eval_variance(default_var);
+    return 0.25f;
 }

@@ -84,6 +84,7 @@ extern unsigned int cfg_num_threads;
 extern unsigned int cfg_batch_size;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
+extern int cfg_min_visits;
 extern size_t cfg_max_memory;
 extern size_t cfg_max_tree_size;
 extern int cfg_max_cache_ratio_percent;
@@ -112,6 +113,7 @@ extern float cfg_logpuct;
 extern float cfg_logconst;
 extern float cfg_puct_init;
 extern float cfg_puct_base;
+extern float cfg_puct_stdev_coef;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern float cfg_fpu_root_reduction;
@@ -124,6 +126,7 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
+extern bool cfg_use_stdev_uct;
 
 #ifdef USE_LADDER
 extern bool cfg_ladder_check;

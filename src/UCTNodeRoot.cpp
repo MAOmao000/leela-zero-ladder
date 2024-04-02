@@ -251,7 +251,7 @@ void UCTNode::prepare_root_node(Network& network, const int color,
         if (move != FastBoard::PASS) {
             auto xy = root_state.board.get_xy(move);
             if (!root_state.is_move_legal(color, move) ||
-                ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START) == LADDER]) {
+                ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
                 // Don't delete nodes for now, just mark them invalid.
                 child->invalidate();
             }

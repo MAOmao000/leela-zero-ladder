@@ -134,10 +134,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 #ifdef USE_LADDER
         auto xy = state.board.get_xy(vertex);
         if (state.is_move_legal(to_move, vertex)) {
-            if (ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)] == LADDER_LIKE) {
-                nodelist.emplace_back(raw_netlist.policy[i] * 0.1f, vertex);
-                legal_sum += raw_netlist.policy[i] * 0.01f;
-            } else if (ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)] != LADDER){
+            if (!ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]){
                 nodelist.emplace_back(raw_netlist.policy[i], vertex);
                 legal_sum += raw_netlist.policy[i];
             }
@@ -382,14 +379,14 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        auto stdev = static_cast<float>(0.25f);
-        if (child.get_visits() > 1) {
-            stdev = std::sqrt(child.get_eval_variance(0.25f));
+        auto stdev = 1.0f;
+        if (cfg_use_stdev_uct) {
+            // maximum stdev is 0.5 so double it to get something of
+            // order 1; still this term will increase the relative
+            // weight of winrate, so also consider increasing cfg_puct
+            stdev = std::sqrt(child.get_eval_variance(0.25f)) * 2.0f;
         }
-        // maximum stdev is 0.5 so double it to get something of
-        // order 1; still this term will increase the relative
-        // weight of winrate, so also consider increasing cfg_puct
-        const auto psa = child.get_policy() * 2.0f * stdev;
+        const auto psa = child.get_policy() * stdev;
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cfg_puct * psa * (numerator / denom);
         const auto value = winrate + puct;
@@ -447,14 +444,14 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        auto stdev = static_cast<float>(0.25f);
-        if (child.get_visits() > 1) {
-            stdev = std::sqrt(child.get_eval_variance(0.25f));
+        auto stdev = 1.0f;
+        if (cfg_use_stdev_uct) {
+            // maximum stdev is 0.5 so double it to get something of
+            // order 1; still this term will increase the relative
+            // weight of winrate, so also consider increasing cfg_puct
+            stdev = std::sqrt(child.get_eval_variance(0.25f)) * cfg_puct_stdev_coef;
         }
-        // maximum stdev is 0.5 so double it to get something of
-        // order 1; still this term will increase the relative
-        // weight of winrate, so also consider increasing cfg_puct
-        const auto psa = child.get_policy() * 2.0f * stdev;
+        const auto psa = child.get_policy() * stdev;
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;

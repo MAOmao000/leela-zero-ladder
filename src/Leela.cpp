@@ -153,6 +153,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                        "Requires --noponder.")
         ("visits,v", po::value<int>(),
                      "Weaken engine by limiting the number of visits.")
+        ("min_visits_needed", po::value<int>(),
+                     "Minimum number of visits needed.")
         ("lagbuffer,b", po::value<int>()->default_value(cfg_lagbuffer_cs),
                         "Safety margin for time usage in centiseconds.")
         ("resignpct,r", po::value<int>()->default_value(cfg_resignpct),
@@ -225,9 +227,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logconst", po::value<float>())
         ("puct_init", po::value<float>())
         ("puct_base", po::value<float>())
+        ("puct_stdev_coef", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
-        ("ci_alpha", po::value<float>());
+        ("ci_alpha", po::value<float>())
+        ("lcb_visits_ratio", po::value<float>())
+        ("no_stdev_uct", "Disable sample variance in UCT formula.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -312,6 +317,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("puct_base")) {
         cfg_puct_base = vm["puct_base"].as<float>();
     }
+    if (vm.count("puct_stdev_coef")) {
+        cfg_puct_stdev_coef = vm["puct_stdev_coef"].as<float>();
+    }
     if (vm.count("softmax_temp")) {
         cfg_softmax_temp = vm["softmax_temp"].as<float>();
     }
@@ -320,6 +328,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("ci_alpha")) {
         cfg_ci_alpha = vm["ci_alpha"].as<float>();
+    }
+    if (vm.count("lcb_visits_ratio")) {
+        cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
+    }
+    if (vm.count("no_stdev_uct")) {
+        cfg_use_stdev_uct = false;
     }
 #endif
 
@@ -442,6 +456,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (cfg_max_visits == 0) {
             cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
         }
+    }
+
+    if (vm.count("min_visits_needed")) {
+        cfg_min_visits = vm["min_visits_needed"].as<int>();
     }
 
     if (vm.count("resignpct")) {
