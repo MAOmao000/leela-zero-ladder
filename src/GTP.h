@@ -88,6 +88,7 @@ extern int cfg_min_visits;
 extern size_t cfg_max_memory;
 extern size_t cfg_max_tree_size;
 extern int cfg_max_cache_ratio_percent;
+extern int cfg_z_entries;
 extern TimeManagement::enabled_t cfg_timemanage;
 extern int cfg_lagbuffer_cs;
 extern int cfg_resignpct;
@@ -127,6 +128,7 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
 extern bool cfg_use_stdev_uct;
+extern bool cfg_restrict_moves;
 
 #ifdef USE_LADDER
 extern bool cfg_ladder_check;

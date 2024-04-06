@@ -68,6 +68,7 @@ int cfg_min_visits;
 size_t cfg_max_memory;
 size_t cfg_max_tree_size;
 int cfg_max_cache_ratio_percent;
+int cfg_z_entries;
 TimeManagement::enabled_t cfg_timemanage;
 int cfg_lagbuffer_cs;
 int cfg_resignpct;
@@ -104,6 +105,7 @@ std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
 bool cfg_use_stdev_uct;
+bool cfg_restrict_moves;
 
 #ifdef USE_LADDER
 bool cfg_ladder_check;
@@ -345,6 +347,7 @@ void GTP::setup_default_parameters() {
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
     cfg_max_cache_ratio_percent = 10;
+    cfg_z_entries = 2000;
     cfg_timemanage = TimeManagement::OFF; // AUTO;
     cfg_lagbuffer_cs = 100;
     cfg_weightsfile = leelaz_file("best-network");
@@ -384,10 +387,11 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;
 #endif
     cfg_use_stdev_uct = true;
+    cfg_restrict_moves = false;
 
 #ifdef USE_LADDER
     cfg_ladder_check = true;
-    cfg_ladder_defense = 10;
+    cfg_ladder_defense = 3;
     cfg_ladder_attack = 20;
     cfg_ladder_depth = 200;
 #endif

@@ -50,15 +50,17 @@
 
 Utils::ThreadPool thread_pool;
 
-auto constexpr z_entries = 1000;
-std::array<float, z_entries> z_lookup;
+//auto constexpr z_entries = 5000;
+//std::array<float, z_entries> z_lookup;
+std::vector<float> z_lookup;
 
 void Utils::create_z_table() {
-    for (auto i = 1; i < z_entries + 1; i++) {
+    for (auto i = 1; i < cfg_z_entries + 1; i++) {
         boost::math::students_t dist(i);
         auto z =
             boost::math::quantile(boost::math::complement(dist, cfg_ci_alpha));
-        z_lookup[i - 1] = z;
+        //z_lookup[i - 1] = z;
+        z_lookup.emplace_back(z);
     }
 }
 
@@ -66,13 +68,13 @@ float Utils::cached_t_quantile(const int v) {
     if (v < 1) {
         return z_lookup[0];
     }
-    if (v < z_entries) {
+    if (v < cfg_z_entries) {
         return z_lookup[v - 1];
     }
     // z approaches constant when v is high enough.
     // With default lookup table size the function is flat enough that we
     // can just return the last entry for all v bigger than it.
-    return z_lookup[z_entries - 1];
+    return z_lookup[cfg_z_entries - 1];
 }
 
 bool Utils::input_pending() {

@@ -101,7 +101,7 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
         }
         GetNeighbor4(neighbor4, i);
         int depth = 0;
-        int min_depth = 0;
+        int max_depth = 0;
         for (int j = 0; j < 4; j++) {
             const int str = ladder_game->string_id[neighbor4[j]];
             if (board[neighbor4[j]] == FLIP_COLOR(color)
@@ -111,23 +111,17 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
                 PutStoneForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color));
                 depth = 0;
                 if (IsLadderCaptured(depth, ladder_game, string[str].origin, color)) {
-                    if (depth >= cfg_ladder_attack) {
-                        min_depth = depth;
-                    } else {
-                        min_depth = 0;
-                        j = 4;
+                    if (depth > max_depth) {
+                        max_depth = depth;
                     }
                 } else {
-                    min_depth = 0;
+                    max_depth = 0;
                     j = 4;
                 }
                 Undo(ladder_game);
-            } else if (board[neighbor4[j]] == FLIP_COLOR(color) && string[str].libs > 1) {
-                min_depth = 0;
-                j = 4;
             }
         }
-        if (min_depth != 0) {
+        if (max_depth >= cfg_ladder_attack) {
             ladder_pos[i] = LADDER_LIKE;
         }
         Undo(ladder_game);
