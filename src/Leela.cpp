@@ -227,14 +227,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logconst", po::value<float>())
         ("puct_init", po::value<float>())
         ("puct_base", po::value<float>())
-        ("puct_stdev_coef", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
         ("no_stdev_uct", "Disable sample variance in UCT formula.");
-        ("restrict_moves", "Enable restrict moves.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -319,9 +317,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("puct_base")) {
         cfg_puct_base = vm["puct_base"].as<float>();
     }
-    if (vm.count("puct_stdev_coef")) {
-        cfg_puct_stdev_coef = vm["puct_stdev_coef"].as<float>();
-    }
     if (vm.count("softmax_temp")) {
         cfg_softmax_temp = vm["softmax_temp"].as<float>();
     }
@@ -339,9 +334,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("no_stdev_uct")) {
         cfg_use_stdev_uct = false;
-    }
-    if (vm.count("restrict_moves")) {
-        cfg_restrict_moves = true;
     }
 #endif
 

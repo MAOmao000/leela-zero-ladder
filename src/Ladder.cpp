@@ -105,14 +105,18 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
         for (int j = 0; j < 4; j++) {
             const int str = ladder_game->string_id[neighbor4[j]];
             if (board[neighbor4[j]] == FLIP_COLOR(color)
-                && string[str].libs == 1
+                //&& string[str].libs == 1
                 && IsLegalForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color))) {
 
                 PutStoneForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color));
                 depth = 0;
                 if (IsLadderCaptured(depth, ladder_game, string[str].origin, color)) {
-                    if (depth > max_depth) {
+                    if (depth >= cfg_ladder_attack) {
                         max_depth = depth;
+                    //}
+                    } else {
+                        max_depth = 0;
+                        j = 4;
                     }
                 } else {
                     max_depth = 0;

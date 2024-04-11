@@ -92,6 +92,8 @@ float cfg_logconst;
 float cfg_puct_init;
 float cfg_puct_base;
 float cfg_puct_stdev_coef;
+float cfg_dynamic_k_factor;
+float cfg_dynamic_k_base;
 float cfg_softmax_temp;
 float cfg_fpu_reduction;
 float cfg_fpu_root_reduction;
@@ -360,12 +362,11 @@ void GTP::setup_default_parameters() {
     cfg_precision = precision_t::AUTO;
 #endif
 #endif
-    cfg_puct = 1.31f;
+    cfg_puct = 0.8f;
     cfg_logpuct = 0.015f;
     cfg_logconst = 1.7f;
-    cfg_puct_init = 1.0f; // 1.25f;
-    cfg_puct_base = 500.0f; // 19652.0f;
-    cfg_puct_stdev_coef = 2.175f;
+    cfg_puct_init = 1.07f; // 0.8f; // 1.0f; // 1.25f;
+    cfg_puct_base = 19652.0f; // 500.0f;
     cfg_softmax_temp = 1.0f;
     cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign
@@ -387,7 +388,6 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;
 #endif
     cfg_use_stdev_uct = true;
-    cfg_restrict_moves = false;
 
 #ifdef USE_LADDER
     cfg_ladder_check = true;

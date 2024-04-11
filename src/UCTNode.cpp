@@ -134,218 +134,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 #ifdef USE_LADDER
         auto xy = state.board.get_xy(vertex);
         if (state.is_move_legal(to_move, vertex)) {
-            if (!ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]){
-                if (cfg_restrict_moves && network.get_network_type() == MINIGO_SE && to_move == root_color) {
-                    if (vertex == 69 || vertex == 129) {
-                        if (state.board.get_state(22) +
-                            state.board.get_state(23) +
-                            state.board.get_state(24) +
-                            state.board.get_state(25) +
-                            state.board.get_state(26) +
-                            state.board.get_state(43) +
-                            state.board.get_state(44) +
-                            state.board.get_state(45) +
-                            state.board.get_state(46) +
-                            state.board.get_state(47) +
-                            state.board.get_state(64) +
-                            state.board.get_state(65) +
-                            state.board.get_state(68) +
-                            state.board.get_state(85) +
-                            state.board.get_state(86) +
-                            state.board.get_state(89) +
-                            state.board.get_state(106) +
-                            state.board.get_state(107) +
-                            state.board.get_state(108) +
-                            state.board.get_state(109) +
-                            state.board.get_state(110) == FastBoard::EMPTY * 21) {
-                            if (state.board.get_state(66) == FullBoard::BLACK &&
-                                state.board.get_state(87) == FullBoard::BLACK &&
-                                state.board.get_state(67) == FullBoard::WHITE &&
-                                state.board.get_state(88) == FullBoard::WHITE &&
-                                vertex == 129 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(66) == FullBoard::WHITE &&
-                                state.board.get_state(87) == FullBoard::WHITE &&
-                                state.board.get_state(67) == FullBoard::BLACK &&
-                                state.board.get_state(88) == FullBoard::BLACK &&
-                                vertex == 129 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(66) == FullBoard::BLACK &&
-                                state.board.get_state(67) == FullBoard::BLACK &&
-                                state.board.get_state(87) == FullBoard::WHITE &&
-                                state.board.get_state(88) == FullBoard::WHITE &&
-                                vertex == 69 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(66) == FullBoard::WHITE &&
-                                state.board.get_state(67) == FullBoard::WHITE &&
-                                state.board.get_state(87) == FullBoard::BLACK &&
-                                state.board.get_state(88) == FullBoard::BLACK &&
-                                vertex == 69 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            }
-                        }
-                    } else if (vertex == 77 || vertex == 143) {
-                        if (state.board.get_state(36) +
-                            state.board.get_state(37) +
-                            state.board.get_state(38) +
-                            state.board.get_state(39) +
-                            state.board.get_state(40) +
-                            state.board.get_state(57) +
-                            state.board.get_state(58) +
-                            state.board.get_state(59) +
-                            state.board.get_state(60) +
-                            state.board.get_state(61) +
-                            state.board.get_state(78) +
-                            state.board.get_state(81) +
-                            state.board.get_state(82) +
-                            state.board.get_state(99) +
-                            state.board.get_state(102) +
-                            state.board.get_state(103) +
-                            state.board.get_state(120) +
-                            state.board.get_state(121) +
-                            state.board.get_state(122) +
-                            state.board.get_state(123) +
-                            state.board.get_state(124) == FastBoard::EMPTY * 21) {
-                            if (state.board.get_state(79) == FullBoard::BLACK &&
-                                state.board.get_state(100) == FullBoard::BLACK &&
-                                state.board.get_state(80) == FullBoard::WHITE &&
-                                state.board.get_state(101) == FullBoard::WHITE &&
-                                vertex == 143 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(79) == FullBoard::WHITE &&
-                                state.board.get_state(100) == FullBoard::WHITE &&
-                                state.board.get_state(80) == FullBoard::BLACK &&
-                                state.board.get_state(101) == FullBoard::BLACK &&
-                                vertex == 143 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(79) == FullBoard::BLACK &&
-                                state.board.get_state(80) == FullBoard::BLACK &&
-                                state.board.get_state(100) == FullBoard::WHITE &&
-                                state.board.get_state(101) == FullBoard::WHITE &&
-                                vertex == 77 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(79) == FullBoard::WHITE &&
-                                state.board.get_state(80) == FullBoard::WHITE &&
-                                state.board.get_state(100) == FullBoard::BLACK &&
-                                state.board.get_state(101) == FullBoard::BLACK &&
-                                vertex == 77 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            }
-                        }
-                    } else if (vertex == 297 || vertex == 363) {
-                        if (state.board.get_state(316) +
-                            state.board.get_state(317) +
-                            state.board.get_state(318) +
-                            state.board.get_state(319) +
-                            state.board.get_state(320) +
-                            state.board.get_state(337) +
-                            state.board.get_state(338) +
-                            state.board.get_state(341) +
-                            state.board.get_state(358) +
-                            state.board.get_state(359) +
-                            state.board.get_state(362) +
-                            state.board.get_state(379) +
-                            state.board.get_state(380) +
-                            state.board.get_state(381) +
-                            state.board.get_state(382) +
-                            state.board.get_state(383) +
-                            state.board.get_state(400) +
-                            state.board.get_state(401) +
-                            state.board.get_state(402) +
-                            state.board.get_state(403) +
-                            state.board.get_state(404) == FastBoard::EMPTY * 21) {
-                            if (state.board.get_state(339) == FullBoard::BLACK &&
-                                state.board.get_state(360) == FullBoard::BLACK &&
-                                state.board.get_state(340) == FullBoard::WHITE &&
-                                state.board.get_state(361) == FullBoard::WHITE &&
-                                vertex == 297 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(339) == FullBoard::WHITE &&
-                                state.board.get_state(360) == FullBoard::WHITE &&
-                                state.board.get_state(340) == FullBoard::BLACK &&
-                                state.board.get_state(361) == FullBoard::BLACK &&
-                                vertex == 297 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(339) == FullBoard::BLACK &&
-                                state.board.get_state(340) == FullBoard::BLACK &&
-                                state.board.get_state(360) == FullBoard::WHITE &&
-                                state.board.get_state(361) == FullBoard::WHITE &&
-                                vertex == 363 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(339) == FullBoard::WHITE &&
-                                state.board.get_state(340) == FullBoard::WHITE &&
-                                state.board.get_state(360) == FullBoard::BLACK &&
-                                state.board.get_state(361) == FullBoard::BLACK &&
-                                vertex == 363 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            }
-                        }
-                    } else if (vertex == 311 || vertex == 371) {
-                        if (state.board.get_state(330) +
-                            state.board.get_state(331) +
-                            state.board.get_state(332) +
-                            state.board.get_state(333) +
-                            state.board.get_state(334) +
-                            state.board.get_state(351) +
-                            state.board.get_state(354) +
-                            state.board.get_state(355) +
-                            state.board.get_state(372) +
-                            state.board.get_state(375) +
-                            state.board.get_state(376) +
-                            state.board.get_state(393) +
-                            state.board.get_state(394) +
-                            state.board.get_state(395) +
-                            state.board.get_state(396) +
-                            state.board.get_state(397) +
-                            state.board.get_state(414) +
-                            state.board.get_state(415) +
-                            state.board.get_state(416) +
-                            state.board.get_state(417) +
-                            state.board.get_state(418) == FastBoard::EMPTY * 21) {
-                            if (state.board.get_state(352) == FullBoard::BLACK &&
-                                state.board.get_state(373) == FullBoard::BLACK &&
-                                state.board.get_state(353) == FullBoard::WHITE &&
-                                state.board.get_state(374) == FullBoard::WHITE &&
-                                vertex == 311 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(352) == FullBoard::WHITE &&
-                                state.board.get_state(373) == FullBoard::WHITE &&
-                                state.board.get_state(353) == FullBoard::BLACK &&
-                                state.board.get_state(374) == FullBoard::BLACK &&
-                                vertex == 311 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(352) == FullBoard::BLACK &&
-                                state.board.get_state(353) == FullBoard::BLACK &&
-                                state.board.get_state(373) == FullBoard::WHITE &&
-                                state.board.get_state(374) == FullBoard::WHITE &&
-                                vertex == 371 && to_move == FullBoard::BLACK
-                            ) {
-                                continue;
-                            } else if (state.board.get_state(352) == FullBoard::WHITE &&
-                                state.board.get_state(353) == FullBoard::WHITE &&
-                                state.board.get_state(373) == FullBoard::BLACK &&
-                                state.board.get_state(374) == FullBoard::BLACK &&
-                                vertex == 371 && to_move == FullBoard::WHITE
-                            ) {
-                                continue;
-                            }
-                        }
-                    }
-                }
+            if (!ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
                 nodelist.emplace_back(raw_netlist.policy[i], vertex);
                 legal_sum += raw_netlist.policy[i];
             }
@@ -560,7 +349,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (child.valid()) {
             parentvisits += child.get_visits();
             if (child.get_visits() > 0) {
-                total_visited_policy += child.get_policy();
+                total_visited_policy += child.get_policy(); 
             }
         }
     }
@@ -580,7 +369,6 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (!child.active()) {
             continue;
         }
-
         auto winrate = fpu_eval;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
@@ -590,16 +378,16 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        auto stdev = 1.0f;
+        auto stddev = 1.0f;
         if (cfg_use_stdev_uct) {
-            // maximum stdev is 0.5 so double it to get something of
-            // order 1; still this term will increase the relative
-            // weight of winrate, so also consider increasing cfg_puct
-            stdev = std::sqrt(child.get_eval_variance(0.25f)) * 2.0f;
+            // See
+            // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
+            stddev = std::sqrt(child.get_eval_variance(0.25f)) + 0.5f;
         }
-        const auto psa = child.get_policy() * stdev;
+        auto cpuct = cfg_puct * stddev;
+        const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
-        const auto puct = cfg_puct * psa * (numerator / denom);
+        const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
@@ -643,9 +431,6 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
         if (!child.active()) {
             continue;
         }
-
-        auto cpuct = cfg_puct_init
-                   + std::log((1.0 + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
         auto winrate = fpu_eval;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
@@ -655,14 +440,16 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
         } else if (child.get_visits() > 0) {
             winrate = child.get_eval(color);
         }
-        auto stdev = 1.0f;
+        auto stddev = 1.0f;
         if (cfg_use_stdev_uct) {
-            // maximum stdev is 0.5 so double it to get something of
-            // order 1; still this term will increase the relative
-            // weight of winrate, so also consider increasing cfg_puct
-            stdev = std::sqrt(child.get_eval_variance(0.25f)) * cfg_puct_stdev_coef;
+            // See
+            // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
+            stddev = std::sqrt(child.get_eval_variance(0.25f)) + 0.5f;
         }
-        const auto psa = child.get_policy() * stdev;
+        auto cpuct = cfg_puct_init
+                   + std::log((1.0f + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
+        cpuct *= stddev;
+        const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;

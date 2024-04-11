@@ -114,7 +114,6 @@ extern float cfg_logpuct;
 extern float cfg_logconst;
 extern float cfg_puct_init;
 extern float cfg_puct_base;
-extern float cfg_puct_stdev_coef;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern float cfg_fpu_root_reduction;
@@ -128,7 +127,6 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
 extern bool cfg_use_stdev_uct;
-extern bool cfg_restrict_moves;
 
 #ifdef USE_LADDER
 extern bool cfg_ladder_check;
