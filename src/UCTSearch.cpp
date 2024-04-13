@@ -268,7 +268,8 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        if (m_network.get_network_type() == MINIGO_SE) {
+//        if (m_network.get_network_type() == MINIGO_SE) {
+        if (cfg_alpha_zero_search) {
             auto next = node->minigo_uct_select_child(color, node == m_root.get());
             auto move = next->get_move();
 

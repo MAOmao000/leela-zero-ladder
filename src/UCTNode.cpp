@@ -370,23 +370,38 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             continue;
         }
         auto winrate = fpu_eval;
+        auto child_visits = 0;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
-        } else if (child.get_visits() > 0) {
-            winrate = child.get_eval(color);
+        } else {
+            child_visits = child.get_visits();
+            if (child_visits > 0) {
+                winrate = child.get_eval(color);
+            }
         }
         auto stddev = 1.0f;
         if (cfg_use_stdev_uct) {
             // See
             // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            stddev = std::sqrt(child.get_eval_variance(0.25f)) + 0.5f;
+            if (child_visits < 2) {
+                stddev = 1.0f;
+            } else {
+                stddev = std::sqrt(child.get_eval_variance(1.0f) / child_visits) * 2.0f  + 1.0f; //  / 4.0f; //+ 0.5f;
+//                stddev = std::sqrt(child.get_eval_variance(1.0f)) + 1.0f; //  / 4.0f; //+ 0.5f;
+                //myprintf_error("%.05f\n", stddev);
+            }
+            //if (stddev == 1.0f) stddev = 0.0f; else stddev /= 4.0f;
+            //stddev = std::max(1.0f, stddev);
+            //stddev = std::min(1.05f, stddev);
+		//	double a = 1.0f / (1.0f + std::sqrt((double)child_visits / 10000.0f));
+		//	stddev = 1.0f + a * (1.0f - stddev);
         }
         auto cpuct = cfg_puct * stddev;
         const auto psa = child.get_policy();
-        const auto denom = 1.0f + child.get_visits();
+        const auto denom = 1.0f + child_visits;
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
@@ -432,25 +447,34 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
             continue;
         }
         auto winrate = fpu_eval;
+        auto child_visits = 0;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
-        } else if (child.get_visits() > 0) {
-            winrate = child.get_eval(color);
+        } else {
+            child_visits = child.get_visits();
+            if (child_visits > 0) {
+                winrate = child.get_eval(color);
+            }
         }
         auto stddev = 1.0f;
         if (cfg_use_stdev_uct) {
             // See
             // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            stddev = std::sqrt(child.get_eval_variance(0.25f)) + 0.5f;
+            stddev = std::sqrt(child.get_eval_variance(0.25f)) / 4.0f;
+            //if (stddev > 0.1f && stddev != 0.5f) myprintf_error("%.05f\n", stddev);
+            //stddev = std::max(1.0f, stddev);
+            //stddev = std::min(0.2f, stddev);
+			double a = 1.0f / (1.0f + std::sqrt((double)child_visits / 10000.0f));
+			stddev = 1.0f + a * stddev;
         }
         auto cpuct = cfg_puct_init
                    + std::log((1.0f + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
         cpuct *= stddev;
         const auto psa = child.get_policy();
-        const auto denom = 1.0f + child.get_visits();
+        const auto denom = 1.0f + child_visits;
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());

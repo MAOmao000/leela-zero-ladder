@@ -232,6 +232,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
+        ("uct_search", po::value<std::string>()->default_value("alpha_zero"),
+                       "[alpha_zero|leela_zero] Select whether to use AlphaZero or LeelaZero for cpuct expression.")
         ("no_stdev_uct", "Disable sample variance in UCT formula.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
@@ -331,6 +333,17 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("lcb_visits_ratio")) {
         cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
+    }
+    if (vm.count("uct_search")) {
+        auto uct_search = vm["uct_search"].as<std::string>();
+        if ("alpha_zero" == uct_search) {
+            cfg_alpha_zero_search = true;
+        } else if ("leela_zero" == uct_search) {
+            cfg_alpha_zero_search = false;
+        } else {
+            printf("Unexpected option for --uct_search, expecting alpha_zero/leela_zero\n");
+            exit(EXIT_FAILURE);
+        }
     }
     if (vm.count("no_stdev_uct")) {
         cfg_use_stdev_uct = false;
