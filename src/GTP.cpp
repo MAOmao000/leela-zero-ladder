@@ -91,7 +91,9 @@ float cfg_logpuct;
 float cfg_logconst;
 float cfg_puct_init;
 float cfg_puct_base;
-float cfg_puct_stdev_coef;
+float cfg_puct_log;
+float cfg_stdev_scale;
+float cfg_stdev_prior;
 float cfg_dynamic_k_factor;
 float cfg_dynamic_k_base;
 float cfg_softmax_temp;
@@ -365,8 +367,13 @@ void GTP::setup_default_parameters() {
     cfg_puct = 0.8f;
     cfg_logpuct = 0.015f;
     cfg_logconst = 1.7f;
-    cfg_puct_init = 1.07f; // 0.8f; // 1.0f; // 1.25f;
-    cfg_puct_base = 19652.0f; // 500.0f;
+    cfg_puct_init = 1.07f; // 1.25f; // 1.0f;
+    cfg_puct_base = 36465.0f; // 19652.0f; //500.0f;
+    cfg_puct_log = 1.0f; // 0.45f;
+    cfg_dynamic_k_factor = 4.0f;
+    cfg_dynamic_k_base = 20000.0f;
+    cfg_stdev_scale = 0.85f;
+    cfg_stdev_prior = 0.4f;
     cfg_softmax_temp = 1.0f;
     cfg_fpu_reduction = 0.25f;
     // see UCTSearch::should_resign

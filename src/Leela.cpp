@@ -227,6 +227,11 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logconst", po::value<float>())
         ("puct_init", po::value<float>())
         ("puct_base", po::value<float>())
+        ("puct_log", po::value<float>())
+        ("dynamic_k_factor", po::value<float>())
+        ("dynamic_k_base", po::value<float>())
+        ("puct_stdev_scale", po::value<float>())
+        ("puct_stdev_prior", po::value<float>())
         ("softmax_temp", po::value<float>())
         ("fpu_reduction", po::value<float>())
         ("ci_alpha", po::value<float>())
@@ -318,6 +323,21 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("puct_base")) {
         cfg_puct_base = vm["puct_base"].as<float>();
+    }
+    if (vm.count("puct_log")) {
+        cfg_puct_log = vm["puct_log"].as<float>();
+    }
+    if (vm.count("dynamic_k_factor")) {
+        cfg_dynamic_k_factor = vm["dynamic_k_factor"].as<float>();
+    }
+    if (vm.count("dynamic_k_base")) {
+        cfg_dynamic_k_base = vm["dynamic_k_base"].as<float>();
+    }
+    if (vm.count("puct_stdev_scale")) {
+        cfg_stdev_scale = vm["puct_stdev_scale"].as<float>();
+    }
+    if (vm.count("puct_stdev_prior")) {
+        cfg_stdev_prior = vm["puct_stdev_prior"].as<float>();
     }
     if (vm.count("softmax_temp")) {
         cfg_softmax_temp = vm["softmax_temp"].as<float>();
