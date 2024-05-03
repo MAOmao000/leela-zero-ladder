@@ -134,12 +134,14 @@ extern bool cfg_cpu_only;
 extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;
 
-#ifdef USE_LADDER
+extern bool cfg_use_ray_ladder;
+extern bool cfg_root_ladder;
+extern bool cfg_root_offense;
 extern bool cfg_ladder_check;
 extern int cfg_ladder_defense;
-extern int cfg_ladder_attack;
+extern int cfg_ladder_offense;
+extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
-#endif
 
 extern AnalyzeTags cfg_analyze_tags;
 

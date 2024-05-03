@@ -50,10 +50,12 @@
 #include "Network.h"
 #include "Utils.h"
 
-#ifdef USE_LADDER
+//#ifdef USE_RAY_LADDER
 #include "GoBoard.h"
 #include "Ladder.h"
-#endif
+//#else
+#include "LadderDetection.h"
+//#endif
 
 using namespace Utils;
 
@@ -83,9 +85,9 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         return false;
     }
 
-#ifdef USE_LADDER
-    char ladder[BOARD_MAX] = {};
-    if ((cfg_ladder_defense || cfg_ladder_attack) && cfg_ladder_check) {
+    char ladder_ray[BOARD_MAX] = {};
+    char ladder[FastBoard::NUM_VERTICES] = {};
+    if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         game_info_t *game = AllocateGame();
         InitializeBoard(game);
         for (int row = 0; row < 19; ++row) {
@@ -98,10 +100,11 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
                 }
             }
         }
-        LadderExtension(game, state.board.black_to_move() ? S_BLACK : S_WHITE, ladder);
+        LadderExtension(game, state.board.black_to_move() ? S_BLACK : S_WHITE, ladder_ray);
         FreeGame(game);
+    } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
+        LadderDetection(state, ladder, is_root);
     }
-#endif
 
     NNCache::Netresult raw_netlist;
     try {
@@ -131,20 +134,22 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
 
-#ifdef USE_LADDER
-        auto xy = state.board.get_xy(vertex);
-        if (state.is_move_legal(to_move, vertex)) {
-            if (!ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
-                nodelist.emplace_back(raw_netlist.policy[i], vertex);
-                legal_sum += raw_netlist.policy[i];
+        if (cfg_use_ray_ladder) {
+            auto xy = state.board.get_xy(vertex);
+            if (state.is_move_legal(to_move, vertex)) {
+                if (!ladder_ray[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
+                    nodelist.emplace_back(raw_netlist.policy[i], vertex);
+                    legal_sum += raw_netlist.policy[i];
+                }
+            }
+        } else {
+            if (state.is_move_legal(to_move, vertex)) {
+                if (!ladder[vertex]) {
+                    nodelist.emplace_back(raw_netlist.policy[i], vertex);
+                    legal_sum += raw_netlist.policy[i];
+                }
             }
         }
-#else
-        if (state.is_move_legal(to_move, vertex)) {
-            nodelist.emplace_back(raw_netlist.policy[i], vertex);
-            legal_sum += raw_netlist.policy[i];
-        }
-#endif
     }
 
     // Always try passes if we're not trying to be clever.
@@ -494,7 +499,8 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
 }
 
 class NodeComp
-    : public std::binary_function<UCTNodePointer&, UCTNodePointer&, bool> {
+//    : public std::binary_function<UCTNodePointer&, UCTNodePointer&, bool> {
+    : public std::function<bool(UCTNodePointer&, UCTNodePointer&)> {
 public:
     NodeComp(const int color, const float lcb_min_visits)
         : m_color(color), m_lcb_min_visits(lcb_min_visits) {}

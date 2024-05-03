@@ -111,12 +111,14 @@ bool cfg_cpu_only;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
 
-#ifdef USE_LADDER
+bool cfg_use_ray_ladder;
+bool cfg_root_ladder;
+bool cfg_root_offense;
 bool cfg_ladder_check;
 int cfg_ladder_defense;
-int cfg_ladder_attack;
+int cfg_ladder_offense;
+int cfg_offense_stones;
 int cfg_ladder_depth;
-#endif
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -382,9 +384,9 @@ void GTP::setup_default_parameters() {
     cfg_fpu_root_reduction = cfg_fpu_reduction;
     cfg_ci_alpha = 1e-5f;
     cfg_lcb_min_visit_ratio = 0.10f;
-    cfg_random_cnt = 0;
+    cfg_random_cnt = 20; // 0;
     cfg_random_min_visits = 1;
-    cfg_random_temp = 1.0f;
+    cfg_random_temp = 0.25f; // 1.0f;
     cfg_dumbpass = false;
     cfg_logfile_handle = nullptr;
     cfg_quiet = false;
@@ -397,12 +399,14 @@ void GTP::setup_default_parameters() {
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;
 
-#ifdef USE_LADDER
+    cfg_use_ray_ladder = false;
+    cfg_root_ladder = false;
+    cfg_root_offense = false;
     cfg_ladder_check = true;
     cfg_ladder_defense = 3;
-    cfg_ladder_attack = 20;
+    cfg_ladder_offense = 5;
+    cfg_offense_stones = 3;
     cfg_ladder_depth = 200;
-#endif
 
     cfg_analyze_tags = AnalyzeTags{};
 

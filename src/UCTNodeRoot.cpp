@@ -45,10 +45,12 @@
 #include "UCTNode.h"
 #include "Utils.h"
 
-#ifdef USE_LADDER
+//#ifdef USE_RAY_LADDER
 #include "GoBoard.h"
 #include "Ladder.h"
-#endif
+//#else
+#include "LadderDetection.h"
+//#endif
 
 /*
  * These functions belong to UCTNode but should only be called on the root node
@@ -228,9 +230,9 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // This also removes a lot of special cases.
     kill_superkos(root_state);
 
-#ifdef USE_LADDER
-    char ladder[BOARD_MAX] = {0};
-    if ((cfg_ladder_defense || cfg_ladder_attack) && cfg_ladder_check) {
+    char ladder_ray[BOARD_MAX] = {};
+    char ladder[FastBoard::NUM_VERTICES] = {};
+    if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         game_info_t *game = AllocateGame();
         InitializeBoard(game);
         for (int row = 0; row < 19; ++row) {
@@ -243,17 +245,27 @@ void UCTNode::prepare_root_node(Network& network, const int color,
                 }
             }
         }
-        LadderExtension(game, root_state.board.black_to_move() ? S_BLACK : S_WHITE, ladder);
+        LadderExtension(game, root_state.board.black_to_move() ? S_BLACK : S_WHITE, ladder_ray);
         FreeGame(game);
+    } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
+        LadderDetection(root_state, ladder);
     }
+
     for (auto& child : m_children) {
         auto move = child->get_move();
         if (move != FastBoard::PASS) {
-            auto xy = root_state.board.get_xy(move);
-            if (!root_state.is_move_legal(color, move) ||
-                ladder[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
-                // Don't delete nodes for now, just mark them invalid.
-                child->invalidate();
+            if (cfg_use_ray_ladder) {
+                auto xy = root_state.board.get_xy(move);
+                if (!root_state.is_move_legal(color, move) ||
+                    ladder_ray[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
+                    // Don't delete nodes for now, just mark them invalid.
+                    child->invalidate();
+                }
+            } else {
+                if (!root_state.is_move_legal(color, move) || ladder[move]) {
+                    // Don't delete nodes for now, just mark them invalid.
+                    child->invalidate();
+                }
             }
         }
     }
@@ -263,7 +275,6 @@ void UCTNode::prepare_root_node(Network& network, const int color,
                        [](const auto &child) { return !child->valid(); }),
         end(m_children)
     );
-#endif
 
     if (cfg_noise) {
         // Adjust the Dirichlet noise's alpha constant to the board size

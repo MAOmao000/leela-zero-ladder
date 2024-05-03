@@ -12,12 +12,6 @@ using namespace Utils;
 #define ALIVE  1
 #define DEAD   0
 
-#ifndef USE_LADDER
-    int cfg_ladder_defense = 0;
-    int cfg_ladder_attack = 0;
-    int cfg_ladder_depth = 0;
-#endif
-
 //
 static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren_xy, const int turn_color);
 
@@ -77,7 +71,7 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
             checked[ladder] = 1;
         }
     }
-    if (cfg_ladder_attack == 0) {
+    if (cfg_ladder_offense == 0) {
         return;
     }
     int neighbor4[4];
@@ -105,13 +99,12 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
         for (int j = 0; j < 4; j++) {
             const int str = ladder_game->string_id[neighbor4[j]];
             if (board[neighbor4[j]] == FLIP_COLOR(color)
-                //&& string[str].libs == 1
                 && IsLegalForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color))) {
 
                 PutStoneForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color));
                 depth = 0;
                 if (IsLadderCaptured(depth, ladder_game, string[str].origin, color)) {
-                    if (depth >= cfg_ladder_attack) {
+                    if (depth >= cfg_ladder_offense) {
                         max_depth = depth;
                     //}
                     } else {
@@ -125,7 +118,7 @@ void LadderExtension(game_info_t *game, int color, char *ladder_pos)
                 Undo(ladder_game);
             }
         }
-        if (max_depth >= cfg_ladder_attack) {
+        if (max_depth >= cfg_ladder_offense) {
             ladder_pos[i] = LADDER_LIKE;
         }
         Undo(ladder_game);
@@ -210,6 +203,7 @@ static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren
             }
             capture_xy = string[str].lib[capture_xy];
         }
+        depth = max_depth;
     }
     return ALIVE;
 }

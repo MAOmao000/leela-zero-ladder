@@ -106,6 +106,19 @@ public:
     static bool starpoint(int size, int point);
     static bool starpoint(int size, int x, int y);
 
+    unsigned short get_liberties(int vertex) const {
+        return m_libs[m_parent[vertex]];
+    }
+    unsigned short get_string_count(int vertex) const {
+        return m_stones[m_parent[vertex]];
+    }
+    int get_state_neighbor(int vertex, int dir) const {
+        return vertex + m_dirs[dir];
+    }
+    int get_next_stone(int vertex) const {
+        return m_next[vertex];
+    }
+
 protected:
     /*
         bit masks to detect eyes on neighbors

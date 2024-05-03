@@ -50,10 +50,10 @@
 #include "Utils.h"
 #include "Zobrist.h"
 
-#ifdef USE_LADDER
+//#ifdef USE_RAY_LADDER
 #include "GoBoard.h"
 #include "ZobristHash.h"
-#endif
+//#endif
 
 using namespace Utils;
 
@@ -180,15 +180,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #endif
 
-#ifdef USE_LADDER
+        ("use_ray_ladder", "Enable RAY's ladder check.")
         ("no_ladder_check", "Disable ladder check.")
+        ("root_ladder_only", "Perform ladder check only on root node")
+        ("root_offense_only", "Perform offense ladder check only on root node")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
-        ("ladder_attack", po::value<int>()->default_value(cfg_ladder_attack),
-                      "Ladder attack check minimum depth.")
+        ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
+                      "Ladder offense check minimum depth.")
+        ("offense_stones", po::value<int>()->default_value(cfg_offense_stones),
+                      "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
-#endif
 
         ;
 #ifdef USE_OPENCL
@@ -559,23 +562,37 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // the best if we have introduced noise there exactly to explore more.
     cfg_fpu_root_reduction = cfg_noise ? 0.0f : cfg_fpu_reduction;
 
-#ifdef USE_LADDER
+    if (vm.count("use_ray_ladder")) {
+        cfg_use_ray_ladder = true;
+    }
+
     if (vm.count("no_ladder_check")) {
-        cfg_ladder_check = false;
+        cfg_ladder_check = true;
+    }
+
+    if (vm.count("root_ladder_only")) {
+        cfg_root_ladder = false;
+    }
+
+    if (vm.count("root_offense_only")) {
+        cfg_root_offense = false;
     }
 
     if (vm.count("ladder_defense")) {
         cfg_ladder_defense = vm["ladder_defense"].as<int>();
     }
 
-    if (vm.count("ladder_attack")) {
-        cfg_ladder_attack = vm["ladder_attack"].as<int>();
+    if (vm.count("ladder_offense")) {
+        cfg_ladder_offense = vm["ladder_offense"].as<int>();
+    }
+
+    if (vm.count("offense_stones")) {
+        cfg_offense_stones = vm["offense_stones"].as<int>();
     }
 
     if (vm.count("ladder_depth")) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
     }
-#endif
 
     auto out = std::stringstream{};
     for (auto i = 1; i < argc; i++) {
@@ -646,13 +663,13 @@ int main(int argc, char* argv[]) {
 
     init_global_objects();
 
-#ifdef USE_LADDER
-    if (cfg_ladder_check && cfg_ladder_defense + cfg_ladder_attack) {
+//#ifdef USE_RAY_LADDER
+    if (cfg_ladder_check && cfg_ladder_defense + cfg_ladder_offense) {
         InitializeConst();
         InitializeHash();
         InitializeUctHash();
     }
-#endif
+//#endif
 
     auto maingame = std::make_unique<GameState>();
 

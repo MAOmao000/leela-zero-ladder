@@ -115,10 +115,10 @@ static constexpr auto KOMI = 7.5f;
 /*
  * USE_LADDER: Protect the ladder.
  */
-#define USE_LADDER
+//#define USE_RAY_LADDER
 
 static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
-static constexpr auto PROGRAM_VERSION = "1.2";
+static constexpr auto PROGRAM_VERSION = "1.3";
 
 /*
  * OpenBLAS limitation: the default configuration on some Linuxes
