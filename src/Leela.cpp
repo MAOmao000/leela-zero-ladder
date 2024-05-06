@@ -567,15 +567,15 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
 
     if (vm.count("no_ladder_check")) {
-        cfg_ladder_check = true;
+        cfg_ladder_check = false;
     }
 
     if (vm.count("root_ladder_only")) {
-        cfg_root_ladder = false;
+        cfg_root_ladder = true;
     }
 
     if (vm.count("root_offense_only")) {
-        cfg_root_offense = false;
+        cfg_root_offense = true;
     }
 
     if (vm.count("ladder_defense")) {

@@ -403,9 +403,9 @@ void GTP::setup_default_parameters() {
     cfg_root_ladder = false;
     cfg_root_offense = false;
     cfg_ladder_check = true;
-    cfg_ladder_defense = 3;
-    cfg_ladder_offense = 5;
-    cfg_offense_stones = 3;
+    cfg_ladder_defense = 10;
+    cfg_ladder_offense = 10;
+    cfg_offense_stones = 5;
     cfg_ladder_depth = 200;
 
     cfg_analyze_tags = AnalyzeTags{};
