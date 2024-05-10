@@ -18,111 +18,129 @@ static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren
 ////////////////////////////////
 //                            //
 ////////////////////////////////
-void LadderExtension(game_info_t *game, int color, char *ladder_pos)
+void LadderExtension(const GameState* const state, char *ladder_pos)
 {
+    if (state->m_komove != FastBoard::NO_VERTEX) {
+        return;
+    }
+
+    auto color = state->board.black_to_move() ? S_BLACK : S_WHITE;
+    game_info_t *game = AllocateGame();
+    InitializeBoard(game);
+    for (int row = 0; row < BOARD_SIZE; ++row) {
+        for (int col = 0; col < BOARD_SIZE; ++col) {
+            auto vertex = state->board.get_vertex(col, row);
+            auto stone = state->board.get_state(vertex);
+            if (stone < 2) { // stone = 0: BLACK, stone = 1: WHITE
+                PutStone(game, POS(col + BOARD_START, row + BOARD_START), stone ? S_WHITE : S_BLACK);
+            }
+        }
+    }
     const string_t *string = game->string;
     std::unique_ptr<search_game_info_t> search_game = nullptr;
-    char checked[BOARD_MAX] = {};
-
-    if (game->ko_move == (game->moves - 1)) return;
+    auto depth = 0;
+    int neighbor4[4];
 
     for (int i = 0; i < MAX_STRING; i++) {
-        if (!string[i].flag ||
-            string[i].color != color) {
-            continue;
-        }
-        int ladder = string[i].lib[0];
-
-        char flag = DEAD;
-
-        if (!checked[ladder] && string[i].libs == 1) {
+        if (!string[i].flag) continue;
+        if (cfg_ladder_defense > 0 &&
+            string[i].color == color &&
+            string[i].size >= cfg_defense_stones &&
+            string[i].libs == 1) {
+            char flag = DEAD;
             if (!search_game)
                 search_game.reset(new search_game_info_t(game));
             search_game_info_t *ladder_game = search_game.get();
-            int neighbor = string[i].neighbor[0];
+            int neighbor = string[i].neighbor[0]; // neighbor: opponent's stone
             while (neighbor != NEIGHBOR_END && flag == DEAD) {
                 if (string[neighbor].libs == 1) {
                     if (IsLegalForSearch(ladder_game, string[neighbor].lib[0], color)) {
                         PutStoneForSearch(ladder_game, string[neighbor].lib[0], color);
-                        int depth = 0;
-                        if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) ||
+                        depth = 0;
+                        if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color) == ALIVE) ||
                             depth < cfg_ladder_defense) {
                             flag = ALIVE;
-                            Undo(ladder_game);
-                            break;
                         }
                         Undo(ladder_game);
                     }
+                    break;
                 }
                 neighbor = string[i].neighbor[neighbor];
             }
             if (flag == DEAD) {
-                if (IsLegalForSearch(ladder_game, ladder, color)) {
-                    PutStoneForSearch(ladder_game, ladder, color);
-                    int depth = 0;
+                if (IsLegalForSearch(ladder_game, string[i].lib[0], color)) {
+                    PutStoneForSearch(ladder_game, string[i].lib[0], color);
+                    depth = 0;
                     if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) == DEAD) {
                         if (depth >= cfg_ladder_defense) {
-                            ladder_pos[ladder] = LADDER;
+                            auto x = CORRECT_X(string[i].lib[0]) - 1;
+                            auto y = CORRECT_Y(string[i].lib[0]) - 1;
+                            ladder_pos[x + y * BOARD_SIZE] = LADDER;
                         }
                     }
                     Undo(ladder_game);
                 }
             }
-            checked[ladder] = 1;
-        }
-    }
-    if (cfg_ladder_offense == 0) {
-        return;
-    }
-    int neighbor4[4];
-    for (int i = RAY_BOARD_SIZE * OB_SIZE + OB_SIZE;
-             i < BOARD_MAX - (RAY_BOARD_SIZE * OB_SIZE + OB_SIZE); i++) {
-        if (ladder_pos[i] == LADDER || !IsLegal(game, i, color)) {
-            continue;
-        }
-        if (!search_game)
-            search_game.reset(new search_game_info_t(game));
-        search_game_info_t *ladder_game = search_game.get();
-        const char *board = ladder_game->board;
-        const string_t *string = ladder_game->string;
-        if (!IsLegalForSearch(ladder_game, i, color)) {
-            continue;
-        }
-        PutStoneForSearch(ladder_game, i, color);
-        if (ladder_game->ko_move == (ladder_game->moves - 1)) {
-            Undo(ladder_game);
-            continue;
-        }
-        GetNeighbor4(neighbor4, i);
-        int depth = 0;
-        int max_depth = 0;
-        for (int j = 0; j < 4; j++) {
-            const int str = ladder_game->string_id[neighbor4[j]];
-            if (board[neighbor4[j]] == FLIP_COLOR(color)
-                && IsLegalForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color))) {
-
-                PutStoneForSearch(ladder_game, string[str].lib[0], FLIP_COLOR(color));
-                depth = 0;
-                if (IsLadderCaptured(depth, ladder_game, string[str].origin, color)) {
-                    if (depth >= cfg_ladder_offense) {
-                        max_depth = depth;
-                    //}
+        } else if (cfg_ladder_offense > 0 &&
+                   string[i].color == FLIP_COLOR(color) &&
+                   string[i].size >= cfg_offense_stones &&
+                   string[i].libs == 2) {
+            if (!search_game)
+                search_game.reset(new search_game_info_t(game));
+            depth = 0;
+            search_game_info_t *ladder_game = search_game.get();
+            if (IsLegalForSearch(ladder_game, string[i].lib[0], color)) {
+                PutStoneForSearch(ladder_game, string[i].lib[0], color);
+                GetNeighbor4(neighbor4, string[i].lib[0]);
+                if (ladder_game->board[neighbor4[0]] != color &&
+                    ladder_game->board[neighbor4[1]] != color &&
+                    ladder_game->board[neighbor4[2]] != color &&
+                    ladder_game->board[neighbor4[3]] != color) {
+                    depth = 0;
+                    if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) == ALIVE) {
+                        if (depth >= cfg_ladder_offense) {
+                            auto x = CORRECT_X(string[i].lib[0]) - 1;
+                            auto y = CORRECT_Y(string[i].lib[0]) - 1;
+                            ladder_pos[x + y * BOARD_SIZE] = LADDER_LIKE;
+                        }
                     } else {
-                        max_depth = 0;
-                        j = 4;
+                        auto x = CORRECT_X(string[i].lib[0]) - 1;
+                        auto y = CORRECT_Y(string[i].lib[0]) - 1;
+                        if (ladder_pos[x + y * BOARD_SIZE] == LADDER_LIKE) {
+                            ladder_pos[x + y * BOARD_SIZE] = 0;
+                        }
                     }
-                } else {
-                    max_depth = 0;
-                    j = 4;
+                }
+                Undo(ladder_game);
+            }
+            auto second_lib = string[i].lib[string[i].lib[0]];
+            if (IsLegalForSearch(ladder_game, second_lib, color)) {
+                PutStoneForSearch(ladder_game, second_lib, color);
+                GetNeighbor4(neighbor4, second_lib);
+                if (ladder_game->board[neighbor4[0]] != color &&
+                    ladder_game->board[neighbor4[1]] != color &&
+                    ladder_game->board[neighbor4[2]] != color &&
+                    ladder_game->board[neighbor4[3]] != color) {
+                    depth = 0;
+                    if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) == ALIVE) {
+                        if (depth >= cfg_ladder_offense) {
+                            auto x = CORRECT_X(second_lib) - 1;
+                            auto y = CORRECT_Y(second_lib) - 1;
+                            ladder_pos[x + y * BOARD_SIZE] = LADDER_LIKE;
+                        }
+                    } else {
+                        auto x = CORRECT_X(second_lib) - 1;
+                        auto y = CORRECT_Y(second_lib) - 1;
+                        if (ladder_pos[x + y * BOARD_SIZE] == LADDER_LIKE) {
+                            ladder_pos[x + y * BOARD_SIZE] = 0;
+                        }
+                    }
                 }
                 Undo(ladder_game);
             }
         }
-        if (max_depth >= cfg_ladder_offense) {
-            ladder_pos[i] = LADDER_LIKE;
-        }
-        Undo(ladder_game);
     }
+    FreeGame(game);
 }
 ////////////////////
 //                //
@@ -134,25 +152,27 @@ static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren
     const int str = game->string_id[ren_xy];
     int escape_color, capture_color;
     int escape_xy, capture_xy;
-    int neighbor, base_depth, max_depth;
+    int neighbor; // , base_depth , max_depth;
     bool result;
 
-    if (game->ko_move == (game->moves - 1) || depth >= cfg_ladder_depth) {
+    if (game->ko_move == (game->moves - 1)) {
         return ALIVE;
+    } else if (depth >= cfg_ladder_depth) {
+        return DEAD;
     }
 
     if (board[ren_xy] == S_EMPTY) {
         return DEAD;
-    } else if (string[str].libs >= 3) {
-        return ALIVE;
     }
 
     escape_color = board[ren_xy];
     capture_color = FLIP_COLOR(escape_color);
-    base_depth = depth;
-    max_depth = depth;
+    auto base_depth = depth;
+    auto max_depth_alive = 0;
+    auto max_depth_dead = 0;
 
     if (turn_color == escape_color) {
+        if (string[str].libs >= 2) return ALIVE;
         neighbor = string[str].neighbor[0];
         while (neighbor != NEIGHBOR_END) {
             if (string[neighbor].libs == 1) {
@@ -162,7 +182,6 @@ static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren
                     result = IsLadderCaptured(++depth, game, ren_xy, FLIP_COLOR(turn_color));
                     Undo(game);
                     if (result == ALIVE) {
-                        if (depth < max_depth) depth = max_depth;
                         return ALIVE;
                     }
                 }
@@ -170,40 +189,58 @@ static bool IsLadderCaptured(int &depth, search_game_info_t *game, const int ren
             neighbor = string[str].neighbor[neighbor];
         }
         escape_xy = string[str].lib[0];
-        while (escape_xy != LIBERTY_END) {
-            if (IsLegalForSearch(game, escape_xy, escape_color)) {
-                PutStoneForSearch(game, escape_xy, escape_color);
-                depth = base_depth;
-                result = IsLadderCaptured(++depth, game, ren_xy, FLIP_COLOR(turn_color));
-                Undo(game);
-                if (result == ALIVE) {
-                    if (depth < max_depth) depth = max_depth;
-                    return ALIVE;
-                }
-            }
-            escape_xy = string[str].lib[escape_xy];
+        if (IsLegalForSearch(game, escape_xy, escape_color)) {
+            PutStoneForSearch(game, escape_xy, escape_color);
+            depth = base_depth;
+            result = IsLadderCaptured(++depth, game, ren_xy, FLIP_COLOR(turn_color));
+            Undo(game);
+            return result;
         }
         return DEAD;
     } else {
-        if (string[str].libs == 1) {
-            return DEAD;
+        if (string[str].libs >= 3) {
+            return ALIVE;
         }
         capture_xy = string[str].lib[0];
-        while (capture_xy != LIBERTY_END) {
+        if (capture_xy != LIBERTY_END) {
             if (IsLegalForSearch(game, capture_xy, capture_color)) {
                 PutStoneForSearch(game, capture_xy, capture_color);
                 depth = base_depth;
                 result = IsLadderCaptured(++depth, game, ren_xy, FLIP_COLOR(turn_color));
                 Undo(game);
                 if (result == DEAD) {
-                    return DEAD;
+                    max_depth_dead = depth;
+                } else {
+                    max_depth_alive = depth;
                 }
-                if (depth < max_depth) depth = max_depth;
-                else max_depth = depth;
             }
             capture_xy = string[str].lib[capture_xy];
+            if (capture_xy != LIBERTY_END) {
+                if (IsLegalForSearch(game, capture_xy, capture_color)) {
+                    PutStoneForSearch(game, capture_xy, capture_color);
+                    depth = base_depth;
+                    result = IsLadderCaptured(++depth, game, ren_xy, FLIP_COLOR(turn_color));
+                    Undo(game);
+                    if (result == DEAD) {
+                        if (depth < max_depth_dead) depth = max_depth_dead;
+                        return DEAD;
+                    } else {
+                        if (max_depth_dead) {
+                            depth = max_depth_dead;
+                            return DEAD;
+                        } else if (depth < max_depth_alive) {
+                            depth = max_depth_alive;
+                        }
+                        return ALIVE;
+                    }
+                }
+            }
         }
-        depth = max_depth;
     }
+    if (max_depth_dead) {
+        depth = max_depth_dead;
+        return DEAD;
+    }
+    if (depth < max_depth_alive) depth = max_depth_alive;
     return ALIVE;
 }

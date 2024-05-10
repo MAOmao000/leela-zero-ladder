@@ -55,8 +55,8 @@ public:
     ~UCTNode() = default;
 
     bool create_children(Network& network, std::atomic<int>& nodecount,
-                         const GameState& state, float& eval, bool is_root,
-                         const int root_color, float min_psa_ratio = 0.0f);
+                         const GameState& state, float& eval,
+                         float min_psa_ratio = 0.0f);
 
     const std::vector<UCTNodePointer>& get_children() const;
     void sort_children(int color, float lcb_min_visits);

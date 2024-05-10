@@ -70,6 +70,8 @@
 #include "ThreadPool.h"
 #include "Timing.h"
 #include "Utils.h"
+#include "Ladder.h"
+#include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
@@ -968,9 +970,17 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
 
     Netresult result;
 
+    char ladder_map[NUM_INTERSECTIONS] = {};
+    if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
+        LadderExtension(state, ladder_map);
+    } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
+        LadderDetection(state, ladder_map);
+    }
+
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        result.policy[sym_idx] = outputs[idx];
+        if (ladder_map[sym_idx]) result.policy[sym_idx] = 0.0f; // outputs[idx] * 1.175494e-38;
+        else result.policy[sym_idx] = outputs[idx];
     }
 
     result.policy_pass = outputs[NUM_INTERSECTIONS];

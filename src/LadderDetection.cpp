@@ -18,7 +18,7 @@ static bool IsLadderCaptured(int &depth, std::unique_ptr<GameState> &state, cons
 ////////////////////////////////
 //                            //
 ////////////////////////////////
-void LadderDetection(const GameState &state, char *ladder_pos, bool is_root)
+void LadderDetection(const GameState* const state, char *ladder_pos)
 {
     auto state_copy = std::make_unique<GameState>(state);
     const auto turn_color = state_copy->board.get_to_move();
@@ -34,6 +34,7 @@ void LadderDetection(const GameState &state, char *ladder_pos, bool is_root)
         const auto vertex = state_copy->board.get_vertex(x, y);
 
         if (state_copy->board.get_state(vertex) == turn_color &&
+            state_copy->board.get_string_count(vertex) >= cfg_defense_stones &&
             state_copy->board.get_liberties(vertex) == 1) {
             auto newpos = vertex;
             auto liberty_pos = 0;
@@ -58,12 +59,12 @@ void LadderDetection(const GameState &state, char *ladder_pos, bool is_root)
                 depth = 0;
                 if (IsLadderCaptured(depth, state_copy, vertex, turn_color, liberty_pos) == DEAD) {
                     if (depth >= cfg_ladder_defense) {
-                        ladder_pos[liberty_pos] = LADDER;
+                        auto xy = state_copy->board.get_xy(liberty_pos);
+                        ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER;
                     }
                 }
             }
-        } else if ((!cfg_root_offense || (cfg_root_offense && is_root)) &&
-                   state_copy->board.get_state(vertex) == opponent &&
+        } else if (state_copy->board.get_state(vertex) == opponent &&
                    state_copy->board.get_string_count(vertex) >= cfg_offense_stones &&
                    state_copy->board.get_liberties(vertex) == 2) {
             // Check the opponent's stone with two breathing points.
@@ -94,11 +95,13 @@ void LadderDetection(const GameState &state, char *ladder_pos, bool is_root)
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
                             if (depth >= cfg_ladder_offense) {
-                                ladder_pos[liberty_pos[0]] = LADDER_LIKE;
+                                auto xy = state_copy->board.get_xy(liberty_pos[0]);
+                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER_LIKE;
                             }
                         } else {
-                            if (ladder_pos[liberty_pos[0]] == LADDER_LIKE) {
-                                ladder_pos[liberty_pos[0]] = 0;
+                            auto xy = state_copy->board.get_xy(liberty_pos[0]);
+                            if (ladder_pos[xy.first + xy.second * BOARD_SIZE] == LADDER_LIKE) {
+                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = 0;
                             }
                         }
                     }
@@ -113,11 +116,13 @@ void LadderDetection(const GameState &state, char *ladder_pos, bool is_root)
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
                             if (depth >= cfg_ladder_offense) {
-                                ladder_pos[liberty_pos[1]] = LADDER_LIKE;
+                                auto xy = state_copy->board.get_xy(liberty_pos[1]);
+                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER_LIKE;
                             }
                         } else {
-                            if (ladder_pos[liberty_pos[1]] == LADDER_LIKE) {
-                                ladder_pos[liberty_pos[1]] = 0;
+                            auto xy = state_copy->board.get_xy(liberty_pos[1]);
+                            if (ladder_pos[xy.first + xy.second * BOARD_SIZE] == LADDER_LIKE) {
+                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = 0;
                             }
                         }
                     }

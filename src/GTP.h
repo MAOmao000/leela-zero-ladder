@@ -135,11 +135,10 @@ extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;
 
 extern bool cfg_use_ray_ladder;
-extern bool cfg_root_ladder;
-extern bool cfg_root_offense;
 extern bool cfg_ladder_check;
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
+extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 

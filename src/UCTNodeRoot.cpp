@@ -45,13 +45,6 @@
 #include "UCTNode.h"
 #include "Utils.h"
 
-//#ifdef USE_RAY_LADDER
-#include "GoBoard.h"
-#include "Ladder.h"
-//#else
-#include "LadderDetection.h"
-//#endif
-
 /*
  * These functions belong to UCTNode but should only be called on the root node
  * of UCTSearch and have been seperated to increase code clarity.
@@ -213,7 +206,7 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     float root_eval;
     const auto had_children = has_children();
     if (expandable()) {
-        create_children(network, nodes, root_state, root_eval, true, root_state.board.get_to_move());
+        create_children(network, nodes, root_state, root_eval);
     }
     if (had_children) {
         root_eval = get_net_eval(color);
@@ -229,52 +222,6 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // Remove illegal moves, so the root move list is correct.
     // This also removes a lot of special cases.
     kill_superkos(root_state);
-
-    char ladder_ray[BOARD_MAX] = {};
-    char ladder[FastBoard::NUM_VERTICES] = {};
-    if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
-        game_info_t *game = AllocateGame();
-        InitializeBoard(game);
-        for (int row = 0; row < 19; ++row) {
-            for (int col = 0; col < 19; ++col) {
-                auto vertex = root_state.board.get_vertex(col, row);
-                auto stone = root_state.board.get_state(vertex);
-                if (stone < 2)
-                {
-                    PutStone(game, POS(col + BOARD_START, row + BOARD_START), stone ? S_WHITE : S_BLACK);
-                }
-            }
-        }
-        LadderExtension(game, root_state.board.black_to_move() ? S_BLACK : S_WHITE, ladder_ray);
-        FreeGame(game);
-    } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
-        LadderDetection(root_state, ladder);
-    }
-
-    for (auto& child : m_children) {
-        auto move = child->get_move();
-        if (move != FastBoard::PASS) {
-            if (cfg_use_ray_ladder) {
-                auto xy = root_state.board.get_xy(move);
-                if (!root_state.is_move_legal(color, move) ||
-                    ladder_ray[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
-                    // Don't delete nodes for now, just mark them invalid.
-                    child->invalidate();
-                }
-            } else {
-                if (!root_state.is_move_legal(color, move) || ladder[move]) {
-                    // Don't delete nodes for now, just mark them invalid.
-                    child->invalidate();
-                }
-            }
-        }
-    }
-    // Now do the actual deletion.
-    m_children.erase(
-        std::remove_if(begin(m_children), end(m_children),
-                       [](const auto &child) { return !child->valid(); }),
-        end(m_children)
-    );
 
     if (cfg_noise) {
         // Adjust the Dirichlet noise's alpha constant to the board size

@@ -112,11 +112,10 @@ bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
 
 bool cfg_use_ray_ladder;
-bool cfg_root_ladder;
-bool cfg_root_offense;
 bool cfg_ladder_check;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
+int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
 
@@ -400,12 +399,11 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;
 
     cfg_use_ray_ladder = false;
-    cfg_root_ladder = false;
-    cfg_root_offense = false;
     cfg_ladder_check = true;
-    cfg_ladder_defense = 10;
-    cfg_ladder_offense = 10;
-    cfg_offense_stones = 5;
+    cfg_ladder_defense = 3;
+    cfg_ladder_offense = 20;
+    cfg_defense_stones = 1;
+    cfg_offense_stones = 3;
     cfg_ladder_depth = 200;
 
     cfg_analyze_tags = AnalyzeTags{};

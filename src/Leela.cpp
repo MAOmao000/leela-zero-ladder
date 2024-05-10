@@ -182,12 +182,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
         ("use_ray_ladder", "Enable RAY's ladder check.")
         ("no_ladder_check", "Disable ladder check.")
-        ("root_ladder_only", "Perform ladder check only on root node")
-        ("root_offense_only", "Perform offense ladder check only on root node")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
                       "Ladder offense check minimum depth.")
+        ("defense_stones", po::value<int>()->default_value(cfg_defense_stones),
+                      "Ladder defense check minimum stones.")
         ("offense_stones", po::value<int>()->default_value(cfg_offense_stones),
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
@@ -570,20 +570,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_check = false;
     }
 
-    if (vm.count("root_ladder_only")) {
-        cfg_root_ladder = true;
-    }
-
-    if (vm.count("root_offense_only")) {
-        cfg_root_offense = true;
-    }
-
     if (vm.count("ladder_defense")) {
         cfg_ladder_defense = vm["ladder_defense"].as<int>();
     }
 
     if (vm.count("ladder_offense")) {
         cfg_ladder_offense = vm["ladder_offense"].as<int>();
+    }
+
+    if (vm.count("defense_stones")) {
+        cfg_defense_stones = vm["defense_stones"].as<int>();
     }
 
     if (vm.count("offense_stones")) {

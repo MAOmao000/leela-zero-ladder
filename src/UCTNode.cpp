@@ -50,13 +50,6 @@
 #include "Network.h"
 #include "Utils.h"
 
-//#ifdef USE_RAY_LADDER
-#include "GoBoard.h"
-#include "Ladder.h"
-//#else
-#include "LadderDetection.h"
-//#endif
-
 using namespace Utils;
 
 UCTNode::UCTNode(const int vertex, const float policy)
@@ -67,8 +60,8 @@ bool UCTNode::first_visit() const {
 }
 
 bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
-                              const GameState& state, float& eval, const bool is_root,
-                              const int root_color, const float min_psa_ratio) {
+                              const GameState& state, float& eval,
+                              const float min_psa_ratio) {
     // no successors in final state
     if (state.get_passes() >= 2) {
         return false;
@@ -83,27 +76,6 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     if (!expandable(min_psa_ratio)) {
         expand_done();
         return false;
-    }
-
-    char ladder_ray[BOARD_MAX] = {};
-    char ladder[FastBoard::NUM_VERTICES] = {};
-    if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
-        game_info_t *game = AllocateGame();
-        InitializeBoard(game);
-        for (int row = 0; row < 19; ++row) {
-            for (int col = 0; col < 19; ++col) {
-                auto vertex = state.board.get_vertex(col, row);
-                auto stone = state.board.get_state(vertex);
-                if (stone < 2)
-                {
-                    PutStone(game, POS(col + BOARD_START, row + BOARD_START), stone ? S_WHITE : S_BLACK);
-                }
-            }
-        }
-        LadderExtension(game, state.board.black_to_move() ? S_BLACK : S_WHITE, ladder_ray);
-        FreeGame(game);
-    } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
-        LadderDetection(state, ladder, is_root);
     }
 
     NNCache::Netresult raw_netlist;
@@ -133,22 +105,9 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-
-        if (cfg_use_ray_ladder) {
-            auto xy = state.board.get_xy(vertex);
-            if (state.is_move_legal(to_move, vertex)) {
-                if (!ladder_ray[POS(xy.first + BOARD_START, xy.second + BOARD_START)]) {
-                    nodelist.emplace_back(raw_netlist.policy[i], vertex);
-                    legal_sum += raw_netlist.policy[i];
-                }
-            }
-        } else {
-            if (state.is_move_legal(to_move, vertex)) {
-                if (!ladder[vertex]) {
-                    nodelist.emplace_back(raw_netlist.policy[i], vertex);
-                    legal_sum += raw_netlist.policy[i];
-                }
-            }
+        if (state.is_move_legal(to_move, vertex)) {
+            nodelist.emplace_back(raw_netlist.policy[i], vertex);
+            legal_sum += raw_netlist.policy[i];
         }
     }
 
@@ -354,10 +313,11 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (child.valid()) {
             parentvisits += child.get_visits();
             if (child.get_visits() > 0) {
-                total_visited_policy += child.get_policy(); 
+                total_visited_policy += child.get_policy();
             }
         }
     }
+
     const auto numerator = std::sqrt(
         double(parentvisits)
         * std::log(cfg_logpuct * double(parentvisits) + cfg_logconst));
