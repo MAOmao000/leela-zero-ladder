@@ -39,7 +39,6 @@ void LadderExtension(const GameState* const state, char *ladder_pos)
     const string_t *string = game->string;
     std::unique_ptr<search_game_info_t> search_game = nullptr;
     auto depth = 0;
-    int neighbor4[4];
 
     for (int i = 0; i < MAX_STRING; i++) {
         if (!string[i].flag) continue;
@@ -89,50 +88,44 @@ void LadderExtension(const GameState* const state, char *ladder_pos)
                 search_game.reset(new search_game_info_t(game));
             depth = 0;
             search_game_info_t *ladder_game = search_game.get();
-            if (IsLegalForSearch(ladder_game, string[i].lib[0], color)) {
+            auto x = CORRECT_X(string[i].lib[0]) - 1;
+            auto y = CORRECT_Y(string[i].lib[0]) - 1;
+            auto ladder_idx = x + y * BOARD_SIZE;
+            if (IsLegalForSearch(ladder_game, string[i].lib[0], color) &&
+                !ladder_pos[ladder_idx]) {
                 PutStoneForSearch(ladder_game, string[i].lib[0], color);
-                GetNeighbor4(neighbor4, string[i].lib[0]);
-                if (ladder_game->board[neighbor4[0]] != color &&
-                    ladder_game->board[neighbor4[1]] != color &&
-                    ladder_game->board[neighbor4[2]] != color &&
-                    ladder_game->board[neighbor4[3]] != color) {
+                const int move_str = ladder_game->string_id[string[i].lib[0]];
+                if (ladder_game->string[move_str].size == 1) {
                     depth = 0;
                     if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) == ALIVE) {
                         if (depth >= cfg_ladder_offense) {
-                            auto x = CORRECT_X(string[i].lib[0]) - 1;
-                            auto y = CORRECT_Y(string[i].lib[0]) - 1;
-                            ladder_pos[x + y * BOARD_SIZE] = LADDER_LIKE;
+                            ladder_pos[ladder_idx] = LADDER_LIKE;
                         }
                     } else {
-                        auto x = CORRECT_X(string[i].lib[0]) - 1;
-                        auto y = CORRECT_Y(string[i].lib[0]) - 1;
-                        if (ladder_pos[x + y * BOARD_SIZE] == LADDER_LIKE) {
-                            ladder_pos[x + y * BOARD_SIZE] = 0;
+                        if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                            ladder_pos[ladder_idx] = 0;
                         }
                     }
                 }
                 Undo(ladder_game);
             }
             auto second_lib = string[i].lib[string[i].lib[0]];
-            if (IsLegalForSearch(ladder_game, second_lib, color)) {
+            x = CORRECT_X(second_lib) - 1;
+            y = CORRECT_Y(second_lib) - 1;
+            ladder_idx = x + y * BOARD_SIZE;
+            if (IsLegalForSearch(ladder_game, second_lib, color) &&
+                !ladder_pos[ladder_idx]) {
                 PutStoneForSearch(ladder_game, second_lib, color);
-                GetNeighbor4(neighbor4, second_lib);
-                if (ladder_game->board[neighbor4[0]] != color &&
-                    ladder_game->board[neighbor4[1]] != color &&
-                    ladder_game->board[neighbor4[2]] != color &&
-                    ladder_game->board[neighbor4[3]] != color) {
+                const int move_str = ladder_game->string_id[second_lib];
+                if (ladder_game->string[move_str].size == 1) {
                     depth = 0;
                     if (IsLadderCaptured(depth, ladder_game, string[i].origin, FLIP_COLOR(color)) == ALIVE) {
                         if (depth >= cfg_ladder_offense) {
-                            auto x = CORRECT_X(second_lib) - 1;
-                            auto y = CORRECT_Y(second_lib) - 1;
-                            ladder_pos[x + y * BOARD_SIZE] = LADDER_LIKE;
+                            ladder_pos[ladder_idx] = LADDER_LIKE;
                         }
                     } else {
-                        auto x = CORRECT_X(second_lib) - 1;
-                        auto y = CORRECT_Y(second_lib) - 1;
-                        if (ladder_pos[x + y * BOARD_SIZE] == LADDER_LIKE) {
-                            ladder_pos[x + y * BOARD_SIZE] = 0;
+                        if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                            ladder_pos[ladder_idx] = 0;
                         }
                     }
                 }

@@ -88,20 +88,20 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
             } while (newpos != vertex);
             // Checking the stone of the current turn with two breathing points.
             if (liberty_pos[0]) {
+                auto xy = state_copy->board.get_xy(liberty_pos[0]);
+                auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
                 if (state_copy->is_move_legal(turn_color, liberty_pos[0]) &&
-                    !ladder_pos[liberty_pos[0]]) {
+                    !ladder_pos[ladder_idx]) {
                     state_copy->play_move(turn_color, liberty_pos[0]);
                     if (state_copy->board.get_next_stone(liberty_pos[0]) == liberty_pos[0]) {
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
                             if (depth >= cfg_ladder_offense) {
-                                auto xy = state_copy->board.get_xy(liberty_pos[0]);
-                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER_LIKE;
+                                ladder_pos[ladder_idx] = LADDER_LIKE;
                             }
                         } else {
-                            auto xy = state_copy->board.get_xy(liberty_pos[0]);
-                            if (ladder_pos[xy.first + xy.second * BOARD_SIZE] == LADDER_LIKE) {
-                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = 0;
+                            if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                                ladder_pos[ladder_idx] = 0;
                             }
                         }
                     }
@@ -109,20 +109,20 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
                 }
             }
             if (liberty_pos[1]) {
+                auto xy = state_copy->board.get_xy(liberty_pos[1]);
+                auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
                 if (state_copy->is_move_legal(turn_color, liberty_pos[1]) &&
-                    !ladder_pos[liberty_pos[1]]) {
+                    !ladder_pos[ladder_idx]) {
                     state_copy->play_move(turn_color, liberty_pos[1]);
                     if (state_copy->board.get_next_stone(liberty_pos[1]) == liberty_pos[1]) {
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
                             if (depth >= cfg_ladder_offense) {
-                                auto xy = state_copy->board.get_xy(liberty_pos[1]);
-                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER_LIKE;
+                                ladder_pos[ladder_idx] = LADDER_LIKE;
                             }
                         } else {
-                            auto xy = state_copy->board.get_xy(liberty_pos[1]);
-                            if (ladder_pos[xy.first + xy.second * BOARD_SIZE] == LADDER_LIKE) {
-                                ladder_pos[xy.first + xy.second * BOARD_SIZE] = 0;
+                            if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                                ladder_pos[ladder_idx] = 0;
                             }
                         }
                     }
