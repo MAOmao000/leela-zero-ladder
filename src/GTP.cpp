@@ -400,7 +400,7 @@ void GTP::setup_default_parameters() {
 
     cfg_use_ray_ladder = false;
     cfg_ladder_check = true;
-    cfg_ladder_defense = 3;
+    cfg_ladder_defense = 10;
     cfg_ladder_offense = 10;
     cfg_defense_stones = 1;
     cfg_offense_stones = 3;
