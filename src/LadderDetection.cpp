@@ -90,8 +90,7 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
             if (liberty_pos[0]) {
                 auto xy = state_copy->board.get_xy(liberty_pos[0]);
                 auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                if (state_copy->is_move_legal(turn_color, liberty_pos[0]) &&
-                    !ladder_pos[ladder_idx]) {
+                if (state_copy->is_move_legal(turn_color, liberty_pos[0])) {
                     state_copy->play_move(turn_color, liberty_pos[0]);
                     if (state_copy->board.get_next_stone(liberty_pos[0]) == liberty_pos[0]) {
                         depth = 0;
@@ -111,8 +110,7 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
             if (liberty_pos[1]) {
                 auto xy = state_copy->board.get_xy(liberty_pos[1]);
                 auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                if (state_copy->is_move_legal(turn_color, liberty_pos[1]) &&
-                    !ladder_pos[ladder_idx]) {
+                if (state_copy->is_move_legal(turn_color, liberty_pos[1])) {
                     state_copy->play_move(turn_color, liberty_pos[1]);
                     if (state_copy->board.get_next_stone(liberty_pos[1]) == liberty_pos[1]) {
                         depth = 0;
