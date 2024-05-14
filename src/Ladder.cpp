@@ -91,8 +91,7 @@ void LadderExtension(const GameState* const state, char *ladder_pos)
             auto x = CORRECT_X(string[i].lib[0]) - 1;
             auto y = CORRECT_Y(string[i].lib[0]) - 1;
             auto ladder_idx = x + y * BOARD_SIZE;
-            if (IsLegalForSearch(ladder_game, string[i].lib[0], color) &&
-                !ladder_pos[ladder_idx]) {
+            if (IsLegalForSearch(ladder_game, string[i].lib[0], color)) {
                 PutStoneForSearch(ladder_game, string[i].lib[0], color);
                 const int move_str = ladder_game->string_id[string[i].lib[0]];
                 if (ladder_game->string[move_str].size == 1) {
@@ -113,8 +112,7 @@ void LadderExtension(const GameState* const state, char *ladder_pos)
             x = CORRECT_X(second_lib) - 1;
             y = CORRECT_Y(second_lib) - 1;
             ladder_idx = x + y * BOARD_SIZE;
-            if (IsLegalForSearch(ladder_game, second_lib, color) &&
-                !ladder_pos[ladder_idx]) {
+            if (IsLegalForSearch(ladder_game, second_lib, color)) {
                 PutStoneForSearch(ladder_game, second_lib, color);
                 const int move_str = ladder_game->string_id[second_lib];
                 if (ladder_game->string[move_str].size == 1) {
