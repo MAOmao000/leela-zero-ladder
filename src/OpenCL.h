@@ -49,12 +49,6 @@
 template <typename net_t> class OpenCL;
 template <typename net_t> class OpenCL_Network;
 
-enum NetworkType : int
-{
-    LEELA_ZERO = 0,
-    MINIGO_SE = 1,
-};
-
 class Layer {
     template <typename> friend class OpenCL_Network;
 
@@ -254,7 +248,7 @@ class OpenCL {
 public:
     OpenCL(int gpu, bool silent = false);
 
-    void initialize(int channels, size_t batch_size, NetworkType net_type);
+    void initialize(int channels, size_t batch_size, /*NetworkType*/int net_type);
     void ensure_context_initialized(OpenCLContext& opencl_context);
     std::string get_device_name();
     bool has_fp16_compute();
@@ -286,7 +280,7 @@ private:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};
-    NetworkType m_net_type{LEELA_ZERO};
+    /*NetworkType*/int m_net_type; // {LEELA_ZERO};
 };
 
 extern const std::string sourceCode_sgemm;

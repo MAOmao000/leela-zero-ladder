@@ -254,12 +254,12 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // the rest are residuals, every residual has 8 x weight lines
     auto residual_blocks = linecount - (1 + 4 + 14);
     if (residual_blocks % 8 == 0) {
-        m_net_type = LEELA_ZERO;
+        m_net_type = NetworkType::LEELA_ZERO;
         residual_blocks /= 8;
         myprintf("%d blocks (Leela Zero).\n", residual_blocks);
     }
     else if (residual_blocks % 12 == 0) {
-        m_net_type = MINIGO_SE;
+        m_net_type = NetworkType::MINIGO_SE;
         residual_blocks /= 12;
         myprintf("%d blocks (MiniGo SE).\n", residual_blocks);
     }
@@ -276,7 +276,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     std::getline(wtfile, line);
 
     // ----------------- Leela Zero -------------------
-    if (m_net_type == LEELA_ZERO)
+    if (m_net_type == NetworkType::LEELA_ZERO)
     {
         const auto plain_conv_layers = 1 + (residual_blocks * 2);
         const auto plain_conv_wts = plain_conv_layers * 4;
@@ -362,7 +362,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
             linecount++;
         }
     }
-    else if (m_net_type == MINIGO_SE)
+    else if (m_net_type == NetworkType::MINIGO_SE)
         // ----------------- MiniGo v17 -------------------
     {
         const auto res_conv_layers = residual_blocks * 2;
@@ -525,7 +525,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
 std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
-	pipe->initialize(channels, m_net_type);
+    pipe->initialize(channels, int(m_net_type));
     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 
     return std::move(pipe);

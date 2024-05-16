@@ -1047,7 +1047,7 @@ OpenCL<net_t>::OpenCL(const int gpu, const bool silent) {
 
 template <typename net_t>
 void OpenCL<net_t>::initialize(const int channels, const size_t batch_size,
-                               const NetworkType net_type) {
+                               const /*NetworkType*/int net_type) {
     m_batch_size = batch_size;
     m_net_type = net_type;
     // Make program of the source code in the context

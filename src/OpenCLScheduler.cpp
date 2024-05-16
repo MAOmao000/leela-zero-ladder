@@ -106,7 +106,7 @@ OpenCLScheduler<net_t>::OpenCLScheduler() {
 }
 
 template <typename net_t>
-void OpenCLScheduler<net_t>::initialize(const int channels, const NetworkType net_type) {
+void OpenCLScheduler<net_t>::initialize(const int channels, const /*NetworkType*/int net_type) {
     m_net_type = net_type;
 
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
@@ -279,7 +279,7 @@ void OpenCLScheduler<net_t>::push_weights(
                            weights->m_batchnorm_stddevs[weight_index]);
     weight_index++;
 
-    if (m_net_type == LEELA_ZERO)
+    if (m_net_type == int(NetworkType::LEELA_ZERO))
     {
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer
@@ -294,7 +294,7 @@ void OpenCLScheduler<net_t>::push_weights(
             weight_index += 2;
         }
     }
-    else if (m_net_type == MINIGO_SE)
+    else if (m_net_type == int(NetworkType::MINIGO_SE))
     {
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer

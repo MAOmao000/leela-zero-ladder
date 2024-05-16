@@ -47,12 +47,16 @@
 #endif
 #include "ForwardPipe.h"
 #include "GameState.h"
-#ifdef USE_OPENCL
-#include "OpenCLScheduler.h"
-#endif
+//#ifdef USE_OPENCL
+//#include "OpenCLScheduler.h"
+//#endif
 #ifdef USE_OPENCL_SELFCHECK
 #include "SMP.h"
 #endif
+
+enum class NetworkType {
+    LEELA_ZERO, MINIGO_SE
+};
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto WINOGRAD_M = 4;
@@ -187,6 +191,6 @@ private:
     std::array<float, 1> m_ip2_val_b;
     bool m_value_head_not_stm;
 
-	NetworkType m_net_type{ LEELA_ZERO };
+    NetworkType m_net_type{ NetworkType::LEELA_ZERO };
 };
 #endif
