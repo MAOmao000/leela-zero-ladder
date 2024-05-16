@@ -521,7 +521,7 @@ void CPUPipe::forward(const std::vector<float>& input,
                 m_weights->m_se_biases[i],
                 se_fc2);
 
-            for (auto c = size_t{ 0 }; c < output_channels; ++c) {
+            for (auto c = size_t{ 0 }; c < size_t(output_channels); ++c) {
                 const auto w = lambda_Sig(se_fc2[c]);
 
                 for (auto b = size_t{ 0 }; b < NUM_INTERSECTIONS; ++b) {
