@@ -216,10 +216,10 @@ Parameters Tuner<net_t>::get_parameters_by_int(
     Parameters param;
     std::vector<size_t> choices(opts.size());
 
-    auto cfgs = 1;
+//    auto cfgs = 1;
     for (auto c = size_t{0}; c < opts.size(); c++) {
         choices[c] = opts[c].second.size();
-        cfgs *= choices[c];
+//        cfgs *= choices[c];
     }
     auto j = n;
 

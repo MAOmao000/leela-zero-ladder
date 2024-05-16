@@ -263,8 +263,8 @@ InitializeBoard( game_info_t *game )
   fill_n(game->tactical_features2, board_max, 0);
   fill_n(game->update_num,  (int)S_OB, 0);
   fill_n(game->capture_num, (int)S_OB, 0);
-  fill(game->update_pos[0],  game->update_pos[S_OB], 0);
-  fill(game->capture_pos[0], game->capture_pos[S_OB], 0);
+  fill(game->update_pos[0],  game->update_pos[S_OB - 1], 0);
+  fill(game->capture_pos[0], game->capture_pos[S_OB - 1], 0);
   
   game->current_hash = 0;
   game->previous1_hash = 0;
