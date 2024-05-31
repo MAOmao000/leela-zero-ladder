@@ -44,6 +44,9 @@
 #include "NNCache.h"
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
+#ifdef USE_CUDNN
+#include "CuDNNScheduler.h"
+#endif
 #endif
 #include "ForwardPipe.h"
 #include "GameState.h"

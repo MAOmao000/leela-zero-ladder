@@ -59,6 +59,9 @@
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
 #include "UCTNode.h"
+#ifdef USE_CUDNN
+#include "CuDNNScheduler.h"
+#endif
 #endif
 #include "FastBoard.h"
 #include "FastState.h"
@@ -533,6 +536,82 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 
 #ifdef USE_HALF
 void Network::select_precision(const int channels) {
+#ifdef USE_CUDNN
+    if (cfg_cudnn) {
+        if (cfg_precision == precision_t::AUTO) {
+            auto score_fp16 = float{-1.0};
+            auto score_fp32 = float{-1.0};
+
+            // Setup fp16 here so that we can see if we can skip autodetect.
+            // However, if fp16 sanity check fails we will return a fp32 and pray it works.
+            myprintf("Initializing CuDNN (autodetecting precision).\n");
+            auto fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
+            if (!fp16_net->needs_autodetect()) {
+                try {
+                    myprintf("CuDNN: using fp16/half or tensor core compute support.\n");
+                    m_forward = init_net(channels, std::move(fp16_net));
+                    benchmark_time(1); // a sanity check run
+                } catch (...) {
+                    myprintf("CuDNN: fp16/half or tensor core failed "
+                             "despite driver claiming support.\n");
+                    myprintf("Falling back to single precision\n");
+                    m_forward.reset();
+                    m_forward = init_net(
+                        channels, std::make_unique<CuDNNScheduler<float>>());
+                }
+                return;
+            }
+
+            // Start by setting up fp32.
+            try {
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+                score_fp32 = benchmark_time(100);
+            } catch (...) {
+                // empty - if exception thrown just throw away fp32 net
+            }
+
+            // Now benchmark fp16.
+            try {
+                m_forward.reset();
+                m_forward = init_net(channels, std::move(fp16_net));
+                score_fp16 = benchmark_time(100);
+            } catch (...) {
+                // empty - if exception thrown just throw away fp16 net
+            }
+
+            if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
+                myprintf("Both single precision and half precision failed to run.\n");
+                throw std::runtime_error("Failed to initialize net.");
+            } else if (score_fp16 < 0.0f) {
+                myprintf("Using CuDNN single precision (half precision failed to run).\n");
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+            } else if (score_fp32 < 0.0f) {
+                myprintf("Using CuDNN half precision (single precision failed to run).\n");
+            } else if (score_fp32 * 1.05f > score_fp16) {
+                myprintf("Using CuDNN single precision (less than 5%% slower than half).\n");
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+            } else {
+                myprintf("Using CuDNN half precision (at least 5%% faster than single).\n");
+            }
+            return;
+        } else if (cfg_precision == precision_t::SINGLE) {
+            myprintf("Initializing CuDNN (single precision).\n");
+            m_forward =
+                init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+        } else if (cfg_precision == precision_t::HALF) {
+            myprintf("Initializing CuDNN (half precision).\n");
+            m_forward = init_net(
+                channels, std::make_unique<CuDNNScheduler<half_float::half>>());
+        }
+        return;
+    }
+#endif
     if (cfg_precision == precision_t::AUTO) {
         auto score_fp16 = float{-1.0};
         auto score_fp32 = float{-1.0};
@@ -655,18 +734,20 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         exit(EXIT_FAILURE);
     }
 
-    auto weight_index = size_t{0};
-    // Input convolution
-    // Winograd transform convolution weights
-    m_fwd_weights->m_conv_weights[weight_index] = winograd_transform_f(
-        m_fwd_weights->m_conv_weights[weight_index], channels, INPUT_CHANNELS);
-    weight_index++;
-
-    // Residual block convolutions
-    for (auto i = size_t{0}; i < residual_blocks * 2; i++) {
+    if (!cfg_cudnn) {
+        auto weight_index = size_t{0};
+        // Input convolution
+        // Winograd transform convolution weights
         m_fwd_weights->m_conv_weights[weight_index] = winograd_transform_f(
-            m_fwd_weights->m_conv_weights[weight_index], channels, channels);
+            m_fwd_weights->m_conv_weights[weight_index], channels, INPUT_CHANNELS);
         weight_index++;
+
+        // Residual block convolutions
+        for (auto i = size_t{0}; i < residual_blocks * 2; i++) {
+            m_fwd_weights->m_conv_weights[weight_index] = winograd_transform_f(
+                m_fwd_weights->m_conv_weights[weight_index], channels, channels);
+            weight_index++;
+        }
     }
 
     // Biases are not calculated and are typically zero but some networks might
@@ -699,18 +780,29 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         m_forward = init_net(channels, std::make_unique<CPUPipe>());
     } else {
 #ifdef USE_OPENCL_SELFCHECK
-        // initialize CPU reference first, so that we can self-check
-        // when doing fp16 vs. fp32 detections
-        m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
+        if (!cfg_cudnn) {
+            // initialize CPU reference first, so that we can self-check
+            // when doing fp16 vs. fp32 detections
+            m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
+        }
 #endif
 #ifdef USE_HALF
         // HALF support is enabled, and we are using the GPU.
         // Select the precision to use at runtime.
         select_precision(channels);
 #else
+#ifdef USE_CUDNN
+        if (cfg_cudnn) {
+            myprintf("Initializing CuDNN (single precision).\n");
+            m_forward = init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+        } else {
+            myprintf("Initializing OpenCL (single precision).\n");
+            m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+        }
+#else
         myprintf("Initializing OpenCL (single precision).\n");
-        m_forward =
-            init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+        m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+#endif
 #endif
     }
 

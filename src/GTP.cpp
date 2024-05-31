@@ -108,6 +108,7 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
+bool cfg_cudnn;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
 
@@ -395,6 +396,7 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
+    cfg_cudnn = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;
 
@@ -1257,7 +1259,7 @@ std::pair<std::string, std::string> GTP::parse_option(std::istringstream& is) {
 size_t GTP::get_base_memory() {
     // At the moment of writing the memory consumption is
     // roughly network size + 85 for one GPU and + 160 for two GPUs.
-#ifdef USE_OPENCL
+#ifdef /*USE_GPU // */USE_OPENCL
     auto gpus = std::max(cfg_gpus.size(), size_t{1});
     return s_network->get_estimated_size() + 85 * MiB * gpus;
 #else

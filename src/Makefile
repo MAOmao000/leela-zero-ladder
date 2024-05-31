@@ -48,13 +48,14 @@ endif
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
 
-sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
-	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
-	  SGFParser.cpp Timing.cpp Utils.cpp FastBoard.cpp \
-	  SGFTree.cpp Zobrist.cpp FastState.cpp GTP.cpp Random.cpp \
-	  SMP.cpp UCTNode.cpp UCTNodePointer.cpp UCTNodeRoot.cpp \
-	  OpenCL.cpp OpenCLScheduler.cpp NNCache.cpp Tuner.cpp CPUPipe.cpp \
-	  LadderDetection.cpp GoBoard.cpp Ladder.cpp Pattern.cpp SearchBoard.cpp ZobristHash.cpp
+sources = $(wildcard *.cpp)
+#sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
+#	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
+#	  SGFParser.cpp Timing.cpp Utils.cpp FastBoard.cpp \
+#	  SGFTree.cpp Zobrist.cpp FastState.cpp GTP.cpp Random.cpp \
+#	  SMP.cpp UCTNode.cpp UCTNodePointer.cpp UCTNodeRoot.cpp \
+#	  OpenCL.cpp OpenCLScheduler.cpp NNCache.cpp Tuner.cpp CPUPipe.cpp \
+#	  LadderDetection.cpp GoBoard.cpp Ladder.cpp Pattern.cpp SearchBoard.cpp ZobristHash.cpp
 
 objects = $(sources:.cpp=.o)
 deps = $(sources:%.cpp=%.d)

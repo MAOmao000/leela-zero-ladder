@@ -110,8 +110,13 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size =
-                (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+            if (cfg_cudnn) {
+                cfg_batch_size =
+                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 1);
+            } else {
+                cfg_batch_size =
+                    (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+            }
 
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
@@ -123,19 +128,30 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size = 5;
+            if (cfg_cudnn) {
+                cfg_batch_size = 10;
+            } else {
+                cfg_batch_size = 5;
+            }
         }
 
-        cfg_num_threads =
-            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        if (cfg_cudnn) {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 1);
+        } else {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        }
     }
 
+#ifdef USE_OPENCL
     if (cfg_num_threads < cfg_batch_size) {
         printf(
             "Number of threads = %d must be no smaller than batch size = %d\n",
             cfg_num_threads, cfg_batch_size);
         exit(EXIT_FAILURE);
     }
+#endif
 }
 #endif
 
@@ -179,7 +195,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifndef USE_CPU_ONLY
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #endif
-
+#ifdef USE_OPENCL
+        ("cudnn", "Use cudnn to evaluate neural net. Only works on recent nVidia GPUs.")
+#endif
         ("use_ray_ladder", "Enable RAY's ladder check.")
         ("no_ladder_check", "Disable ladder check.")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
@@ -409,6 +427,35 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("tune-only")) {
         cfg_tune_only = true;
     }
+    if (vm.count("cpu-only")) {
+        cfg_cpu_only = true;
+    }
+#else
+    cfg_cpu_only = true;
+#endif
+
+    if (cfg_cpu_only) {
+        calculate_thread_count_cpu(vm);
+    } else {
+#ifdef USE_OPENCL
+        if (vm.count("cudnn")) {
+            cfg_cudnn = true;
+            calculate_thread_count_gpu(vm);
+            myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
+        } else {
+            calculate_thread_count_gpu(vm);
+            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
+        }
+#else
+#ifdef USE_OPENCL
+        calculate_thread_count_gpu(vm);
+        myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
+#endif
+#endif
+    }
+    myprintf("Using %d thread(s).\n", cfg_num_threads);
+
+#ifdef USE_OPENCL
 #ifdef USE_HALF
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
@@ -417,6 +464,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         } else if ("half" == precision) {
             cfg_precision = precision_t::HALF;
         } else if ("auto" == precision) {
+            // Auto precision is not supported for full tuner cases.
             cfg_precision = precision_t::AUTO;
         } else {
             printf("Unexpected option for --precision, expecting single/half/auto\n");
@@ -432,22 +480,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         }
     }
 #endif
-    if (vm.count("cpu-only")) {
-        cfg_cpu_only = true;
-    }
-#else
-    cfg_cpu_only = true;
 #endif
-
-    if (cfg_cpu_only) {
-        calculate_thread_count_cpu(vm);
-    } else {
-#ifdef USE_OPENCL
-        calculate_thread_count_gpu(vm);
-        myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
-#endif
-    }
-    myprintf("Using %d thread(s).\n", cfg_num_threads);
 
     if (vm.count("seed")) {
         cfg_rng_seed = vm["seed"].as<std::uint64_t>();
