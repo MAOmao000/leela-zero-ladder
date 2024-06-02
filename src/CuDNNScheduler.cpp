@@ -365,8 +365,13 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum) {
         }
 
         // run the NN evaluation
-        m_networks[gnum]->forward(batch_input, batch_output_pol,
-            batch_output_val, context, (const int)count);
+        if (count == 1) {
+            m_networks[gnum]->forward(batch_input, batch_output_pol,
+                batch_output_val, context[0], (const int)count);
+        } else {
+            m_networks[gnum]->forward(batch_input, batch_output_pol,
+                batch_output_val, context[1], (const int)count);
+        }
 
         // Get output and copy back
         index = 0;

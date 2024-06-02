@@ -23,14 +23,22 @@ clang:
 
 DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz
 LIBS =
+USE_CUDNN = 0
 
 ifeq ($(THE_OS),Linux)
 # for Linux with OpenBLAS
 	CXXFLAGS += -I/usr/include/openblas -I./Eigen
 	DYNAMIC_LIBS += -lopenblas
 	DYNAMIC_LIBS += -lOpenCL
-	LDFLAGS  += -L/usr/local/cuda-12.2/lib64/
-
+	LDFLAGS += -L/usr/local/cuda-12.2/lib64
+ifeq ($(BACKEND),CUDNN)
+	CUDA_INCLUDE = /usr/local/cuda-12.2/targets/x86_64-linux/include
+	CUDNN_INCLUDE = /usr/include
+	CUDNN_LIB = /usr/local/cuda-12.2/lib64
+	CXXFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE) -DUSE_CUDNN
+	DYNAMIC_LIBS += -lcudart_static -lcuda -lcudnn
+	LDFLAGS  += -L$(CUDNN_LIB)
+endif
 endif
 ifeq ($(THE_OS),Darwin)
 # for macOS (comment out the Linux part)

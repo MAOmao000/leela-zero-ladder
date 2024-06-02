@@ -116,13 +116,13 @@ public:
     void forward(std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
-                 CuDNNContext cudnn_context[2],
+                 CuDNNContext& cudnn_context,
                  const int batch_size = 1);
 
     void forward_activations(std::vector<float>& input,
                              std::vector<float>& output_pol,
                              std::vector<float>& output_val,
-                             CuDNNContext cudnn_context[2],
+                             CuDNNContext& cudnn_context,
                              const int batch_size = 1);
 
 private:
@@ -173,8 +173,6 @@ private:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};
-    int m_gpu{-1};
-    bool m_silent{false};
     int m_net_type{0};
 };
 #endif
