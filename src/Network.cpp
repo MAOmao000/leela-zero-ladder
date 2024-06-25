@@ -267,7 +267,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
         myprintf("%d blocks (MiniGo SE).\n", residual_blocks);
     }
     else {
-        myprintf("\nInconsistent number of weights in the file.\n");
+        myprintf_error("\nInconsistent number of weights in the file.\n");
         return {0, 0};
     }
 
@@ -786,25 +786,31 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
         }
 #endif
-#ifdef USE_HALF
-        // HALF support is enabled, and we are using the GPU.
-        // Select the precision to use at runtime.
-        select_precision(channels);
-#else
 #ifdef USE_CUDNN
+#ifdef USE_HALF
         if (cfg_cudnn) {
+            // HALF support is enabled, and we are using the GPU.
+            // Select the precision to use at runtime.
+            select_precision(channels);
+#else
             myprintf("Initializing CuDNN (single precision).\n");
             m_forward = init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
         } else {
-            myprintf("Initializing OpenCL (single precision).\n");
-            m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        }
+#endif
+#ifdef USE_HALF
+            // HALF support is enabled, and we are using the GPU.
+            // Select the precision to use at runtime.
+            select_precision(channels);
 #else
-        myprintf("Initializing OpenCL (single precision).\n");
-        m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+            myprintf("Initializing OpenCL (single precision).\n");
+            m_forward =
+                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
 #endif
-#endif
+        }
+#ifdef USE_CUDNN
     }
+#endif
 
 #else // !USE_OPENCL
     myprintf("Initializing CPU-only evaluation.\n");

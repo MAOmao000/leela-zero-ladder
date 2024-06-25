@@ -132,6 +132,7 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
 extern bool cfg_cudnn;
+extern bool cfg_NCHW;
 extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;
 

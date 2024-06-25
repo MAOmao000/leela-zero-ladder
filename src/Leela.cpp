@@ -70,7 +70,8 @@ static void license_blurb() {
 static void calculate_thread_count_cpu(
     boost::program_options::variables_map& vm) {
     // If we are CPU-based, there is no point using more than the number of CPUs.
-    auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
+    auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{ MAX_CPUS });
+    cfg_max_threads = std::max(cfg_max_threads, size_t{1});
 
     if (vm["threads"].as<unsigned int>() > 0) {
         auto num_threads = vm["threads"].as<unsigned int>();
@@ -128,10 +129,11 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
+            calculate_thread_count_cpu(vm);
             if (cfg_cudnn) {
-                cfg_batch_size = 10;
+                cfg_batch_size = cfg_num_threads * 5 / 3;
             } else {
-                cfg_batch_size = 5;
+                cfg_batch_size = cfg_num_threads * 5 / 6;
             }
         }
 
@@ -196,7 +198,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #endif
 #ifdef USE_OPENCL
+#ifdef USE_CUDNN
         ("cudnn", "Use cudnn to evaluate neural net. Only works on recent nVidia GPUs.")
+        ("channel-first", "Use Channel first format (NCHW) for tensor format.")
+#endif
 #endif
         ("use_ray_ladder", "Enable RAY's ladder check.")
         ("no_ladder_check", "Disable ladder check.")
@@ -438,8 +443,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         calculate_thread_count_cpu(vm);
     } else {
 #ifdef USE_OPENCL
+#ifdef USE_CUDNN
         if (vm.count("cudnn")) {
             cfg_cudnn = true;
+            if (vm.count("channel-first")) {
+                cfg_NCHW = true;
+            }
             calculate_thread_count_gpu(vm);
             myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
         } else {
@@ -447,7 +456,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
         }
 #else
-#ifdef USE_OPENCL
         calculate_thread_count_gpu(vm);
         myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #endif

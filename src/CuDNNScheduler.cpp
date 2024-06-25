@@ -174,7 +174,6 @@ void CuDNNScheduler<net_t>::push_residual(unsigned int filter_size,
         float scale_2 = 1.0f;
         /* Residual add alpha */
         float scale_3 = 1.0f;
-
         cudnn_net->push_residual(filter_size, channels, outputs,
                                  weights_1_conv,
                                  means_1_conv,
@@ -183,6 +182,63 @@ void CuDNNScheduler<net_t>::push_residual(unsigned int filter_size,
                                  scale_1,
                                  scale_2,
                                  scale_3);
+    }
+}
+
+template <typename net_t>
+void CuDNNScheduler<net_t>::push_residual_se(unsigned int filter_size,
+                                          unsigned int channels,
+                                          unsigned int outputs,
+                                          const std::vector<float>& weights_1,
+                                          const std::vector<float>& means_1,
+                                          const std::vector<float>& variances_1,
+                                          const std::vector<float>& weights_2,
+                                          const std::vector<float>& means_2,
+                                          const std::vector<float>& variances_2,
+                                          const std::vector<float>& fc1_w,
+                                          const std::vector<float>& fc1_b,
+                                          const std::vector<float>& fc2_w,
+                                          const std::vector<float>& fc2_b) {
+
+    for (const auto& cudnn_net : m_networks) {
+        std::vector<float> weights_1_conv = std::vector<float>(weights_1);
+        std::vector<float> means_1_conv = std::vector<float>(means_1);
+        std::vector<float> variances_1_conv = std::vector<float>(variances_1);
+        std::vector<float> weights_2_conv = std::vector<float>(weights_2);
+        std::vector<float> means_2_conv = std::vector<float>(means_2);
+        std::vector<float> variances_2_conv = std::vector<float>(variances_2);
+        std::vector<float> fc1_w_conv = std::vector<float>(fc1_w);
+        std::vector<float> fc1_b_conv = std::vector<float>(fc1_b);
+        std::vector<float> fc2_w_conv = std::vector<float>(fc2_w);
+        std::vector<float> fc2_b_conv = std::vector<float>(fc2_b);
+
+        bn_stddivs_to_conv(weights_1_conv,
+                           variances_1,
+                           means_1_conv,
+                           outputs, channels);
+
+        bn_stddivs_to_conv(weights_2_conv,
+                           variances_2,
+                           means_2_conv,
+                           outputs, channels);
+
+        /* Convolution alpha */
+        float scale_1 = 1.0f;
+        float scale_2 = 1.0f;
+        /* Residual add alpha */
+        float scale_3 = 1.0f;
+        cudnn_net->push_residual_se(filter_size, channels, outputs,
+            weights_1_conv,
+            means_1_conv,
+            weights_2_conv,
+            means_2_conv,
+            fc1_w_conv,
+            fc1_b_conv,
+            fc2_w_conv,
+            fc2_b_conv,
+            scale_1,
+            scale_2,
+            scale_3);
     }
 }
 
@@ -226,6 +282,23 @@ void CuDNNScheduler<net_t>::push_weights(
                 weights->m_batchnorm_stddevs[weight_index + 1]);
             weight_index += 2;
         }
+    }
+    else if (m_net_type == int(NetworkType::MINIGO_SE))
+        // residual blocks : except the first entry,
+        // the second ~ last entry is all on residual topwer
+        for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
+            push_residual_se(3/*filter_size*/, outputs, outputs,
+                weights->m_conv_weights[weight_index],
+                weights->m_batchnorm_means[weight_index],
+                weights->m_batchnorm_stddevs[weight_index],
+                weights->m_conv_weights[weight_index + 1],
+                weights->m_batchnorm_means[weight_index + 1],
+                weights->m_batchnorm_stddevs[weight_index + 1],
+                weights->m_se_weights[weight_index - 1],
+                weights->m_se_biases[weight_index - 1],
+                weights->m_se_weights[weight_index],
+                weights->m_se_biases[weight_index]);
+            weight_index += 2;
     }
 
     // Output head convolutions

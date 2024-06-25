@@ -84,6 +84,20 @@ public:
                                const std::vector<float>& means_2,
                                const std::vector<float>& variances_2);
 
+    virtual void push_residual_se(unsigned int filter_size,
+                               unsigned int channels,
+                               unsigned int outputs,
+                               const std::vector<float>& weights_1,
+                               const std::vector<float>& means_1,
+                               const std::vector<float>& variances_1,
+                               const std::vector<float>& weights_2,
+                               const std::vector<float>& means_2,
+                               const std::vector<float>& variances_2,
+                                          const std::vector<float>& fc1_w,
+                                          const std::vector<float>& fc1_b,
+                                          const std::vector<float>& fc2_w,
+                                          const std::vector<float>& fc2_b);
+
     void push_convolve(unsigned int filter_size,
                        unsigned int channels,
                        unsigned int outputs,
