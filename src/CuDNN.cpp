@@ -1188,10 +1188,10 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
         std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
     } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
-        for(auto i = size_t{0}; i < batch_size * Network::OUTPUTS_VALUE * NUM_INTERSECTIONS; i++) {
+        for(auto i = 0; i < batch_size * Network::OUTPUTS_VALUE * NUM_INTERSECTIONS; i++) {
             output_val[i] = (float)val_net_t[i]; // float <- net_t
         }
-        for(auto i = size_t{0}; i < batch_size * Network::OUTPUTS_POLICY * NUM_INTERSECTIONS; i++) {
+        for(auto i = 0; i < batch_size * Network::OUTPUTS_POLICY * NUM_INTERSECTIONS; i++) {
             output_pol[i] = (float)pol_net_t[i]; // float <- net_t
         }
     } else {

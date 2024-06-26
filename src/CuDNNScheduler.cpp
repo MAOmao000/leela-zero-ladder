@@ -259,10 +259,13 @@ void CuDNNScheduler<net_t>::push_weights(
     const unsigned int outputs,
     std::shared_ptr<const ForwardPipeWeights> weights) {
 
+    // For compatibility with OpenCL implementation
+    (void)filter_size;
+
     auto weight_index = size_t{0};
 
     // Winograd filter transformation changes filter size to 4x4
-    push_input_convolution(3/*filter_size*/, channels, outputs,
+    push_input_convolution(3, channels, outputs,
                            weights->m_conv_weights[weight_index],
                            weights->m_batchnorm_means[weight_index],
                            weights->m_batchnorm_stddevs[weight_index]);
@@ -273,7 +276,7 @@ void CuDNNScheduler<net_t>::push_weights(
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer
         for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
-            push_residual(3/*filter_size*/, outputs, outputs,
+            push_residual(3, outputs, outputs,
                 weights->m_conv_weights[weight_index],
                 weights->m_batchnorm_means[weight_index],
                 weights->m_batchnorm_stddevs[weight_index],
@@ -287,7 +290,7 @@ void CuDNNScheduler<net_t>::push_weights(
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer
         for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
-            push_residual_se(3/*filter_size*/, outputs, outputs,
+            push_residual_se(3, outputs, outputs,
                 weights->m_conv_weights[weight_index],
                 weights->m_batchnorm_means[weight_index],
                 weights->m_batchnorm_stddevs[weight_index],

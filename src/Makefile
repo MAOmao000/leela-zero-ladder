@@ -2,25 +2,22 @@ THE_OS := $(shell uname -s)
 
 default:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=gcc CXX=g++ NVCC=nvcc \
+	$(MAKE) CC=gcc CXX=g++ \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -Wno-deprecated-copy -pipe -O3 -g -ffast-math -flto -march=native -std=c++17 -DNDEBUG' \
-		NVCCFLAGS='$(NVCCFLAGS) -std=c++17 -O3 -Xcompiler "-Wall -Wno-unused-function"
 		LDFLAGS='$(LDFLAGS) -flto -g' \
 		leelaz
 
 debug:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=gcc CXX=g++ NVCC=nvcc \
+	$(MAKE) CC=gcc CXX=g++ \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -Wno-deprecated-copy -pipe -Og -g -std=c++17' \
-		NVCCFLAGS='$(NVCCFLAGS) -std=c++17 -O3 -Xcompiler "-Wall -Wno-unused-function"
 		LDFLAGS='$(LDFLAGS) -g' \
 		leelaz
 
 clang:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=clang CXX=clang++ NVCC=nvcc \
+	$(MAKE) CC=clang CXX=clang++ \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -Wno-deprecated-copy -O3 -ffast-math -flto -mfpmath=sse -march=native -std=c++17 -DNDEBUG' \
-		NVCCFLAGS='$(NVCCFLAGS) -std=c++17 -O3 -Xcompiler "-Wall -Wno-unused-function"
 		LDFLAGS='$(LDFLAGS) -flto -fuse-linker-plugin' \
 		leelaz
 
@@ -39,7 +36,10 @@ ifeq ($(BACKEND),CUDNN)
 	CUDNN_INCLUDE = /usr/include
 	CUDNN_LIB = /usr/local/cuda-12.2/lib64
 	CXXFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE) -DUSE_CUDNN
-	NVCCFLAGS += -gencode arch=compute_89,code=sm_89 -gencode arch=compute_89,code=compute_89
+	NVCCFLAGS = -std=c++17 -O3 -Xcompiler -Wall -DUSE_CUDNN
+	NVCCFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE)
+	NVCCFLAGS += -gencode arch=compute_${CUDA_ARCHITECTURES},code=sm_${CUDA_ARCHITECTURES}
+	NVCCFLAGS += -gencode arch=compute_${CUDA_ARCHITECTURES},code=compute_${CUDA_ARCHITECTURES}
 	DYNAMIC_LIBS += -lcudart_static -lcuda -lcudnn -lcublas
 	LDFLAGS  += -L$(CUDNN_LIB)
 endif
@@ -60,28 +60,26 @@ endif
 CXXFLAGS += -I.
 CPPFLAGS += -MD -MP
 
-sources = $(wildcard *.cpp) $(wildcard *.cu)
-#sources = Network.cpp FullBoard.cpp KoState.cpp Training.cpp \
-#	  TimeControl.cpp UCTSearch.cpp GameState.cpp Leela.cpp \
-#	  SGFParser.cpp Timing.cpp Utils.cpp FastBoard.cpp \
-#	  SGFTree.cpp Zobrist.cpp FastState.cpp GTP.cpp Random.cpp \
-#	  SMP.cpp UCTNode.cpp UCTNodePointer.cpp UCTNodeRoot.cpp \
-#	  OpenCL.cpp OpenCLScheduler.cpp NNCache.cpp Tuner.cpp CPUPipe.cpp \
-#	  LadderDetection.cpp GoBoard.cpp Ladder.cpp Pattern.cpp SearchBoard.cpp ZobristHash.cpp
+#sources = $(wildcard *.cpp)
+#objects = $(sources:.cpp=.o)
+#deps = $(sources:%.cpp=%.d)
 
-objects = $(sources:.cpp=.o) $(sources:.cu=.o)
-deps = $(sources:%.cpp=%.d) $(sources:%.cu=%.d)
+BUILD_DIR ?= .
+SRC_DIRS ?= .
+sources:= $(shell find $(SRC_DIRS) -maxdepth 1 -name '*.cpp' -or -name '*.cu')
+objects := $(sources:%=$(BUILD_DIR)/%.o)
+deps := $(objects:.o=.d)
 
 -include $(deps)
 
-%.o: %.cu
-	$(NVCC) $(NVCCFLAGS) -c -o $@ $<
+$(BUILD_DIR)/leelaz: $(objects)
+	$(CXX) $(objects) $(LDFLAGS) -o $@ $(LIBS) $(DYNAMIC_LIBS)
 
-%.o: %.cpp
+$(BUILD_DIR)/%.cu.o: %.cu
+	nvcc $(NVCCFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/%.cpp.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
-
-leelaz: $(objects)
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS) $(DYNAMIC_LIBS)
 
 clean:
 	-$(RM) leelaz $(objects) $(deps)

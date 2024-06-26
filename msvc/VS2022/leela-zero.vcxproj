@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClInclude Include="..\..\src\CL\cl2.hpp" />
     <ClInclude Include="..\..\src\config.h" />
+    <ClInclude Include="..\..\src\CuDNN.h" />
+    <ClInclude Include="..\..\src\CuDNNScheduler.h" />
     <ClInclude Include="..\..\src\FastBoard.h" />
     <ClInclude Include="..\..\src\FastState.h" />
     <ClInclude Include="..\..\src\FullBoard.h" />
@@ -50,6 +52,8 @@
     <ClInclude Include="..\..\src\Zobrist.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\src\CuDNN.cpp" />
+    <ClCompile Include="..\..\src\CuDNNScheduler.cpp" />
     <ClCompile Include="..\..\src\FastBoard.cpp" />
     <ClCompile Include="..\..\src\FastState.cpp" />
     <ClCompile Include="..\..\src\FullBoard.cpp" />
@@ -83,12 +87,25 @@
     <ClCompile Include="..\..\src\Zobrist.cpp" />
     <ClCompile Include="..\..\src\ZobristHash.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="..\..\src\SEnet.cu">
+      <FileType>Document</FileType>
+      <Include Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\IGO\leela-zero-cudnn\src;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(Include)</Include>
+      <UseHostInclude Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</UseHostInclude>
+      <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_52,sm_52</CodeGeneration>
+      <Defines Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Defines)</Defines>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">O2</Optimization>
+      <Runtime Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MT</Runtime>
+      <RuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Default</RuntimeChecks>
+    </CudaCompile>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{7B887BFE-8D2C-46CD-B139-5213434BF218}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>leelazero</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <CudaToolkitCustomDir>$(CUDA_PATH)</CudaToolkitCustomDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -113,12 +130,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>ClangCL</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -205,8 +223,8 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\vcpkg\installed\x64-windows-static\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_CUDNN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -216,10 +234,21 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <CudaCompile>
+      <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>
+      <CodeGeneration>compute_52,sm_52;%(CodeGeneration)</CodeGeneration>
+      <FastMath>true</FastMath>
+      <Optimization>InheritFromHost</Optimization>
+    </CudaCompile>
+    <CudaLink>
+      <GPUDebugInfo>false</GPUDebugInfo>
+    </CudaLink>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.2.targets" />
+  </ImportGroup>
 </Project>
