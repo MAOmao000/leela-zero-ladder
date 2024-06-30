@@ -1034,10 +1034,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input[0], inSize, cudaMemcpyHostToDevice));
     } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
         auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
-        //std::copy(input.begin(), input.end(), input_net_t.begin());
-        for(auto i = size_t{0}; i < batch_size * m_layers[0].channels * NUM_INTERSECTIONS; i++) {
-            input_net_t[i] = (net_t)input[i]; // net_t <- float
-        }
+        std::copy(input.begin(), input.end(), input_net_t.begin());
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input_net_t[0], inSize, cudaMemcpyHostToDevice));
     } else {
         auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
@@ -1184,16 +1181,9 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     }
 
     // input: val_net_t(net_t), pol_net_t(net_t)
-    if (typeid(net_t) == typeid(float) && cfg_NCHW) {
+    if (cfg_NCHW) {
         std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
         std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
-    } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
-        for(auto i = 0; i < batch_size * Network::OUTPUTS_VALUE * NUM_INTERSECTIONS; i++) {
-            output_val[i] = (float)val_net_t[i]; // float <- net_t
-        }
-        for(auto i = 0; i < batch_size * Network::OUTPUTS_POLICY * NUM_INTERSECTIONS; i++) {
-            output_pol[i] = (float)pol_net_t[i]; // float <- net_t
-        }
     } else {
         output_val = NHWC_to_NCHW<net_t>(
             val_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_VALUE);
