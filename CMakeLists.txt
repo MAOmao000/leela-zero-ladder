@@ -88,8 +88,9 @@ if(USE_BACKEND STREQUAL "CUDNNGRAPH")
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
     ${SrcPath}/SEnet.cu
+    ${SrcPath}/Tuner.cpp
   )
-  set(FEIncludePath "${HOME}/cudnn-frontend-1.5.2/include")
+  set(FEIncludePath "/home/x/cudnn-frontend/include")
 # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
     set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
@@ -106,7 +107,7 @@ if(USE_BACKEND STREQUAL "CUDNNGRAPH")
   elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
     set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
     set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
   else()
@@ -124,6 +125,7 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
     ${SrcPath}/SEnet.cu
+    ${SrcPath}/Tuner.cpp
   )
 # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
@@ -141,7 +143,7 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
     set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
     set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
   else()
@@ -154,6 +156,7 @@ elseif(USE_BACKEND STREQUAL "OPENCL")
   set(NEURALNET_BACKEND_SOURCES
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/Tuner.cpp
   )
 
 elseif(USE_BACKEND STREQUAL "BLAS")
@@ -190,7 +193,6 @@ add_executable(leelaz
   ${SrcPath}/TimeControl.cpp
   ${SrcPath}/Timing.cpp
   ${SrcPath}/Training.cpp
-  ${SrcPath}/Tuner.cpp
   ${SrcPath}/UCTNode.cpp
   ${SrcPath}/UCTNodePointer.cpp
   ${SrcPath}/UCTNodeRoot.cpp
@@ -200,6 +202,7 @@ add_executable(leelaz
   ${SrcPath}/ZobristHash.cpp
   ${NEURALNET_BACKEND_SOURCES}
   ${SrcPath}/Leela.cpp
+)
 
 if(USE_BACKEND STREQUAL "CUDNNGRAPH")
   message(STATUS "Looking for system CuDNN library.")
@@ -298,3 +301,7 @@ endif()
 if(APPLE)
   include_directories("/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers")
 endif()
+target_link_libraries(leelaz ${Boost_LIBRARIES})
+target_link_libraries(leelaz ${ZLIB_LIBRARIES})
+target_link_libraries(leelaz ${CMAKE_THREAD_LIBS_INIT})
+install(TARGETS leelaz DESTINATION ${CMAKE_INSTALL_BINDIR})

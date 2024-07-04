@@ -46,9 +46,9 @@ endif
 ifeq ($(BACKEND),CUDNN_GRAPH)
 	CUDA_INCLUDE = /usr/local/cuda-12.2/targets/x86_64-linux/include
 	CUDNN_INCLUDE = /usr/include
-	CUDNN_FE_INCLUDE = ${HOME}/cudnn-frontend-1.5.2/include
+	CUDNN_FE_INCLUDE = /home/x/cudnn-frontend/include
 	CUDNN_LIB = /usr/local/cuda-12.2/lib64
-	CXXFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE) -I$(CUDA_FE_INCLUDE) -DUSE_BLAS -DUSE_CUDNN -DUSE_CUDNN_GRAPH
+	CXXFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE) -I$(CUDNN_FE_INCLUDE) -DUSE_BLAS -DUSE_CUDNN -DUSE_CUDNN_GRAPH
 	NVCCFLAGS = -std=c++17 -O3 -Xcompiler -Wall -DUSE_CUDNN
 	NVCCFLAGS += -I$(CUDNN_INCLUDE) -I$(CUDA_INCLUDE)
 	NVCCFLAGS += -gencode arch=compute_${CUDA_ARCHITECTURES},code=sm_${CUDA_ARCHITECTURES}

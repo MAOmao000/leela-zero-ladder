@@ -777,7 +777,6 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
 template <typename net_t>
 void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
                                              const int outputs,
-                                             const int filter_size,
                                              conv_descriptor& conv_desc,
                                              const int batch_size) {
 
@@ -786,22 +785,17 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
     int64_t h = BOARD_SIZE;
     int64_t w = BOARD_SIZE;
     int64_t k = outputs;
-    int64_t r = filter_size;
-    int64_t s = filter_size;
 
     fe::DataType_t data_type;
     fe::DataType_t compute_type;
-    fe::DataType_t conv_compute_type;
     fe::DataType_t intermediate_type;
     if (typeid(net_t) == typeid(float)) {
         data_type = fe::DataType_t::FLOAT;
         compute_type = fe::DataType_t::FLOAT;
-        conv_compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
     } else { // typeid: __half
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
-        conv_compute_type = fe::DataType_t::HALF;
         intermediate_type = fe::DataType_t::HALF;
     }
     auto build_new_graph = [=](cudnnHandle_t handle) {
@@ -879,17 +873,14 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
     fe::DataType_t data_type;
     fe::DataType_t compute_type;
     fe::DataType_t conv_compute_type;
-    fe::DataType_t intermediate_type;
     if (typeid(net_t) == typeid(float)) {
         data_type = fe::DataType_t::FLOAT;
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::FLOAT;
-        intermediate_type = fe::DataType_t::FLOAT;
     } else { // typeid: __half
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::HALF;
-        intermediate_type = fe::DataType_t::HALF;
     }
     auto pad_size = filter_size / 2;
     auto build_new_graph = [=](cudnnHandle_t handle) {
@@ -1252,10 +1243,10 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
                                              cfg_batch_size);
             m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
 
-            m_cudnn.convolve_fe_add_relu_init(channels, outputs, filter_size,
+            m_cudnn.convolve_fe_add_relu_init(channels, outputs,
                                               m_conv_desc[CONV_DESC_ADD_RELU][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_ADD_RELU][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_add_relu_init(channels, outputs, filter_size,
+            m_cudnn.convolve_fe_add_relu_init(channels, outputs,
                                               m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES],
                                               cfg_batch_size);
             m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES].is_initialized = true;

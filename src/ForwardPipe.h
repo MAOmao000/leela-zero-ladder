@@ -31,7 +31,9 @@
 #define FORWARDPIPE_H_INCLUDED
 
 #include "config.h"
+#ifdef USE_OPENCL
 #include "OpenCL.h"
+#endif
 
 #include <memory>
 #include <vector>

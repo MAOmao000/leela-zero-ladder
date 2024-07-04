@@ -399,7 +399,6 @@ private:
 
     void convolve_fe_add_relu_init(const int channels,
                                    const int outputs,
-                                   const int filter_size,
                                    conv_descriptor& conv_desc,
                                    const int batch_size = 1);
 #endif
