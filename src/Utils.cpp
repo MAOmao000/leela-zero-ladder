@@ -60,7 +60,7 @@ void Utils::create_z_table() {
         auto z =
             boost::math::quantile(boost::math::complement(dist, cfg_ci_alpha));
         //z_lookup[i - 1] = z;
-        z_lookup.emplace_back(z);
+        z_lookup.emplace_back(float(z));
     }
 }
 

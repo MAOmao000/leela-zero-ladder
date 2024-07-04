@@ -109,6 +109,7 @@ std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
 bool cfg_cudnn;
+bool cfg_cudnn_graph;
 bool cfg_NCHW;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
@@ -398,6 +399,7 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;
 #endif
     cfg_cudnn = false;
+    cfg_cudnn_graph = false;
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;

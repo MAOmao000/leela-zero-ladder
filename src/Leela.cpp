@@ -200,6 +200,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_OPENCL
 #ifdef USE_CUDNN
         ("cudnn", "Use cudnn to evaluate neural net. Only works on recent nVidia GPUs.")
+#ifdef USE_CUDNN_GRAPH
+        ("cudnn-graph", "Use cudnn graph to evaluate neural net. Only works on recent nVidia GPUs.")
+#endif
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
 #endif
 #endif
@@ -451,6 +454,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             }
             calculate_thread_count_gpu(vm);
             myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
+#ifdef USE_CUDNN_GRAPH
+        } else if (vm.count("cudnn-graph")) {
+            cfg_cudnn = true;
+            cfg_cudnn_graph = true;
+            if (vm.count("channel-first")) {
+                cfg_NCHW = true;
+            }
+            calculate_thread_count_gpu(vm);
+            myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
+#endif
         } else {
             calculate_thread_count_gpu(vm);
             myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);

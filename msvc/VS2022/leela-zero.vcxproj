@@ -52,8 +52,12 @@
     <ClInclude Include="..\..\src\Zobrist.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\CuDNN.cpp" />
-    <ClCompile Include="..\..\src\CuDNNScheduler.cpp" />
+    <ClCompile Include="..\..\src\CuDNN.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\src\CuDNNScheduler.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\FastBoard.cpp" />
     <ClCompile Include="..\..\src\FastState.cpp" />
     <ClCompile Include="..\..\src\FullBoard.cpp" />
@@ -67,8 +71,12 @@
     <ClCompile Include="..\..\src\Network.cpp" />
     <ClCompile Include="..\..\src\NNCache.cpp" />
     <ClCompile Include="..\..\src\CPUPipe.cpp" />
-    <ClCompile Include="..\..\src\OpenCL.cpp" />
-    <ClCompile Include="..\..\src\OpenCLScheduler.cpp" />
+    <ClCompile Include="..\..\src\OpenCL.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\..\src\OpenCLScheduler.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\Pattern.cpp" />
     <ClCompile Include="..\..\src\Random.cpp" />
     <ClCompile Include="..\..\src\SearchBoard.cpp" />
@@ -78,7 +86,9 @@
     <ClCompile Include="..\..\src\TimeControl.cpp" />
     <ClCompile Include="..\..\src\Timing.cpp" />
     <ClCompile Include="..\..\src\Training.cpp" />
-    <ClCompile Include="..\..\src\Tuner.cpp" />
+    <ClCompile Include="..\..\src\Tuner.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\UCTNode.cpp" />
     <ClCompile Include="..\..\src\UCTNodePointer.cpp" />
     <ClCompile Include="..\..\src\UCTNodeRoot.cpp" />
@@ -97,6 +107,7 @@
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">O2</Optimization>
       <Runtime Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MT</Runtime>
       <RuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Default</RuntimeChecks>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </CudaCompile>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -165,7 +176,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>leelaz</TargetName>
+    <TargetName>leelaz_cudnnfe</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
     <IncludePath>..\..\src\Eigen;$(IncludePath)</IncludePath>
   </PropertyGroup>
@@ -223,8 +234,8 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_CUDNN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_CUDNN;USE_CUDNN_GRAPH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\;C:\lib\nvidia\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\cudnn-frontend-1.5.2\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -234,8 +245,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\lib\nvidia\lib\x64;C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libopenblas.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CudaCompile>
       <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>

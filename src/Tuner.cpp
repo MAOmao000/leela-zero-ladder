@@ -293,7 +293,7 @@ static float compare_ref(std::vector<net_t>& x, std::vector<net_t>& ref,
                 auto r = ref[batch * n * m + j * n + i];
                 auto y = x[batch * n_ceil * m_ceil + j * n_ceil + i];
 
-                sum += (r - y) * (r - y);
+                sum += (float)((r - y) * (r - y));
             }
         }
     }

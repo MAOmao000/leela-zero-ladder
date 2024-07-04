@@ -15,10 +15,8 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-#include(GNUInstallDirs)
 
 project(leelaz)
-#add_subdirectory(gtest EXCLUDE_FROM_ALL) # We don't want to install gtest, exclude it from `all`
 
 # Required Packages
 set(Boost_MIN_VERSION "1.58.0")
@@ -26,40 +24,12 @@ set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.58.0 REQUIRED program_options filesystem)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
-find_package(OpenCL REQUIRED)
 # We need OpenBLAS for now, because we make some specific
 # calls. Ideally we'd use OpenBLAS is possible and fall back to
 # not doing those calls if it's not present.
 if(NOT APPLE)
   set(BLA_VENDOR OpenBLAS)
 endif()
-if(USE_BLAS)
-  message(STATUS "Looking for system BLAS/OpenBLAS library.")
-  find_package(BLAS REQUIRED)
-  find_path(BLAS_INCLUDE_DIRS openblas_config.h
-    /usr/include
-    /usr/local/include
-    /usr/include/openblas
-    /opt/OpenBLAS/include
-    /usr/include/x86_64-linux-gnu
-    $ENV{BLAS_HOME}/include)
-    add_definitions(-DUSE_BLAS)
-else()
-message(STATUS "Using built-in matrix library.")
-endif()
-
-if(USE_CUDNN)
-  message(STATUS "Looking for system CuDNN library.")
-  find_package(CUDAToolkit REQUIRED)
-  find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
-  if((NOT CUDNN_INCLUDE_DIR))
-    message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
-  endif()
-  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
-  add_definitions(-DUSE_CUDNN)
-endif()
-
-#find_package(Qt5Core)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
@@ -96,9 +66,6 @@ if(GccSpecificFlags)
   set(CMAKE_EXE_LINKER_FLAGS "-flto -g")
 endif(GccSpecificFlags)
 
-if(USE_CPU_ONLY)
-  add_definitions(-DUSE_CPU_ONLY)
-endif()
 if(USE_HALF)
   add_definitions(-DUSE_HALF)
 endif()
@@ -108,87 +75,226 @@ set(SrcPath "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 include_directories(${IncludePath})
 include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${OpenCL_INCLUDE_DIRS})
 include_directories(${ZLIB_INCLUDE_DIRS})
-if(USE_CUDNN)
+
+set(USE_BACKEND CACHE STRING "EIGEN")
+if(USE_BACKEND STREQUAL "CUDNNGRAPH")
+  message(STATUS "-DUSE_BACKEND=CUDNNGRAPH, using CUDNNGRAPH backend.")
   enable_language(CUDA)
   set(CUDA_STANDARD 17)
-  set(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCHITECTURES})
-  set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
-endif()
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CuDNN.cpp
+    ${SrcPath}/CuDNNScheduler.cpp
+    ${SrcPath}/OpenCL.cpp
+    ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/SEnet.cu
+  )
+  set(FEIncludePath "${HOME}/cudnn-frontend-1.5.2/include")
+# https://en.wikipedia.org/wiki/CUDA#GPUs_supported
+  if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
+    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.5)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.1)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
+    set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  else()
+    message(WARNING "CUDA 10.2 or greater is recommended, but attempting to build anyways")
+    set(CMAKE_CUDA_ARCHITECTURES 30 37 53 70)
+  endif()
 
-if((UNIX AND NOT APPLE) OR WIN32)
-    include_directories(${BLAS_INCLUDE_DIRS})
-endif()
-if(APPLE)
-    include_directories("/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers")
-endif()
+elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
+  message(STATUS "-DUSE_BACKEND=CUDNNLEGACY, using CUDNNLEGACY backend.")
+  enable_language(CUDA)
+  set(CUDA_STANDARD 17)
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CuDNN.cpp
+    ${SrcPath}/CuDNNScheduler.cpp
+    ${SrcPath}/OpenCL.cpp
+    ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/SEnet.cu
+  )
+# https://en.wikipedia.org/wiki/CUDA#GPUs_supported
+  if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
+    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.5)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.1)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
+    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  elseif (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
+    set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
+    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+  else()
+    message(WARNING "CUDA 10.2 or greater is recommended, but attempting to build anyways")
+    set(CMAKE_CUDA_ARCHITECTURES 30 37 53 70)
+  endif()
 
-set(leelaz_MAIN "${SrcPath}/Leela.cpp")
-file(GLOB leelaz_SRC "${SrcPath}/*.c*")
-list(REMOVE_ITEM leelaz_SRC ${leelaz_MAIN})
+elseif(USE_BACKEND STREQUAL "OPENCL")
+  message(STATUS "-DUSE_BACKEND=OPENCL, using OPENCL backend.")
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/OpenCL.cpp
+    ${SrcPath}/OpenCLScheduler.cpp
+  )
 
-# Reuse for leelaz and gtest
-if(USE_CUDNN)
-    add_library(objs OBJECT ${leelaz_SRC} "${SrcPath}/SEnet.cu")
+elseif(USE_BACKEND STREQUAL "BLAS")
+  message(STATUS "-DUSE_BACKEND=BLAS, using BLAS backend.")
+
+elseif(USE_BACKEND STREQUAL "EIGEN")
+  message(STATUS "-DUSE_BACKEND=EIGEN, using EIGEN backend.")
+
 else()
-    add_library(objs OBJECT ${leelaz_SRC})
+  message(FATAL_ERROR "Unrecognized backend: " ${USE_BACKEND})
 endif()
 
-add_executable(leelaz $<TARGET_OBJECTS:objs> ${leelaz_MAIN})
+#--------------------------- LEELA ZERO COMPILING AND LINKING --------------------------------------------------------------
 
-target_link_libraries(leelaz ${Boost_LIBRARIES})
-target_link_libraries(leelaz ${BLAS_LIBRARIES})
-target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-target_link_libraries(leelaz ${ZLIB_LIBRARIES})
-target_link_libraries(leelaz ${CMAKE_THREAD_LIBS_INIT})
-if(USE_CUDNN)
+add_executable(leelaz
+  ${SrcPath}/CPUPipe.cpp
+  ${SrcPath}/FastBoard.cpp
+  ${SrcPath}/FastState.cpp
+  ${SrcPath}/FullBoard.cpp
+  ${SrcPath}/GameState.cpp
+  ${SrcPath}/GoBoard.cpp
+  ${SrcPath}/GTP.cpp
+  ${SrcPath}/KoState.cpp
+  ${SrcPath}/Ladder.cpp
+  ${SrcPath}/LadderDetection.cpp
+  ${SrcPath}/Network.cpp
+  ${SrcPath}/NNCache.cpp
+  ${SrcPath}/Pattern.cpp
+  ${SrcPath}/Random.cpp
+  ${SrcPath}/SearchBoard.cpp
+  ${SrcPath}/SGFParser.cpp
+  ${SrcPath}/SGFTree.cpp
+  ${SrcPath}/SMP.cpp
+  ${SrcPath}/TimeControl.cpp
+  ${SrcPath}/Timing.cpp
+  ${SrcPath}/Training.cpp
+  ${SrcPath}/Tuner.cpp
+  ${SrcPath}/UCTNode.cpp
+  ${SrcPath}/UCTNodePointer.cpp
+  ${SrcPath}/UCTNodeRoot.cpp
+  ${SrcPath}/UCTSearch.cpp
+  ${SrcPath}/Utils.cpp
+  ${SrcPath}/Zobrist.cpp
+  ${SrcPath}/ZobristHash.cpp
+  ${NEURALNET_BACKEND_SOURCES}
+  ${SrcPath}/Leela.cpp
+
+if(USE_BACKEND STREQUAL "CUDNNGRAPH")
+  message(STATUS "Looking for system CuDNN library.")
+  find_package(CUDAToolkit REQUIRED)
+  find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
+  if((NOT CUDNN_INCLUDE_DIR))
+    message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
+  endif()
+  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
+  find_package(OpenCL REQUIRED)
+  find_package(BLAS REQUIRED)
+  find_path(BLAS_INCLUDE_DIRS openblas_config.h
+    /usr/include
+    /usr/local/include
+    /usr/include/openblas
+    /opt/OpenBLAS/include
+    /usr/include/x86_64-linux-gnu
+    $ENV{BLAS_HOME}/include)
+  add_definitions(-DUSE_BLAS)
+  add_definitions(-DUSE_CUDNN)
+  add_definitions(-DUSE_CUDNN_GRAPH)
+  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR} ${FEIncludePath})
+  include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
   target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
+  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
+  if((UNIX AND NOT APPLE) OR WIN32)
+    include_directories(${BLAS_INCLUDE_DIRS})
+  endif()
+  target_link_libraries(leelaz ${BLAS_LIBRARIES})
+elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
+  message(STATUS "Looking for system CuDNN library.")
+  find_package(CUDAToolkit REQUIRED)
+  find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
+  if((NOT CUDNN_INCLUDE_DIR))
+    message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
+  endif()
+  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
+  find_package(OpenCL REQUIRED)
+  find_package(BLAS REQUIRED)
+  find_path(BLAS_INCLUDE_DIRS openblas_config.h
+    /usr/include
+    /usr/local/include
+    /usr/include/openblas
+    /opt/OpenBLAS/include
+    /usr/include/x86_64-linux-gnu
+    $ENV{BLAS_HOME}/include)
+  add_definitions(-DUSE_BLAS)
+  add_definitions(-DUSE_CUDNN)
+  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
+  include_directories(${OpenCL_INCLUDE_DIRS})
+  target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
+  target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
+  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
+  if((UNIX AND NOT APPLE) OR WIN32)
+    include_directories(${BLAS_INCLUDE_DIRS})
+  endif()
+  target_link_libraries(leelaz ${BLAS_LIBRARIES})
+elseif(USE_BACKEND STREQUAL "OPENCL")
+  find_package(OpenCL REQUIRED)
+  find_package(BLAS REQUIRED)
+  find_path(BLAS_INCLUDE_DIRS openblas_config.h
+    /usr/include
+    /usr/local/include
+    /usr/include/openblas
+    /opt/OpenBLAS/include
+    /usr/include/x86_64-linux-gnu
+    $ENV{BLAS_HOME}/include)
+  add_definitions(-DUSE_BLAS)
+  include_directories(${OpenCL_INCLUDE_DIRS})
+  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
+  if((UNIX AND NOT APPLE) OR WIN32)
+    include_directories(${BLAS_INCLUDE_DIRS})
+  endif()
+  target_link_libraries(leelaz ${BLAS_LIBRARIES})
+elseif(USE_BACKEND STREQUAL "BLAS")
+  message(STATUS "Looking for system BLAS/OpenBLAS library.")
+  find_package(BLAS REQUIRED)
+  find_path(BLAS_INCLUDE_DIRS openblas_config.h
+    /usr/include
+    /usr/local/include
+    /usr/include/openblas
+    /opt/OpenBLAS/include
+    /usr/include/x86_64-linux-gnu
+    $ENV{BLAS_HOME}/include)
+  add_definitions(-DUSE_BLAS)
+  add_definitions(-DUSE_CPU_ONLY)
+  if((UNIX AND NOT APPLE) OR WIN32)
+    include_directories(${BLAS_INCLUDE_DIRS})
+  endif()
+  target_link_libraries(leelaz ${BLAS_LIBRARIES})
+else()
+  message(STATUS "Using built-in matrix library.")
+  add_definitions(-DUSE_CPU_ONLY)
 endif()
-install(TARGETS leelaz DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-#if(Qt5Core_FOUND)
-#    if(NOT Qt5Core_VERSION VERSION_LESS "5.3.0")
-#        add_subdirectory(autogtp)
-#        add_subdirectory(validation)
-#    else()
-#        message(WARNING "Qt ${Qt5Core_VERSION} is found but does not met required version 5.3.0, \
-#        build target for `autogtp` and `validation` is disabled.")
-#    endif()
-#else()
-#    message(WARNING "Qt is not found, build for `autogtp` and `validation` is disabled")
-#endif()
-
-# Google Test below
-#file(GLOB tests_SRC "${SrcPath}/tests/*.cpp")
-
-#add_executable(tests ${tests_SRC} $<TARGET_OBJECTS:objs>)
-#if(GccSpecificFlags)
-#  target_compile_options(tests PRIVATE "-Wno-unused-variable")
-#endif()
-
-#target_link_libraries(tests ${Boost_LIBRARIES})
-#target_link_libraries(tests ${BLAS_LIBRARIES})
-#target_link_libraries(tests ${OpenCL_LIBRARIES})
-#target_link_libraries(tests ${ZLIB_LIBRARIES})
-#target_link_libraries(tests gtest_main ${CMAKE_THREAD_LIBS_INIT})
-
-#include(GetGitRevisionDescription)
-#git_describe(VERSION --tags)
-#string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" MAJOR_VERSION "${VERSION}")
-#string(REGEX REPLACE "^v[0-9]+\\.([0-9]+).*" "\\1" MINOR_VERSION "${VERSION}")
-
-#SET(CPACK_GENERATOR "DEB")
-#SET(CPACK_DEBIAN_PACKAGE_NAME "leelaz")
-#SET(CPACK_DEBIAN_PACKAGE_VERSION "${MAJOR_VERSION}.${MINOR_VERSION}")
-#SET(CPACK_DEBIAN_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
-#SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Gian-Carlo Pascutto https://github.com/gcp/leela-zero")
-#SET(CPACK_DEBIAN_PACKAGE_DESCRIPTION "Go engine with no human-provided knowledge, modeled after the AlphaGo Zero paper.")
-#SET(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-#SET(CPACK_DEBIAN_PACKAGE_SECTION "games")
-#SET(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-#SET(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${MAJOR_VERSION}.${MINOR_VERSION}")
-
-#INCLUDE(CPack)
+if(APPLE)
+  include_directories("/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers")
+endif()

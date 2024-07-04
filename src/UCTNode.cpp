@@ -430,7 +430,6 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
             } else {
                 auto variance = child.get_eval_variance(1.0f);
                 auto stddev = std::sqrt(variance);
-//                stdev = 1.0f + cfg_stdev_scale * (stddev / cfg_stdev_prior);
                 auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child_visits);
                 k = std::max(0.5, (double)k);
                 k = std::min(1.4, (double)k);

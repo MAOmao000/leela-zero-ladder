@@ -29,16 +29,36 @@
 #include <vector>
 #include <cudnn.h>
 #include <cublas_v2.h>
+#if defined(USE_CUDNN_GRAPH)
+#include <cudnn_frontend.h>
+#endif
 
 auto constexpr CONV_DESC_INPUT = 0;
 auto constexpr CONV_DESC_RESIDUAL = 1;
 auto constexpr CONV_DESC_VALUE = 2;
 auto constexpr CONV_DESC_POLICY = 3;
+#if defined(USE_CUDNN_GRAPH)
+auto constexpr CONV_DESC_NO_RELU = 4;
+auto constexpr CONV_DESC_ADD_RELU = 5;
+#endif
 auto constexpr SINGLE_BATCH = 0;
 auto constexpr MULTIPLE_BATCHES = 1;
 
 template <typename net_t> class CuDNN;
 template <typename net_t> class CuDNN_Network;
+
+#if defined(USE_CUDNN_GRAPH)
+#define checkCUDNNFE(expression)                                  \
+    {                                                             \
+        cudnn_frontend::error_t err = (expression);               \
+        if (err.is_bad()) {                                       \
+            std::cerr << "Error on " << __FILE__ << "("           \
+                <<  __LINE__ << "): "                             \
+                << err.get_message() << std::endl;                \
+            throw std::runtime_error("cuDNN FrontEnd error");     \
+        }                                                         \
+    }
+#endif
 
 #define checkCUDNN(expression)                                    \
     {                                                             \
@@ -47,7 +67,7 @@ template <typename net_t> class CuDNN_Network;
             std::cerr << "Error on " << __FILE__ << "("           \
                 <<  __LINE__ << "): "                             \
                 << cudnnGetErrorString(status) << std::endl;      \
-            throw std::runtime_error("CuDNN error");              \
+            throw std::runtime_error("cuDNN error");              \
         }                                                         \
     }
 
@@ -171,6 +191,15 @@ struct conv_descriptor {
     cudnnConvolutionFwdAlgo_t convolution_identity_algorithm;
     size_t workspace_size{0};
     size_t workspace_identity_size{0};
+
+#if defined(USE_CUDNN_GRAPH)
+    cudnn_frontend::graph::Graph graph;
+    std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> X;
+    std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> W;
+    std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> B;
+    std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> Y;
+    std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> Z;
+#endif
     bool is_initialized{false};
 };
 
@@ -185,10 +214,14 @@ private:
     bool is_se_block{false};
     bool is_convolve1{false};
     conv_descriptor conv_desc[2];
+#if defined(USE_CUDNN_GRAPH)
+    conv_descriptor conv_no_relu_desc[2];
+    conv_descriptor conv_add_relu_desc[2];
+#endif
     float scale_1{1.0f};
     float scale_2{1.0f};
     float scale_3{1.0f};
-    std::vector<void*> weights;
+    std::vector<void *> weights;
 };
 
 class CuDNNContext {
@@ -277,8 +310,11 @@ private:
 
     CuDNN<net_t>& m_cudnn;
     std::vector<CuDNN_Layer> m_layers;
+#if defined(USE_CUDNN_GRAPH)
+    conv_descriptor m_conv_desc[6][2];
+#else
     conv_descriptor m_conv_desc[4][2];
-
+#endif
 };
 
 template <typename net_t>
@@ -348,11 +384,39 @@ private:
                                  const int channels,
                                  const int spatial);
 
+#if defined(USE_CUDNN_GRAPH)
+    void convolve_fe_init(const int channels,
+                          const int outputs,
+                          const int filter_size,
+                          conv_descriptor& conv_desc,
+                          const int batch_size = 1);
+
+    void convolve_fe_no_relu_init(const int channels,
+                                  const int outputs,
+                                  const int filter_size,
+                                  conv_descriptor& conv_desc,
+                                  const int batch_size = 1);
+
+    void convolve_fe_add_relu_init(const int channels,
+                                   const int outputs,
+                                   const int filter_size,
+                                   conv_descriptor& conv_desc,
+                                   const int batch_size = 1);
+#endif
+
     void convolve_init(const int channels,
                        const int outputs,
                        const int filter_size,
                        conv_descriptor& conv_desc,
                        const int batch_size = 1);
+
+#if defined(USE_CUDNN_GRAPH)
+    void convolve_fe_head_init(const int channels,
+                               const int outputs,
+                               const int filter_size,
+                               conv_descriptor& conv_desc,
+                               const int batch_size = 1);
+#endif
 
     cudnnHandle_t m_handle;
     cublasHandle_t m_cublas_handles;
