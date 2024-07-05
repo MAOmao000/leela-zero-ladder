@@ -33,6 +33,7 @@
 
 #include <cassert>
 #include <vector>
+#include <cmath>
 
 #include "ForwardPipe.h"
 
