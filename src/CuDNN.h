@@ -27,6 +27,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
 #include <cudnn.h>
 #include <cublas_v2.h>
 #if defined(USE_CUDNN_GRAPH)

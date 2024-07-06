@@ -1566,7 +1566,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, OutBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                            variant_pack, workspace));
-                checkCUDA(cudaDeviceSynchronize());
             } else {
 #endif
                 m_cudnn.convolveActivation(InBuffer,
@@ -1601,7 +1600,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                            variant_pack1, workspace));
-                checkCUDA(cudaDeviceSynchronize());
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
                     {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
@@ -1610,7 +1608,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
                 checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                                    variant_pack2, workspace));
-                checkCUDA(cudaDeviceSynchronize());
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack3 = {
                     {layer.conv_add_relu_desc[conv_desc_idx].X, TempBuffer},
@@ -1618,7 +1615,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_add_relu_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_add_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                                     variant_pack3, workspace));
-                checkCUDA(cudaDeviceSynchronize());
                 std::swap(InBuffer, OutBuffer);
             } else {
 #endif
@@ -1668,7 +1664,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                            variant_pack1, workspace));
-                checkCUDA(cudaDeviceSynchronize());
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
                     {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
@@ -1677,7 +1672,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
                 checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                                    variant_pack2, workspace));
-                checkCUDA(cudaDeviceSynchronize());
 
                 std::swap(TempBuffer, IdentityOutBuffer);
             } else {
@@ -1748,7 +1742,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                            variant_pack, workspace));
-                checkCUDA(cudaDeviceSynchronize());
             } else {
 #endif
                 m_cudnn.convolve(OutBuffer,

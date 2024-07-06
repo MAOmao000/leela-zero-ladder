@@ -3,6 +3,7 @@
 #ifdef USE_CUDNN
 #include <stdint.h>
 #include <stdexcept>
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
 #include <cuda_fp16.h>
 
 // TODO maybe tune this number, it varies by GPU.
