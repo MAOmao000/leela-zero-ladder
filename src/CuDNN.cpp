@@ -598,59 +598,32 @@ void CuDNN<net_t>::convolve_fe_init(const int channels,
         std::shared_ptr<fe::graph::Tensor_attributes> W;
         std::shared_ptr<fe::graph::Tensor_attributes> B;
         std::shared_ptr<fe::graph::Tensor_attributes> Y;
-        if (cfg_NCHW) {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, h * w, w, 1 }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, r * s, s, 1 }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            auto conv_output = graph.conv_fprop(X, W, conv_options);
-            B = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("bias")
-                .set_dim({ 1, k, 1, 1 })
-                .set_stride({ k, 1, 1, 1 }));
-            auto bias_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::ADD);
-            auto bias_output = graph.pointwise(conv_output, B, bias_options);
-            auto relu_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::RELU_FWD);
-            Y = graph.pointwise(bias_output, relu_options);
-            Y->set_output(true).set_stride({ k * h * w, h * w, w, 1 });
-        } else {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, 1, c * w, c }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, 1, c * s, c }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            auto conv_output = graph.conv_fprop(X, W, conv_options);
-            B = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("bias")
-                .set_dim({ 1, k, 1, 1 })
-                .set_stride({ k, 1, k, k }));
-            auto bias_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::ADD);
-            auto bias_output = graph.pointwise(conv_output, B, bias_options);
-            auto relu_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::RELU_FWD);
-            Y = graph.pointwise(bias_output, relu_options);
-            Y->set_output(true); // is_virtual = false
-        }
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        W = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("filter")
+            .set_dim({ k, c, r, s })
+            .set_stride({ c * r * s, 1, c * s, c }));
+        auto conv_options = fe::graph::Conv_fprop_attributes()
+                            .set_compute_data_type(conv_compute_type)
+                            .set_padding({ pad_size, pad_size })
+                            .set_stride({ 1, 1 })
+                            .set_dilation({ 1, 1 });
+        auto conv_output = graph.conv_fprop(X, W, conv_options);
+        B = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("bias")
+            .set_dim({ 1, k, 1, 1 })
+            .set_stride({ k, 1, 1, 1 }));
+        auto bias_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::ADD);
+        auto bias_output = graph.pointwise(conv_output, B, bias_options);
+        auto relu_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::RELU_FWD);
+        Y = graph.pointwise(bias_output, relu_options);
+        Y->set_output(true); // is_virtual = false
 
         checkCUDNNFE(graph.validate());
         checkCUDNNFE(graph.build_operation_graph(handle));
@@ -658,7 +631,7 @@ void CuDNN<net_t>::convolve_fe_init(const int channels,
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
         return std::make_tuple(graph, X, W, B, Y);
-        };
+    };
 
     auto [graph, X, W, B, Y] = build_new_graph(m_handle);
     conv_desc.graph = graph;
@@ -709,53 +682,29 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
         std::shared_ptr<fe::graph::Tensor_attributes> W;
         std::shared_ptr<fe::graph::Tensor_attributes> B;
         std::shared_ptr<fe::graph::Tensor_attributes> Y;
-        if (cfg_NCHW) {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, h * w, w, 1 }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, r * s, s, 1 }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            auto conv_output = graph.conv_fprop(X, W, conv_options);
-            B = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("bias")
-                .set_dim({ 1, k, 1, 1 })
-                .set_stride({ k, 1, 1, 1 }));
-            auto bias_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::ADD);
-            Y = graph.pointwise(conv_output, B, bias_options);
-            Y->set_output(true).set_stride({ k * h * w, h * w, w, 1 });
-        } else {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, 1, c * w, c }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, 1, c * s, c }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            auto conv_output = graph.conv_fprop(X, W, conv_options);
-            B = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("bias")
-                .set_dim({ 1, k, 1, 1 })
-                .set_stride({ k, 1, k, k }));
-            auto bias_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::ADD);
-            Y = graph.pointwise(conv_output, B, bias_options);
-            Y->set_output(true);
-        }
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        W = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("filter")
+            .set_dim({ k, c, r, s })
+            .set_stride({ c * r * s, 1, c * s, c }));
+        auto conv_options = fe::graph::Conv_fprop_attributes()
+                            .set_compute_data_type(conv_compute_type)
+                            .set_padding({ pad_size, pad_size })
+                            .set_stride({ 1, 1 })
+                            .set_dilation({ 1, 1 });
+        auto conv_output = graph.conv_fprop(X, W, conv_options);
+        B = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("bias")
+            .set_dim({ 1, k, 1, 1 })
+            .set_stride({ k, 1, 1, 1 }));
+        auto bias_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::ADD);
+        Y = graph.pointwise(conv_output, B, bias_options);
+        Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
         checkCUDNNFE(graph.build_operation_graph(handle));
@@ -763,7 +712,7 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
         return std::make_tuple(graph, X, W, B, Y);
-        };
+    };
 
     auto [graph, X, W, B, Y] = build_new_graph(m_handle);
     conv_desc.graph = graph;
@@ -806,39 +755,22 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
         std::shared_ptr<fe::graph::Tensor_attributes> X;
         std::shared_ptr<fe::graph::Tensor_attributes> Z;
         std::shared_ptr<fe::graph::Tensor_attributes> Y;
-        if (cfg_NCHW) {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, h * w, w, 1 }));
-            Z = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("feature")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, h * w, w, 1 }));  // Should be p,q
-            auto add_options = fe::graph::Pointwise_attributes()
-                               .set_mode(fe::PointwiseMode_t::ADD);
-            auto add_output = graph.pointwise(X, Z, add_options);
-            auto relu_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::RELU_FWD);
-            Y = graph.pointwise(add_output, relu_options);
-            Y->set_output(true).set_stride({ k * h * w, h * w, w, 1 });
-        } else {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, 1, c * w, c }));
-            Z = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("feature")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, 1, c * w, c }));  // Should be p,q
-            auto add_options = fe::graph::Pointwise_attributes()
-                               .set_mode(fe::PointwiseMode_t::ADD);
-            auto add_output = graph.pointwise(X, Z, add_options);
-            auto relu_options = fe::graph::Pointwise_attributes()
-                                .set_mode(fe::PointwiseMode_t::RELU_FWD);
-            Y = graph.pointwise(add_output, relu_options);
-            Y->set_output(true).set_stride({ k * h * w, 1, k * w, k });
-        }
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        Z = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("feature")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));  // Should be p,q
+        auto add_options = fe::graph::Pointwise_attributes()
+                           .set_mode(fe::PointwiseMode_t::ADD);
+        auto add_output = graph.pointwise(X, Z, add_options);
+        auto relu_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::RELU_FWD);
+        Y = graph.pointwise(add_output, relu_options);
+        Y->set_output(true).set_stride({ k * h * w, 1, k * w, k });
 
         checkCUDNNFE(graph.validate());
         checkCUDNNFE(graph.build_operation_graph(handle));
@@ -846,7 +778,7 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
         return std::make_tuple(graph, X, Z, Y);
-        };
+    };
 
     auto [graph, X, Z, Y] = build_new_graph(m_handle);
     conv_desc.graph = graph;
@@ -890,39 +822,22 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
         std::shared_ptr<fe::graph::Tensor_attributes> X;
         std::shared_ptr<fe::graph::Tensor_attributes> W;
         std::shared_ptr<fe::graph::Tensor_attributes> Y;
-        if (cfg_NCHW) {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, h * w, w, 1 }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, r * s, s, 1 }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            Y = graph.conv_fprop(X, W, conv_options);
-            Y->set_output(true).set_stride({ k * h * w, h * w, w, 1 });
-        } else {
-            X = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("image")
-                .set_dim({ n, c, h, w })
-                .set_stride({ c * h * w, 1, c * w, c }));
-            W = graph.tensor(fe::graph::Tensor_attributes()
-                .set_name("filter")
-                .set_dim({ k, c, r, s })
-                .set_stride({ c * r * s, 1, c * s, c }));
-            auto conv_options = fe::graph::Conv_fprop_attributes()
-                                .set_compute_data_type(conv_compute_type)
-                                .set_padding({ pad_size, pad_size })
-                                .set_stride({ 1, 1 })
-                                .set_dilation({ 1, 1 });
-            Y = graph.conv_fprop(X, W, conv_options);
-            Y->set_output(true); // is_virtual = false
-        }
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        W = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("filter")
+            .set_dim({ k, c, r, s })
+            .set_stride({ c * r * s, 1, c * s, c }));
+        auto conv_options = fe::graph::Conv_fprop_attributes()
+                            .set_compute_data_type(conv_compute_type)
+                            .set_padding({ pad_size, pad_size })
+                            .set_stride({ 1, 1 })
+                            .set_dilation({ 1, 1 });
+        Y = graph.conv_fprop(X, W, conv_options);
+        Y->set_output(true); // is_virtual = false
 
         checkCUDNNFE(graph.validate());
         checkCUDNNFE(graph.build_operation_graph(handle));
@@ -930,7 +845,7 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
         return std::make_tuple(graph, X, W, Y);
-        };
+    };
 
     auto [graph, X, W, Y] = build_new_graph(m_handle);
     conv_desc.graph = graph;
@@ -1431,7 +1346,7 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
                                               m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
-                                            cfg_batch_size);
+                                              cfg_batch_size);
             } else {
 #endif
                 m_cudnn.convolve_init(channels, outputs, filter_size,
@@ -1565,7 +1480,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].B, conv_biases[0]},
                     {layer.conv_desc[conv_desc_idx].Y, OutBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                           variant_pack, workspace));
+                                                                          variant_pack, workspace));
             } else {
 #endif
                 m_cudnn.convolveActivation(InBuffer,
@@ -1599,7 +1514,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].B, conv1_biases[0]},
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                           variant_pack1, workspace));
+                                                                          variant_pack1, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
                     {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
@@ -1607,14 +1522,14 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_no_relu_desc[conv_desc_idx].B, conv2_biases[0]},
                     {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
                 checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                                   variant_pack2, workspace));
+                                                                                  variant_pack2, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack3 = {
                     {layer.conv_add_relu_desc[conv_desc_idx].X, TempBuffer},
                     {layer.conv_add_relu_desc[conv_desc_idx].Z, OutBuffer},
                     {layer.conv_add_relu_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_add_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                                    variant_pack3, workspace));
+                                                                                   variant_pack3, workspace));
                 std::swap(InBuffer, OutBuffer);
             } else {
 #endif
@@ -1663,7 +1578,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].B, conv1_biases[0]},
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                           variant_pack1, workspace));
+                                                                          variant_pack1, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
                     {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
@@ -1671,7 +1586,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_no_relu_desc[conv_desc_idx].B, conv2_biases[0]},
                     {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
                 checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                                   variant_pack2, workspace));
+                                                                                  variant_pack2, workspace));
 
                 std::swap(TempBuffer, IdentityOutBuffer);
             } else {
@@ -1741,7 +1656,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].W, layer.weights[0]},
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
-                                                                           variant_pack, workspace));
+                                                                          variant_pack, workspace));
             } else {
 #endif
                 m_cudnn.convolve(OutBuffer,

@@ -202,8 +202,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cudnn", "Use cudnn to evaluate neural net. Only works on recent nVidia GPUs.")
 #ifdef USE_CUDNN_GRAPH
         ("cudnn-graph", "Use cudnn graph to evaluate neural net. Only works on recent nVidia GPUs.")
-#endif
+#else
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
+#endif
 #endif
 #endif
         ("use_ray_ladder", "Enable RAY's ladder check.")
@@ -458,9 +459,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         } else if (vm.count("cudnn-graph")) {
             cfg_cudnn = true;
             cfg_cudnn_graph = true;
-            if (vm.count("channel-first")) {
-                cfg_NCHW = true;
-            }
             calculate_thread_count_gpu(vm);
             myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
 #endif
