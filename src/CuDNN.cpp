@@ -15,10 +15,10 @@
     You should have received a copy of the GNU General Public License
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 */
-
+//#define CACHE_TENSORRT_PLAN
 #include "config.h"
 
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
@@ -31,6 +31,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <filesystem>
 
 #include "GTP.h"
 #include "Utils.h"
@@ -147,14 +148,24 @@ CuDNN<net_t>::CuDNN(const int gpu, const bool silent) {
     }
 
     cudaSetDevice(best_device_id);
+    m_device_prop = best_device;
 }
 
 template <typename net_t>
-void CuDNN<net_t>::initialize(const int channels, const int batch_size, const int net_type) {
+CuDNN<net_t>::~CuDNN() {
+    cublasDestroy(m_cublas_handles);
+    cudnnDestroy(m_handle);
+}
 
+template <typename net_t>
+void CuDNN<net_t>::initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash) {
     // For compatibility with OpenCL implementation
     (void)channels;
 
+    putenv("CUDNN_LOGGLEVEL_DBG=0");
+    if (cfg_backend == backend_t::CUDNNGRAPH) {
+        putenv("CUDNN_FRONTEND_LOG_INFO=0");
+    }
     m_net_type = net_type;
     m_batch_size = batch_size;
 
@@ -166,6 +177,7 @@ void CuDNN<net_t>::initialize(const int channels, const int batch_size, const in
 
     m_handle = cudnn;
     m_cublas_handles = cublas;
+    m_model_hash = model_hash;
     m_init_ok = true;
 }
 
@@ -626,10 +638,16 @@ void CuDNN<net_t>::convolve_fe_init(const int channels,
         Y->set_output(true); // is_virtual = false
 
         checkCUDNNFE(graph.validate());
+        auto key = graph.key();
+        auto it = m_maintained_cache1.find(key);
+        if (it != m_maintained_cache1.end()) {
+            return it->second;
+        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
+        m_maintained_cache1.insert({key, std::make_tuple(graph, X, W, B, Y)});
         return std::make_tuple(graph, X, W, B, Y);
     };
 
@@ -707,10 +725,16 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
         Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
+        auto key = graph.key();
+        auto it = m_maintained_cache2.find(key);
+        if (it != m_maintained_cache2.end()) {
+            return it->second;
+        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
+        m_maintained_cache2.insert({key, std::make_tuple(graph, X, W, B, Y)});
         return std::make_tuple(graph, X, W, B, Y);
     };
 
@@ -773,10 +797,16 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
         Y->set_output(true).set_stride({ k * h * w, 1, k * w, k });
 
         checkCUDNNFE(graph.validate());
+        auto key = graph.key();
+        auto it = m_maintained_cache3.find(key);
+        if (it != m_maintained_cache3.end()) {
+            return it->second;
+        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
+        m_maintained_cache3.insert({key, std::make_tuple(graph, X, Z, Y)});
         return std::make_tuple(graph, X, Z, Y);
     };
 
@@ -840,10 +870,16 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
         Y->set_output(true); // is_virtual = false
 
         checkCUDNNFE(graph.validate());
+        auto key = graph.key();
+        auto it = m_maintained_cache4.find(key);
+        if (it != m_maintained_cache4.end()) {
+            return it->second;
+        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
+        m_maintained_cache4.insert({key, std::make_tuple(graph, X, W, Y)});
         return std::make_tuple(graph, X, W, Y);
     };
 
@@ -1025,6 +1061,36 @@ void CuDNN_Network<net_t>::push_weights(const size_t layer,
 }
 
 template <typename net_t>
+void CuDNN_Network<net_t>::push_weights_trt(const size_t layer,
+                                            const std::vector<float>& weights) {
+    if (layer >= m_layers.size()) {
+        m_layers.push_back(CuDNN_Layer());
+    }
+    if (typeid(net_t) == typeid(float)) {
+        auto weightSize = weights.size() * sizeof(float);
+
+        void *host_mem;
+        host_mem = malloc(weightSize);
+        memcpy(host_mem, (net_t*)&weights[0], weightSize);
+        m_layers.back().weights.emplace_back(host_mem);
+        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
+    } else {
+        auto converted_weights = std::vector<net_t>();
+        for(auto i = size_t{0}; i < weights.size(); i++) {
+            converted_weights.emplace_back((net_t)weights[i]);
+        }
+
+        auto weightSize = weights.size() * sizeof(net_t);
+
+        void *host_mem;
+        host_mem = malloc(weightSize);
+        memcpy(host_mem, (net_t *)&converted_weights[0], weightSize);
+        m_layers.back().weights.emplace_back(host_mem);
+        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
+    }
+}
+
+template <typename net_t>
 void CuDNN_Network<net_t>::push_weights_col_major(const size_t layer,
                                                   const std::vector<float>& weights,
                                                   const int row,
@@ -1050,16 +1116,52 @@ void CuDNN_Network<net_t>::push_weights_col_major(const size_t layer,
 }
 
 template <typename net_t>
+void CuDNN_Network<net_t>::push_weights_trt_col_major(const size_t layer,
+                                                      const std::vector<float>& weights,
+                                                      const int row,
+                                                      const int column) {
+    if (layer >= m_layers.size()) {
+        m_layers.push_back(CuDNN_Layer());
+    }
+
+    auto weightSize = weights.size() * sizeof(net_t);
+    auto converted_weights = std::vector<net_t>(weights.size());
+    for (int i = 0; i < column; i++) {
+        for (int j = 0; j < row; j++) {
+            converted_weights[i * row + j] = (net_t)weights[i + j * column];
+        }
+    }
+    void *host_mem;
+    host_mem = malloc(weightSize);
+    memcpy(host_mem, (net_t*)&converted_weights[0], weightSize);
+    m_layers.back().weights.emplace_back(host_mem);
+    m_layers.back().weights_size.emplace_back((int64_t)weights.size());
+}
+
+template <typename net_t>
 void CuDNN_Network<net_t>::push_input_convolution(const unsigned int filter_size,
                                                   unsigned int channels,
                                                   const unsigned int outputs,
                                                   const std::vector<float>& weights,
                                                   const std::vector<float>& biases,
                                                   const float scale) {
-
-    std::vector<float> weights_pad(weights);
-
     size_t layer = get_layer_count();
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (cfg_NCHW) {
+            push_weights_trt(layer, weights); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
+        } else {
+            auto weights_convert = NCHW_to_NHWC<float>(weights, outputs, filter_size, filter_size, channels);
+            push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+            push_weights_trt(layer, biases);          // Convert precision with push_weights
+        }
+        m_layers[layer].is_input_convolution = true;
+        m_layers[layer].outputs = outputs;
+        m_layers[layer].filter_size = filter_size;
+        m_layers[layer].channels = channels;
+        m_layers[layer].name = "in." + std::to_string(layer);
+        return;
+    }
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases);  // Here it is still float(Convert precision with push_weights)
@@ -1077,23 +1179,19 @@ void CuDNN_Network<net_t>::push_input_convolution(const unsigned int filter_size
     m_layers[layer].scale_3 = 1.0f;
 
     if (!m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH].is_initialized) {
-#if defined(USE_CUDNN_GRAPH)
-        if (cfg_cudnn_graph) {
+        if (cfg_backend == backend_t::CUDNNGRAPH) {
             m_cudnn.convolve_fe_init(channels, outputs, filter_size,
                                      m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH]);
             m_cudnn.convolve_fe_init(channels, outputs, filter_size,
                                      m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
                                      cfg_batch_size);
         } else {
-#endif
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH]);
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
                                   cfg_batch_size);
-#if defined(USE_CUDNN_GRAPH)
         }
-#endif
         m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH].is_initialized = true;
         m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES].is_initialized = true;
     }
@@ -1114,8 +1212,30 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
                                          const float scale_1,
                                          const float scale_2,
                                          const float scale_3) {
-
     size_t layer = get_layer_count();
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (cfg_NCHW) {
+            push_weights_trt(layer, weights_1); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, weights_2); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, biases_2);  // Here it is still float(Convert precision with push_weights)
+        } else {
+            auto weights_convert_1 = NCHW_to_NHWC<float>(
+                weights_1, outputs, filter_size, filter_size, channels);
+            auto weights_convert_2 = NCHW_to_NHWC<float>(
+                weights_2, outputs, filter_size, filter_size, channels);
+            push_weights_trt(layer, weights_convert_1); // Convert precision with push_weights
+            push_weights_trt(layer, biases_1);          // Convert precision with push_weights
+            push_weights_trt(layer, weights_convert_2); // Convert precision with push_weights
+            push_weights_trt(layer, biases_2);          // Convert precision with push_weights
+        }
+        m_layers[layer].is_residual_block = true;
+        m_layers[layer].outputs = outputs;
+        m_layers[layer].filter_size = filter_size;
+        m_layers[layer].channels = channels;
+        m_layers[layer].name = "res." + std::to_string(layer);
+        return;
+    }
     if (cfg_NCHW) {
         push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
@@ -1140,8 +1260,7 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
     m_layers[layer].scale_3 = 1.0f / scale_3;
 
     if (!m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
-#if defined(USE_CUDNN_GRAPH)
-        if (cfg_cudnn_graph) {
+        if (cfg_backend == backend_t::CUDNNGRAPH) {
             m_cudnn.convolve_fe_init(channels, outputs, filter_size,
                                      m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1166,7 +1285,6 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
                                               cfg_batch_size);
             m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES].is_initialized = true;
         } else {
-#endif
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1174,17 +1292,14 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
                                   cfg_batch_size);
             m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
-#if defined(USE_CUDNN_GRAPH)
         }
-#endif
     }
 
     m_layers[layer].conv_desc[SINGLE_BATCH]
         = m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH];
     m_layers[layer].conv_desc[MULTIPLE_BATCHES]
         = m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
-#if defined(USE_CUDNN_GRAPH)
-    if (cfg_cudnn_graph) {
+    if (cfg_backend == backend_t::CUDNNGRAPH) {
         m_layers[layer].conv_no_relu_desc[SINGLE_BATCH]
             = m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH];
         m_layers[layer].conv_no_relu_desc[MULTIPLE_BATCHES]
@@ -1194,7 +1309,6 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
         m_layers[layer].conv_add_relu_desc[MULTIPLE_BATCHES]
             = m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES];
     }
-#endif
 }
 
 template <typename net_t>
@@ -1212,8 +1326,39 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
                                             const float scale_1,
                                             const float scale_2,
                                             const float scale_3) {
-
     size_t layer = get_layer_count();
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (cfg_NCHW) {
+            push_weights_trt(layer, weights_1); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, weights_2); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, biases_2);  // Here it is still float(Convert precision with push_weights)
+            push_weights_trt_col_major(layer, se_fc1_w, channels / 2, channels);
+            push_weights_trt(layer, se_fc1_b);
+            push_weights_trt_col_major(layer, se_fc2_w, channels * 2, channels / 2);
+            push_weights_trt(layer, se_fc2_b);
+        } else {
+            auto weights_convert_1 = NCHW_to_NHWC<float>(
+                weights_1, outputs, filter_size, filter_size, channels);
+            auto weights_convert_2 = NCHW_to_NHWC<float>(
+                weights_2, outputs, filter_size, filter_size, channels);
+            push_weights_trt(layer, weights_convert_1); // Convert precision with push_weights
+            push_weights_trt(layer, biases_1);          // Convert precision with push_weights
+            push_weights_trt(layer, weights_convert_2); // Convert precision with push_weights
+            push_weights_trt(layer, biases_2);          // Convert precision with push_weights
+            push_weights_trt_col_major(layer, se_fc1_w, channels / 2, channels);
+            push_weights_trt(layer, se_fc1_b);
+            push_weights_trt_col_major(layer, se_fc2_w, channels * 2, channels / 2);
+            push_weights_trt(layer, se_fc2_b);
+        }
+        m_layers[layer].is_residual_block = true;
+        m_layers[layer].is_se_block = true;
+        m_layers[layer].outputs = outputs;
+        m_layers[layer].filter_size = filter_size;
+        m_layers[layer].channels = channels;
+        m_layers[layer].name = "res." + std::to_string(layer);
+        return;
+    }
     if (cfg_NCHW) {
         push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
@@ -1249,8 +1394,7 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
     m_layers[layer].scale_3 = 1.0f / scale_3;
 
     if (!m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
-#if defined(USE_CUDNN_GRAPH)
-        if (cfg_cudnn_graph) {
+        if (cfg_backend == backend_t::CUDNNGRAPH) {
             m_cudnn.convolve_fe_init(channels, outputs, filter_size,
                                      m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1267,7 +1411,6 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
                                              cfg_batch_size);
             m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
         } else {
-#endif
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1275,23 +1418,19 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
                                   cfg_batch_size);
             m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
-#if defined(USE_CUDNN_GRAPH)
         }
-#endif
     }
 
     m_layers[layer].conv_desc[SINGLE_BATCH]
         = m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH];
     m_layers[layer].conv_desc[MULTIPLE_BATCHES]
         = m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
-#if defined(USE_CUDNN_GRAPH)
-    if (cfg_cudnn_graph) {
+    if (cfg_backend == backend_t::CUDNNGRAPH) {
         m_layers[layer].conv_no_relu_desc[SINGLE_BATCH]
             = m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH];
         m_layers[layer].conv_no_relu_desc[MULTIPLE_BATCHES]
             = m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES];
     }
-#endif
 }
 
 template <typename net_t>
@@ -1300,6 +1439,29 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
                                          const unsigned int outputs,
                                          const std::vector<float>& weights) {
     size_t layer = get_layer_count();
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (cfg_NCHW) {
+            push_weights_trt(layer, weights); // Here it is still float(Convert precision with push_weights)
+        } else {
+            auto weights_convert = NCHW_to_NHWC<float>(
+                weights, outputs, filter_size, filter_size, channels);
+            push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+        }
+        m_layers[layer].is_convolve1 = true;
+        m_layers[layer].outputs = outputs;
+        m_layers[layer].filter_size = filter_size;
+        m_layers[layer].channels = channels;
+        if (outputs != Network::OUTPUTS_VALUE) {
+            m_layers[layer].name = "pol." + std::to_string(layer);
+            return;
+        }
+        m_layers[layer].name = "val." + std::to_string(layer);
+        m_trt.reset(new TrtResNet<net_t>(*this, m_cudnn));
+        if (!m_trt->build()) {
+            return;
+        }
+        return;
+    }
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
     } else {
@@ -1312,25 +1474,21 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
     m_layers[layer].channels = channels;
     m_layers[layer].filter_size = filter_size;
 
-    if (outputs == 1) {
+    if (outputs == Network::OUTPUTS_VALUE) {
         if (!m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH].is_initialized) {
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH]);
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
                                               cfg_batch_size);
             } else {
-#endif
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH]);
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
                                       cfg_batch_size);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
             m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH].is_initialized = true;
             m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES].is_initialized = true;
         }
@@ -1340,23 +1498,19 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
             = m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES];
     } else {
         if (!m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH].is_initialized) {
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
                                               cfg_batch_size);
             } else {
-#endif
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
                                       cfg_batch_size);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
             m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH].is_initialized = true;
             m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES].is_initialized = true;
         }
@@ -1374,6 +1528,91 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                CuDNNContext& cudnn_context,
                                                const int batch_size) {
 
+    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
+    const auto pol_elements
+        = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
+    const auto val_elements
+        = batch_size * m_layers.back().outputs * NUM_INTERSECTIONS;
+    auto pol_net_t = std::vector<net_t>(pol_elements);
+    auto val_net_t = std::vector<net_t>(val_elements);
+
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (!cudnn_context.m_buffers_allocated) {
+            cudnn_context.mContext.reset(m_trt->mEngine->createExecutionContext());
+            assert(cudnn_context.mContext);
+            for (int i = 0; i < m_trt->mEngine->getNbIOTensors(); i++) {
+                void* buffer = nullptr;
+                auto name = m_trt->mEngine->getIOTensorName(i);
+                auto dims = m_trt->mEngine->getTensorShape(name);
+                size_t bytes = std::accumulate(dims.d + 1,
+                                               dims.d + dims.nbDims,
+                                               batch_size * sizeof(net_t),
+                                               std::multiplies<size_t>());
+                checkCUDA(cudaMalloc(&buffer, bytes));
+                cudnn_context.mBuffers.emplace(std::make_pair(name, buffer));
+                cudnn_context.mContext->setTensorAddress(name, buffer);
+            }
+            cudnn_context.mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
+            cudaStreamSynchronize(cudaStreamPerThread);
+            cudnn_context.m_buffers_allocated = true;
+        }
+        auto search = cudnn_context.mBuffers.find("InputFeature");
+        assert(search != cudnn_context.mBuffers.end());
+        if (typeid(net_t) == typeid(float) && cfg_NCHW) {
+            checkCUDA(cudaMemcpyAsync(
+                search->second,
+                (net_t*)&input[0],
+                inSize,
+                cudaMemcpyHostToDevice));
+        } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
+            auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
+            std::copy(input.begin(), input.end(), input_net_t.begin());
+            checkCUDA(cudaMemcpyAsync(
+                search->second,
+                (net_t*)&input_net_t[0],
+                inSize,
+                cudaMemcpyHostToDevice));
+        } else {
+            auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
+            input_net_t = NCHW_to_NHWC<net_t>(
+                input, batch_size, BOARD_SIZE, BOARD_SIZE, m_layers[0].channels);
+            checkCUDA(cudaMemcpyAsync(
+                search->second,
+                (net_t*)&input_net_t[0],
+                inSize,
+                cudaMemcpyHostToDevice));
+        }
+        auto dims = m_trt->mEngine->getTensorShape("InputFeature");
+        assert(dims.nbDims != -1);
+        dims.d[0] = batch_size;
+        cudnn_context.mContext->setInputShape("InputFeature", dims);
+        // Asynchronously enqueue the inference work
+        ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
+        search = cudnn_context.mBuffers.find("OutputPolicy");
+        assert(search != cudnn_context.mBuffers.end());
+        checkCUDA(cudaMemcpy(
+            &pol_net_t[0],
+            search->second,
+            pol_elements * sizeof(net_t),
+            cudaMemcpyDeviceToHost));
+        search = cudnn_context.mBuffers.find("OutputValue");
+        assert(search != cudnn_context.mBuffers.end());
+        checkCUDA(cudaMemcpy(
+            &val_net_t[0],
+            search->second,
+            val_elements * sizeof(net_t),
+            cudaMemcpyDeviceToHost));
+        if (cfg_NCHW) {
+            std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
+            std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
+        } else {
+            output_val = NHWC_to_NCHW<net_t>(
+                val_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_VALUE);
+            output_pol = NHWC_to_NCHW<net_t>(
+                pol_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_POLICY);
+        }
+        return;
+    }
     // input: input(float) 18 chanels * (BOARD_SIZE * BOARD_SIZE)
     int conv_desc_idx = SINGLE_BATCH;
     if (batch_size > 1) {
@@ -1381,12 +1620,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     }
     // Always allocates enough space for floats
     constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(float);
-    const auto pol_elements
-        = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
-    const auto val_elements = batch_size * m_layers.back().outputs * NUM_INTERSECTIONS;
-
-    auto pol_net_t = std::vector<net_t>(pol_elements);
-    auto val_net_t = std::vector<net_t>(val_elements);
 
     if (!cudnn_context.m_buffers_allocated) {
         auto max_wsize = size_t{0};
@@ -1394,14 +1627,12 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         for (const auto& layer : m_layers) {
             max_wsize = std::max(max_wsize,
                                  layer.conv_desc[conv_desc_idx].workspace_size);
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 max_wsize = std::max(max_wsize,
                                      layer.conv_no_relu_desc[conv_desc_idx].workspace_size);
                 max_wsize = std::max(max_wsize,
                                      layer.conv_add_relu_desc[conv_desc_idx].workspace_size);
             }
-#endif
             if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE))
                 max_wsize = std::max(max_wsize,
                                      layer.conv_desc[conv_desc_idx].workspace_identity_size);
@@ -1448,7 +1679,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     auto PoolBuffer = cudnn_context.m_PoolBuffer;
     auto TempBuffer = cudnn_context.m_TempBuffer;
 
-    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
+//    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     if (typeid(net_t) == typeid(float) && cfg_NCHW) {
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input[0], inSize, cudaMemcpyHostToDevice));
     } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
@@ -1472,8 +1703,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
 
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
                     {layer.conv_desc[conv_desc_idx].X, InBuffer},
                     {layer.conv_desc[conv_desc_idx].W, conv_weights[0]},
@@ -1482,7 +1712,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                           variant_pack, workspace));
             } else {
-#endif
                 m_cudnn.convolveActivation(InBuffer,
                                            OutBuffer,
                                            conv_weights[0],
@@ -1492,9 +1721,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                            layer.conv_desc[conv_desc_idx],
                                            layer.scale_1,
                                            1.0f);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
             // output: OutBuffer
 
         } else if (layer.is_residual_block && !layer.is_se_block) {
@@ -1506,8 +1733,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             auto conv2_weights = begin(layer.weights) + 2;
             auto conv2_biases = begin(layer.weights) + 3;
 
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack1 = {
                     {layer.conv_desc[conv_desc_idx].X, OutBuffer},
                     {layer.conv_desc[conv_desc_idx].W, conv1_weights[0]},
@@ -1532,7 +1758,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                                                    variant_pack3, workspace));
                 std::swap(InBuffer, OutBuffer);
             } else {
-#endif
                 m_cudnn.convolveActivation(OutBuffer,
                                            InBuffer,
                                            conv1_weights[0],
@@ -1552,9 +1777,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                            layer.conv_desc[conv_desc_idx],
                                            layer.scale_2,
                                            layer.scale_3);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
             // output: OutBuffer
 
         } else if (layer.is_residual_block && layer.is_se_block) {
@@ -1570,8 +1793,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             auto fc2_weights = begin(layer.weights) + 6;
             auto fc2_biases = begin(layer.weights) + 7;
 
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack1 = {
                     {layer.conv_desc[conv_desc_idx].X, OutBuffer},
                     {layer.conv_desc[conv_desc_idx].W, conv1_weights[0]},
@@ -1590,7 +1812,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 
                 std::swap(TempBuffer, IdentityOutBuffer);
             } else {
-#endif
                 m_cudnn.convolveActivation(OutBuffer,        // *bufferIn
                                            InBuffer,         // *bufferOut
                                            conv1_weights[0],
@@ -1610,9 +1831,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                    layer.conv_desc[conv_desc_idx],
                                                    layer.scale_2,
                                                    layer.scale_3);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
 
             if (typeid(net_t) == typeid(float)) {
                 m_cudnn.squeeze_excitation_float(OutBuffer,         // *bufferIn1: first input
@@ -1641,7 +1860,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                 layer.outputs,
                                                 NUM_INTERSECTIONS);
             }
-
             std::swap(InBuffer, OutBuffer);
             // output: OutBuffer
 
@@ -1649,8 +1867,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             // input: OutBuffer(net_t is float or __half)
             assert(layer.is_convolve1);
             // input: OutBuffer
-#if defined(USE_CUDNN_GRAPH)
-            if (cfg_cudnn_graph) {
+            if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
                     {layer.conv_desc[conv_desc_idx].X, OutBuffer},
                     {layer.conv_desc[conv_desc_idx].W, layer.weights[0]},
@@ -1658,17 +1875,13 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                           variant_pack, workspace));
             } else {
-#endif
                 m_cudnn.convolve(OutBuffer,
                                  InBuffer,
                                  layer.weights[0],
                                  workspace,
                                  layer.conv_desc[conv_desc_idx],
                                  layer.scale_1);
-#if defined(USE_CUDNN_GRAPH)
             }
-#endif
-
             if (niter == std::end(m_layers)) {
                 // Value input: InBuffer
                 checkCUDA(cudaMemcpy(&val_net_t[0], InBuffer,

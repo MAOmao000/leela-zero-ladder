@@ -194,6 +194,10 @@ private:
     std::array<float, 1> m_ip2_val_b;
     bool m_value_head_not_stm;
 
+#if defined(USE_TENSOR_RT)
+    std::string m_model_hash;
+#endif
+
     NetworkType m_net_type{ NetworkType::LEELA_ZERO };
 };
 #endif

@@ -106,7 +106,8 @@ OpenCLScheduler<net_t>::OpenCLScheduler() {
 }
 
 template <typename net_t>
-void OpenCLScheduler<net_t>::initialize(const int channels, const /*NetworkType*/int net_type) {
+void OpenCLScheduler<net_t>::initialize(const int channels, const int net_type, const std::string &model_hash) {
+    (void) model_hash;
     m_net_type = net_type;
 
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough

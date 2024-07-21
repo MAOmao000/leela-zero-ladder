@@ -131,8 +131,11 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
-extern bool cfg_cudnn;
-extern bool cfg_cudnn_graph;
+extern bool cfg_cache_plan;
+enum class backend_t {
+    OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
+};
+extern backend_t cfg_backend;
 extern bool cfg_NCHW;
 extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;

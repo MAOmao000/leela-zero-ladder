@@ -52,6 +52,18 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
     for (auto& x : m_worker_threads) {
         x.join();
     }
+    for (const auto& cudnn_net : m_networks) {
+        for (auto iter = std::begin(cudnn_net->m_layers); iter != std::end(cudnn_net->m_layers); iter++) {
+            const auto& layer = *iter;
+            for (auto it = layer.weights.begin(); it != layer.weights.end(); ++it) {
+                if (cfg_backend == backend_t::TENSORRT) {
+                    free(*it);
+                } else {
+                    cudaFree(*it);
+                }
+            }
+        }
+    }
 }
 
 template <typename net_t>
@@ -79,7 +91,7 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
 }
 
 template <typename net_t>
-void CuDNNScheduler<net_t>::initialize(int channels, const int net_type) {
+void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const std::string &model_hash) {
     m_net_type = net_type;
 
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
@@ -90,7 +102,11 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type) {
 
     auto gnum = 0;
     for (auto& cudnn : m_cudnn) {
-        cudnn->initialize(channels, cfg_batch_size, net_type);
+        if (cfg_backend == backend_t::TENSORRT) {
+            cudnn->initialize(channels, cfg_batch_size, net_type, model_hash);
+        } else {
+            cudnn->initialize(channels, cfg_batch_size, net_type, "");
+        }
 
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =
@@ -416,6 +432,23 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum) {
         auto count = inputs.size();
 
         if (!m_running) {
+            if (cfg_backend == backend_t::TENSORRT) {
+                for (int i = 0; i < 2; i++) {
+                    context[i].mContext.reset();
+                    for (auto ptr: context[i].mBuffers) {
+                        checkCUDA(cudaFree(ptr.second));
+                    }
+                }
+            } else {
+                for (int i = 0; i < 2; i++) {
+                    if (context[i].m_workspace) checkCUDA(cudaFree(context[i].m_workspace));
+                    if (context[i].m_InBuffer) checkCUDA(cudaFree(context[i].m_InBuffer));
+                    if (context[i].m_OutBuffer) checkCUDA(cudaFree(context[i].m_OutBuffer));
+                    if (context[i].m_IdentityOutBuffer) checkCUDA(cudaFree(context[i].m_IdentityOutBuffer));
+                    if (context[i].m_PoolBuffer) checkCUDA(cudaFree(context[i].m_PoolBuffer));
+                    if (context[i].m_TempBuffer) checkCUDA(cudaFree(context[i].m_TempBuffer));
+                }
+            }
             return;
         }
 

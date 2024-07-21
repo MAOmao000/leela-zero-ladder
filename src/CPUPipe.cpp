@@ -62,7 +62,8 @@ using ConstEigenVectorMap =
     Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>>;
 #endif
 
-void CPUPipe::initialize(int channels, const /*NetworkType*/int net_type) {
+void CPUPipe::initialize(int channels, const int net_type, const std::string &model_hash) {
+    (void) model_hash;
     m_input_channels = channels;
     m_net_type = net_type;
 }

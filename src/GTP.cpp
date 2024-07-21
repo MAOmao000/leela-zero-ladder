@@ -108,8 +108,8 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
-bool cfg_cudnn;
-bool cfg_cudnn_graph;
+bool cfg_cache_plan;
+backend_t cfg_backend;
 bool cfg_NCHW;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
@@ -398,8 +398,8 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
-    cfg_cudnn = false;
-    cfg_cudnn_graph = false;
+    cfg_cache_plan = false;
+    cfg_backend = backend_t::OPENCL;
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;

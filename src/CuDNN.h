@@ -27,11 +27,15 @@
 #include <mutex>
 #include <string>
 #include <vector>
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM
+#include <unordered_map>
 #include <cudnn.h>
 #include <cublas_v2.h>
 #if defined(USE_CUDNN_GRAPH)
 #include <cudnn_frontend.h>
+#endif
+
+#if defined(USE_TENSOR_RT)
+#include "TrtBackend.h"
 #endif
 
 auto constexpr CONV_DESC_INPUT = 0;
@@ -61,35 +65,35 @@ template <typename net_t> class CuDNN_Network;
     }
 #endif
 
-#define checkCUDNN(expression)                                    \
-    {                                                             \
-        cudnnStatus_t status = (expression);                      \
-        if (status != CUDNN_STATUS_SUCCESS) {                     \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                <<  __LINE__ << "): "                             \
-                << cudnnGetErrorString(status) << std::endl;      \
-            throw std::runtime_error("cuDNN error");              \
-        }                                                         \
+#define checkCUDNN(expression)                                   \
+    {                                                            \
+        cudnnStatus_t status = (expression);                     \
+        if (status != CUDNN_STATUS_SUCCESS) {                    \
+            std::cerr << "Error on " << __FILE__ << "("          \
+                << __LINE__ << "): "                             \
+                << cudnnGetErrorString(status) << std::endl;     \
+            throw std::runtime_error("cuDNN error");             \
+        }                                                        \
     }
 
-#define checkCUDA(error)                                          \
-    {                                                             \
-        if (error != cudaSuccess) {                               \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                <<  __LINE__ << "): "                             \
-                << cudaGetErrorString(error) << std::endl;        \
-            throw std::runtime_error("CUDA error");               \
-        }                                                         \
+#define checkCUDA(error)                                         \
+    {                                                            \
+        if (error != cudaSuccess) {                              \
+            std::cerr << "Error on " << __FILE__ << "("          \
+                << __LINE__ << "): "                             \
+                << cudaGetErrorString(error) << std::endl;       \
+            throw std::runtime_error("CUDA error");              \
+        }                                                        \
     }
 
-#define checkCUBLAS(status)                                       \
-    {                                                             \
-        if (status != CUBLAS_STATUS_SUCCESS) {                    \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                <<  __LINE__ << "): "                             \
-                << cublasGetStatusString(status) << std::endl;    \
-            throw std::runtime_error("cuBlas error");             \
-        }                                                         \
+#define checkCUBLAS(status)                                      \
+    {                                                            \
+        if (status != CUBLAS_STATUS_SUCCESS) {                   \
+            std::cerr << "Error on " << __FILE__ << "("          \
+                << __LINE__ << "): "                             \
+                << cublasGetStatusString(status) << std::endl;   \
+            throw std::runtime_error("cuBlas error");            \
+        }                                                        \
     }
 
 void global_average_pooling_float(
@@ -206,6 +210,10 @@ struct conv_descriptor {
 
 class CuDNN_Layer {
     template <typename> friend class CuDNN_Network;
+    template <typename> friend class CuDNNScheduler;
+#if defined(USE_TENSOR_RT)
+    template <typename> friend class TrtResNet;
+#endif
 private:
     unsigned int channels{0};
     unsigned int outputs{0};
@@ -223,20 +231,36 @@ private:
     float scale_2{1.0f};
     float scale_3{1.0f};
     std::vector<void *> weights;
+#if defined(USE_TENSOR_RT)
+    std::vector<int64_t> weights_size;
+    std::string name;
+#endif
 };
+
+#if defined(USE_TENSOR_RT)
+template <typename net_t> class TrtResNet;
+#endif
 
 class CuDNNContext {
     template <typename> friend class CuDNN;
     template <typename> friend class CuDNN_Network;
+#if defined(USE_TENSOR_RT)
+    template <typename> friend class TrtResNet;
+    template <typename> friend class CuDNNScheduler;
+#endif
 private:
-    void *m_workspace;
-    void *m_InBuffer;
-    void *m_OutBuffer;
-    void *m_IdentityOutBuffer;
-    void *m_PoolBuffer;
-    void *m_TempBuffer;
+    void *m_workspace{nullptr};
+    void *m_InBuffer{nullptr};
+    void *m_OutBuffer{nullptr};
+    void *m_IdentityOutBuffer{nullptr};
+    void *m_PoolBuffer{nullptr};
+    void *m_TempBuffer{nullptr};
     bool m_is_initialized{false};
     bool m_buffers_allocated{false};
+#if defined(USE_TENSOR_RT)
+    TrtUniquePtr<nvinfer1::IExecutionContext> mContext{nullptr};
+    std::map<std::string, void*> mBuffers;
+#endif
 };
 
 template <typename net_t>
@@ -302,34 +326,50 @@ public:
                              CuDNNContext& cudnn_context,
                              const int batch_size = 1);
 
+    CuDNN<net_t>& m_cudnn;
+    std::vector<CuDNN_Layer> m_layers;
 private:
     void push_weights(const size_t layer, const std::vector<float>& weights);
+    void push_weights_trt(const size_t layer, const std::vector<float>& weights);
     void push_weights_col_major(const size_t layer,
                                 const std::vector<float>& weights,
                                 const int row,
                                 const int column);
+    void push_weights_trt_col_major(const size_t layer,
+                                    const std::vector<float>& weights,
+                                    const int row,
+                                    const int column);
 
-    CuDNN<net_t>& m_cudnn;
-    std::vector<CuDNN_Layer> m_layers;
 #if defined(USE_CUDNN_GRAPH)
     conv_descriptor m_conv_desc[6][2];
 #else
     conv_descriptor m_conv_desc[4][2];
 #endif
+#if defined(USE_TENSOR_RT)
+    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
+#endif
 };
 
+#if defined(USE_CUDNN_GRAPH)
+namespace fe = cudnn_frontend;
+#endif
 template <typename net_t>
 class CuDNN {
     friend class CuDNN_Network<net_t>;
     friend class CuDNN_Layer;
 public:
     CuDNN(const int gpu, const bool silent = false);
+    virtual ~CuDNN();
 
-    void initialize(const int channels, const int batch_size, const int net_type);
+    void initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash = "");
     bool has_fp16_compute();
     bool has_tensor_cores();
 
     int m_batch_size = 1;
+    cudaDeviceProp m_device_prop;
+#if defined(USE_TENSOR_RT)
+    std::string m_model_hash;
+#endif
 
 private:
     void convolve(const void *bufferIn,
@@ -424,5 +464,33 @@ private:
     bool m_tensorcore{false};
     bool m_init_ok{false};
     int m_net_type{0};
+#if defined(USE_CUDNN_GRAPH)
+    using graph_and_tensors1 = std::tuple<fe::graph::Graph,
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // X
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // W
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // B
+                                          std::shared_ptr<fe::graph::Tensor_attributes>   // Y
+                                          >;
+    using graph_and_tensors2 = std::tuple<fe::graph::Graph,
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // X
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // W
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // B
+                                          std::shared_ptr<fe::graph::Tensor_attributes>   // Y
+                                          >;
+    using graph_and_tensors3 = std::tuple<fe::graph::Graph,
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // X
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // Z
+                                          std::shared_ptr<fe::graph::Tensor_attributes>   // Y
+                                          >;
+    using graph_and_tensors4 = std::tuple<fe::graph::Graph,
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // X
+                                          std::shared_ptr<fe::graph::Tensor_attributes>,  // W
+                                          std::shared_ptr<fe::graph::Tensor_attributes>   // Y
+                                          >;
+    std::unordered_map<std::size_t, graph_and_tensors1> m_maintained_cache1;
+    std::unordered_map<std::size_t, graph_and_tensors2> m_maintained_cache2;
+    std::unordered_map<std::size_t, graph_and_tensors3> m_maintained_cache3;
+    std::unordered_map<std::size_t, graph_and_tensors4> m_maintained_cache4;
+#endif
 };
 #endif

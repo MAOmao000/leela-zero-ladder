@@ -58,7 +58,7 @@ public:
     virtual ~CuDNNScheduler();
     CuDNNScheduler();
 
-    virtual void initialize(int channels, const int net_type);
+    virtual void initialize(int channels, const int net_type, const std::string &model_hash = nullptr);
     virtual void forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val);
