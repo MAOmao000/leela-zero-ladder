@@ -151,6 +151,7 @@ public:
     }
 
     ~TrtResNet() {
+std::cerr << "####################################################### TrtResNet Destructor " << std::this_thread::get_id() << std::endl;
         if (mEngine) mEngine.reset();
         if (mRuntime) mRuntime.reset();
     }
@@ -166,9 +167,7 @@ protected:
 private:
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
-        TrtUniquePtr<nvinfer1::IBuilder>& builder,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        TrtUniquePtr<nvinfer1::IBuilderConfig>& config,
         nvinfer1::IOptimizationProfile* profile);
 
     nvinfer1::ITensor* initInputs(
@@ -188,27 +187,18 @@ private:
         unsigned int channels,
         unsigned int outputs);
 
-    nvinfer1::IScaleLayer* buildMatBiasLayer(
-        nvinfer1::ITensor* input,
-        int64_t biases_size,
-        void* biases,
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string op_name,
-        unsigned int channels,
-        unsigned int outputs);
-
     nvinfer1::ILayer* buildActivationLayer(
         nvinfer1::ITensor* input,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name,
         nvinfer1::ActivationType act_type);
 
-    nvinfer1::ILayer* TrtResNet<net_t>::applyGPoolLayer(
+    nvinfer1::ILayer* applyGPoolLayer(
         nvinfer1::ITensor* input,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name);
 
-    nvinfer1::ILayer* TrtResNet<net_t>::buildMatMulLayer(
+    nvinfer1::ILayer* buildMatMulLayer(
         nvinfer1::ITensor* input,
         int64_t weights_size,
         void* weights,

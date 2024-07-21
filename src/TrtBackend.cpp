@@ -95,7 +95,7 @@ bool TrtResNet<net_t>::build() {
         return false;
     }
 
-    constructNetwork(builder, network, config, profile);
+    constructNetwork(network, profile);
     config->addOptimizationProfile(profile);
 
     if (m_cudnn.m_device_prop.major >= 8) {
@@ -115,7 +115,7 @@ bool TrtResNet<net_t>::build() {
         tuneMutex.lock();
         //std::string cacheDir = "trtcache";
         std::string cacheDir = Utils::leelaz_file("trtcache");
-        bool result = std::filesystem::create_directory(cacheDir);
+        std::filesystem::create_directory(cacheDir);
         assert(std::filesystem::exists(cacheDir));
         assert(std::filesystem::is_directory(cacheDir));
 
@@ -287,22 +287,20 @@ bool TrtResNet<net_t>::build() {
 
     mRuntime.reset(nvinfer1::createInferRuntime(trt::gLogger.getTRTLogger()));
     if (!mRuntime) {
-        std::cerr << "createInferRuntime error: " << network << std::endl;
+        std::cerr << "createInferRuntime error: " << std::endl;
         return false;
     }
 
     mEngine.reset(mRuntime->deserializeCudaEngine(plan.data(), plan.size()));
     if (!mEngine) {
-        std::cerr << "deserializeCudaEngine error: " << network << std::endl;
+        std::cerr << "deserializeCudaEngine error: " << std::endl;
         return false;
     }
     return true;
 }
 
 template <typename net_t>
-void TrtResNet<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::IBuilder>& builder,
-                                        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-                                        TrtUniquePtr<nvinfer1::IBuilderConfig>& config,
+void TrtResNet<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
                                         nvinfer1::IOptimizationProfile* profile) {
     nvinfer1::ITensor* inputFeature;
     nvinfer1::ILayer* initialConvLayer;
@@ -434,11 +432,9 @@ nvinfer1::ITensor* TrtResNet<net_t>::initInputs(
     nvinfer1::IOptimizationProfile* profile) {
 
     auto numInChannels = layer.channels;
-    auto numOutChannels = layer.outputs;
     auto nnYLen = BOARD_SIZE;
     auto nnXLen = BOARD_SIZE;
     auto maxBatchSize = cfg_batch_size;
-    nvinfer1::ILayer* dataOut{nullptr};
     nvinfer1::ITensor* inputFeature;
     if (typeid(net_t) == typeid(float)) {
         inputFeature
@@ -559,52 +555,6 @@ nvinfer1::ILayer* TrtResNet<net_t>::buildConvLayer(
     convLayer->setName(op_name.c_str());
 
     return convLayer;
-}
-
-template <typename net_t>
-nvinfer1::IScaleLayer* TrtResNet<net_t>::buildMatBiasLayer(
-    nvinfer1::ITensor* input,
-    int64_t biases_size,
-    void* biases,
-    TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-    std::string op_name,
-    unsigned int channels,
-    unsigned int outputs) {
-
-    mTuneDesc += strprintf(
-        R"|("%s"(%d))|",
-        op_name.c_str(),
-        channels);
-
-    nvinfer1::IScaleLayer *matBiasLayer;
-    if (typeid(net_t) == typeid(float)) {
-        matBiasLayer = network->addScale(
-            *input,
-            nvinfer1::ScaleMode::kCHANNEL,
-            {
-                nvinfer1::DataType::kFLOAT,
-                biases,
-                biases_size
-            },
-            {nvinfer1::DataType::kFLOAT, nullptr, 0},
-            {nvinfer1::DataType::kFLOAT, nullptr, 0}
-        );
-    } else {
-        matBiasLayer = network->addScale(
-            *input,
-            nvinfer1::ScaleMode::kCHANNEL,
-            {
-                nvinfer1::DataType::kHALF,
-                biases,
-                biases_size
-            },
-            {nvinfer1::DataType::kHALF, nullptr, 0},
-            {nvinfer1::DataType::kHALF, nullptr, 0}
-        );
-    }
-    matBiasLayer->setName(op_name.c_str());
-
-    return matBiasLayer;
 }
 
 template <typename net_t>

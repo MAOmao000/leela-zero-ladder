@@ -242,6 +242,7 @@ add_executable(leelaz
   ${NEURALNET_BACKEND_SOURCES}
   ${SrcPath}/Leela.cpp
 )
+target_compile_features(leelaz PUBLIC cxx_std_17 c_std_17)
 
 if(USE_BACKEND STREQUAL "TENSORRT")
   message(STATUS "Looking for system TensorRT and CuDNN library.")
@@ -283,6 +284,7 @@ if(USE_BACKEND STREQUAL "TENSORRT")
   add_definitions(-DUSE_BLAS)
   add_definitions(-DUSE_CUDNN)
   add_definitions(-DUSE_CUDNN_GRAPH)
+  add_definitions(-DUSE_TENSOR_RT)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR} ${FEIncludePath})
   include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})

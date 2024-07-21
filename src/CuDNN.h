@@ -268,6 +268,12 @@ class CuDNN_Network {
 
 public:
     CuDNN_Network(CuDNN<net_t>& cudnn) : m_cudnn(cudnn) {}
+    ~CuDNN_Network() {
+std::cerr << "####################################################### CuDNN_Network Destructor " << std::this_thread::get_id() << std::endl;
+//#if defined(USE_TENSOR_RT)
+//        m_trt.reset();
+//#endif
+    }
     CuDNN<net_t>& getCuDNN() {
         return m_cudnn;
     }
@@ -345,9 +351,9 @@ private:
 #else
     conv_descriptor m_conv_desc[4][2];
 #endif
-#if defined(USE_TENSOR_RT)
-    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
-#endif
+//#if defined(USE_TENSOR_RT)
+//    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
+//#endif
 };
 
 #if defined(USE_CUDNN_GRAPH)
@@ -464,6 +470,9 @@ private:
     bool m_tensorcore{false};
     bool m_init_ok{false};
     int m_net_type{0};
+#if defined(USE_TENSOR_RT)
+    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
+#endif
 #if defined(USE_CUDNN_GRAPH)
     using graph_and_tensors1 = std::tuple<fe::graph::Graph,
                                           std::shared_ptr<fe::graph::Tensor_attributes>,  // X

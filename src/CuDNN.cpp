@@ -153,6 +153,8 @@ CuDNN<net_t>::CuDNN(const int gpu, const bool silent) {
 
 template <typename net_t>
 CuDNN<net_t>::~CuDNN() {
+std::cerr << "####################################################### CuDNN Destructor " << std::this_thread::get_id() << std::endl;
+    m_trt.reset();
     cublasDestroy(m_cublas_handles);
     cudnnDestroy(m_handle);
 }
@@ -162,9 +164,11 @@ void CuDNN<net_t>::initialize(const int channels, const int batch_size, const in
     // For compatibility with OpenCL implementation
     (void)channels;
 
-    putenv("CUDNN_LOGGLEVEL_DBG=0");
+    const char* log_level = "CUDNN_LOGGLEVEL_DBG=0";
+    putenv((char *)log_level);
     if (cfg_backend == backend_t::CUDNNGRAPH) {
-        putenv("CUDNN_FRONTEND_LOG_INFO=0");
+        const char* log_info = "CUDNN_FRONTEND_LOG_INFO=0";
+        putenv((char *)log_info);
     }
     m_net_type = net_type;
     m_batch_size = batch_size;
@@ -1456,8 +1460,8 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
             return;
         }
         m_layers[layer].name = "val." + std::to_string(layer);
-        m_trt.reset(new TrtResNet<net_t>(*this, m_cudnn));
-        if (!m_trt->build()) {
+        getCuDNN().m_trt.reset(new TrtResNet<net_t>(*this, m_cudnn));
+        if (!getCuDNN().m_trt->build()) {
             return;
         }
         return;
@@ -1538,12 +1542,12 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 
     if (cfg_backend == backend_t::TENSORRT) {
         if (!cudnn_context.m_buffers_allocated) {
-            cudnn_context.mContext.reset(m_trt->mEngine->createExecutionContext());
+            cudnn_context.mContext.reset(getCuDNN().m_trt->mEngine->createExecutionContext());
             assert(cudnn_context.mContext);
-            for (int i = 0; i < m_trt->mEngine->getNbIOTensors(); i++) {
+            for (int i = 0; i < getCuDNN().m_trt->mEngine->getNbIOTensors(); i++) {
                 void* buffer = nullptr;
-                auto name = m_trt->mEngine->getIOTensorName(i);
-                auto dims = m_trt->mEngine->getTensorShape(name);
+                auto name = getCuDNN().m_trt->mEngine->getIOTensorName(i);
+                auto dims = getCuDNN().m_trt->mEngine->getTensorShape(name);
                 size_t bytes = std::accumulate(dims.d + 1,
                                                dims.d + dims.nbDims,
                                                batch_size * sizeof(net_t),
@@ -1567,22 +1571,24 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
             std::copy(input.begin(), input.end(), input_net_t.begin());
-            checkCUDA(cudaMemcpyAsync(
+//            checkCUDA(cudaMemcpyAsync(
+            cudaMemcpyAsync(
                 search->second,
                 (net_t*)&input_net_t[0],
                 inSize,
-                cudaMemcpyHostToDevice));
+                cudaMemcpyHostToDevice); //);
         } else {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
             input_net_t = NCHW_to_NHWC<net_t>(
                 input, batch_size, BOARD_SIZE, BOARD_SIZE, m_layers[0].channels);
-            checkCUDA(cudaMemcpyAsync(
+//            checkCUDA(cudaMemcpyAsync(
+            cudaMemcpyAsync(
                 search->second,
                 (net_t*)&input_net_t[0],
                 inSize,
-                cudaMemcpyHostToDevice));
+                cudaMemcpyHostToDevice); //);
         }
-        auto dims = m_trt->mEngine->getTensorShape("InputFeature");
+        auto dims = getCuDNN().m_trt->mEngine->getTensorShape("InputFeature");
         assert(dims.nbDims != -1);
         dims.d[0] = batch_size;
         cudnn_context.mContext->setInputShape("InputFeature", dims);

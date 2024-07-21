@@ -572,7 +572,7 @@ void Network::select_precision(const int channels) {
 
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
-        myprintf("Initializing %s (autodetecting precision).\n", backend);
+        myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
@@ -581,12 +581,12 @@ void Network::select_precision(const int channels) {
         }
         if (!fp16_net->needs_autodetect()) {
             try {
-                myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
+                myprintf("%s: using fp16/half or tensor core compute support.\n", backend.c_str());
                 m_forward = init_net(channels, std::move(fp16_net));
                 benchmark_time(1); // a sanity check run
             } catch (...) {
                 myprintf("%s: fp16/half or tensor core failed "
-                         "despite driver claiming support.\n", backend);
+                         "despite driver claiming support.\n", backend.c_str());
                 myprintf("Falling back to single precision\n");
                 m_forward.reset();
                 if (cfg_backend == backend_t::OPENCL) {
@@ -628,7 +628,7 @@ void Network::select_precision(const int channels) {
             myprintf("Both single precision and half precision failed to run.\n");
             throw std::runtime_error("Failed to initialize net.");
         } else if (score_fp16 < 0.0f) {
-            myprintf("Using %s single precision (half precision failed to run).\n", backend);
+            myprintf("Using %s single precision (half precision failed to run).\n", backend.c_str());
             m_forward.reset();
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
@@ -638,9 +638,9 @@ void Network::select_precision(const int channels) {
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
             }
         } else if (score_fp32 < 0.0f) {
-            myprintf("Using %s half precision (single precision failed to run).\n", backend);
+            myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
         } else if (score_fp32 * 1.05f > score_fp16) {
-            myprintf("Using %s single precision (less than 5%% slower than half).\n", backend);
+            myprintf("Using %s single precision (less than 5%% slower than half).\n", backend.c_str());
             m_forward.reset();
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
@@ -649,11 +649,11 @@ void Network::select_precision(const int channels) {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
             }
-            myprintf("Using %s half precision (at least 5%% faster than single).\n", backend);
+            myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
         }
             return;
     } else if (cfg_precision == precision_t::SINGLE) {
-        myprintf("Initializing %s (single precision).\n", backend);
+        myprintf("Initializing %s (single precision).\n", backend.c_str());
         if (cfg_backend == backend_t::OPENCL) {
             m_forward =
                 init_net(channels, std::make_unique<OpenCLScheduler<float>>());
@@ -662,7 +662,7 @@ void Network::select_precision(const int channels) {
                 init_net(channels, std::make_unique<CuDNNScheduler<float>>());
         }
     } else if (cfg_precision == precision_t::HALF) {
-        myprintf("Initializing %s (half precision).\n", backend);
+        myprintf("Initializing %s (half precision).\n", backend.c_str());
         if (cfg_backend == backend_t::OPENCL) {
             m_forward = init_net(
                 channels, std::make_unique<OpenCLScheduler<half_float::half>>());

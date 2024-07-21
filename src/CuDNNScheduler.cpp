@@ -44,6 +44,7 @@ static void bn_stddivs_to_conv(std::vector<float>& w,
 
 template <typename net_t>
 CuDNNScheduler<net_t>::~CuDNNScheduler() {
+std::cerr << "####################################################### CuDNNScheduler Destructor " << std::this_thread::get_id() << std::endl;
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_running = false;
@@ -432,6 +433,7 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum) {
         auto count = inputs.size();
 
         if (!m_running) {
+std::cerr << "####################################################### batch_worker Destructor " << std::this_thread::get_id() << std::endl;
             if (cfg_backend == backend_t::TENSORRT) {
                 for (int i = 0; i < 2; i++) {
                     context[i].mContext.reset();
