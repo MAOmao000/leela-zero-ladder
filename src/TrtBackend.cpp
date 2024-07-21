@@ -83,17 +83,6 @@ bool TrtResNet<net_t>::build() {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;
     }
-/*
-#ifdef _WIN32
-    auto path_i = cfg_weightsfile.find_last_of("\\") + 1;
-#else
-    auto path_i = cfg_weightsfile.find_last_of("/") + 1;
-#endif
-    auto ext_i = cfg_weightsfile.find_last_of(".");
-    std::string pathname = cfg_weightsfile.substr(0, path_i + 1);
-    std::string extname = cfg_weightsfile.substr(ext_i, cfg_weightsfile.size() - ext_i);
-    std::string weightsfile = cfg_weightsfile.substr(path_i, ext_i-path_i);
-*/
     std::filesystem::path path = cfg_weightsfile;
     std::string filename = path.filename().string();
     auto ext_i = filename.find_last_of(".");
