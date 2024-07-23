@@ -44,7 +44,7 @@ static void bn_stddivs_to_conv(std::vector<float>& w,
 
 template <typename net_t>
 CuDNNScheduler<net_t>::~CuDNNScheduler() {
-std::cerr << "####################################################### CuDNNScheduler Destructor " << std::this_thread::get_id() << std::endl;
+//std::cerr << "####################################################### CuDNNScheduler Destructor " << std::this_thread::get_id() << std::endl;
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_running = false;
@@ -64,6 +64,39 @@ std::cerr << "####################################################### CuDNNSched
                 }
             }
         }
+    }
+    for (int i = 0; i < 2; i++) {
+        for (size_t j = 0; j < m_context[i].size(); j++) {
+            for (size_t k = 0; k < m_context[i][j].size(); k++) {
+                if (cfg_backend == backend_t::TENSORRT) {
+                    m_context[i][j][k]->mContext.reset();
+                    for (auto ptr: m_context[i][j][k]->mBuffers) {
+                        cudaFree(ptr.second);
+                    }
+                } else if (m_context[i][j][k]->m_buffers_allocated) {
+                    if (m_context[i][j][k]->m_workspace)
+                        cudaFree(m_context[i][j][k]->m_workspace);
+                    if (m_context[i][j][k]->m_InBuffer)
+                        cudaFree(m_context[i][j][k]->m_InBuffer);
+                    if (m_context[i][j][k]->m_OutBuffer)
+                        cudaFree(m_context[i][j][k]->m_OutBuffer);
+                    if (m_context[i][j][k]->m_IdentityOutBuffer)
+                        cudaFree(m_context[i][j][k]->m_IdentityOutBuffer);
+                    if (m_context[i][j][k]->m_PoolBuffer)
+                        cudaFree(m_context[i][j][k]->m_PoolBuffer);
+                    if (m_context[i][j][k]->m_TempBuffer)
+                        cudaFree(m_context[i][j][k]->m_TempBuffer);
+                }
+            }
+        }
+    }
+    for (const auto& cudnn : m_cudnn) {
+        if (cfg_backend == backend_t::TENSORRT) {
+            if (cudnn->m_trt->mEngine) cudnn->m_trt->mEngine.reset();
+            if (cudnn->m_trt->mRuntime) cudnn->m_trt->mRuntime.reset();
+        }
+        cublasDestroy(cudnn->m_cublas_handles);
+        cudnnDestroy(cudnn->m_handle);
     }
 }
 
@@ -109,11 +142,18 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
             cudnn->initialize(channels, cfg_batch_size, net_type, "");
         }
 
+        std::vector<std::shared_ptr<CuDNNContext>> tmp_context[2];
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
+            auto cudnn_context_0 = std::make_shared<CuDNNContext>();
+            auto cudnn_context_1 = std::make_shared<CuDNNContext>();
             auto t =
-                std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum);
+                std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum, i);
+            tmp_context[0].push_back(cudnn_context_0);
+            tmp_context[1].push_back(cudnn_context_1);
             m_worker_threads.push_back(std::move(t));
         }
+        m_context[0].push_back(tmp_context[0]);
+        m_context[1].push_back(tmp_context[1]);
         gnum++;
     }
 
@@ -353,14 +393,14 @@ struct batch_stats_t batch_stats;
 #endif
 
 template <typename net_t>
-void CuDNNScheduler<net_t>::batch_worker(size_t gnum) {
+void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
     constexpr auto in_size = Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE;
     constexpr auto out_pol_size =
         Network::OUTPUTS_POLICY * BOARD_SIZE * BOARD_SIZE;
     constexpr auto out_val_size =
         Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE;
 
-    CuDNNContext context[2];
+//    CuDNNContext context[2];
 
     // batch scheduling heuristic.
     // Returns the batch picked up from the queue (m_forward_queue)
@@ -433,7 +473,8 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum) {
         auto count = inputs.size();
 
         if (!m_running) {
-std::cerr << "####################################################### batch_worker Destructor " << std::this_thread::get_id() << std::endl;
+//std::cerr << "####################################################### batch_worker Destructor " << std::this_thread::get_id() << std::endl;
+/*
             if (cfg_backend == backend_t::TENSORRT) {
                 for (int i = 0; i < 2; i++) {
                     context[i].mContext.reset();
@@ -451,6 +492,7 @@ std::cerr << "####################################################### batch_work
                     if (context[i].m_TempBuffer) checkCUDA(cudaFree(context[i].m_TempBuffer));
                 }
             }
+*/
             return;
         }
 
@@ -478,10 +520,10 @@ std::cerr << "####################################################### batch_work
         // run the NN evaluation
         if (count == 1) {
             m_networks[gnum]->forward(batch_input, batch_output_pol,
-                batch_output_val, context[0], (const int)count);
+                batch_output_val, m_context[0][gnum][tid], (const int)count);
         } else {
             m_networks[gnum]->forward(batch_input, batch_output_pol,
-                batch_output_val, context[1], (const int)count);
+                batch_output_val, m_context[1][gnum][tid], (const int)count);
         }
 
         // Get output and copy back

@@ -93,10 +93,10 @@ public:
                                const std::vector<float>& weights_2,
                                const std::vector<float>& means_2,
                                const std::vector<float>& variances_2,
-                                          const std::vector<float>& fc1_w,
-                                          const std::vector<float>& fc1_b,
-                                          const std::vector<float>& fc2_w,
-                                          const std::vector<float>& fc2_b);
+                               const std::vector<float>& fc1_w,
+                               const std::vector<float>& fc1_b,
+                               const std::vector<float>& fc2_w,
+                               const std::vector<float>& fc2_b);
 
     void push_convolve(unsigned int filter_size,
                        unsigned int channels,
@@ -108,6 +108,7 @@ private:
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
     std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;
+    std::vector<std::vector<std::shared_ptr<CuDNNContext>>> m_context[2];
 
     std::mutex m_mutex;
     std::condition_variable m_cv;
@@ -121,7 +122,7 @@ private:
     std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
     std::list<std::thread> m_worker_threads;
 
-    void batch_worker(size_t gnum);
+    void batch_worker(size_t gnum, size_t tid);
 
     virtual void drain();
     virtual void resume();

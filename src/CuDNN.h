@@ -268,12 +268,12 @@ class CuDNN_Network {
 
 public:
     CuDNN_Network(CuDNN<net_t>& cudnn) : m_cudnn(cudnn) {}
-    ~CuDNN_Network() {
-std::cerr << "####################################################### CuDNN_Network Destructor " << std::this_thread::get_id() << std::endl;
+//    ~CuDNN_Network() {
+//std::cerr << "####################################################### CuDNN_Network Destructor " << std::this_thread::get_id() << std::endl;
 //#if defined(USE_TENSOR_RT)
 //        m_trt.reset();
 //#endif
-    }
+//    }
     CuDNN<net_t>& getCuDNN() {
         return m_cudnn;
     }
@@ -323,13 +323,13 @@ std::cerr << "####################################################### CuDNN_Netw
     void forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
-                 CuDNNContext& cudnn_context,
+                 std::shared_ptr<CuDNNContext> cudnn_context,
                  const int batch_size = 1);
 
     void forward_activations(const std::vector<float>& input,
                              std::vector<float>& output_pol,
                              std::vector<float>& output_val,
-                             CuDNNContext& cudnn_context,
+                             std::shared_ptr<CuDNNContext> cudnn_context,
                              const int batch_size = 1);
 
     CuDNN<net_t>& m_cudnn;
@@ -363,9 +363,10 @@ template <typename net_t>
 class CuDNN {
     friend class CuDNN_Network<net_t>;
     friend class CuDNN_Layer;
+    friend class CuDNNScheduler<net_t>;
 public:
     CuDNN(const int gpu, const bool silent = false);
-    virtual ~CuDNN();
+//    virtual ~CuDNN();
 
     void initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash = "");
     bool has_fp16_compute();

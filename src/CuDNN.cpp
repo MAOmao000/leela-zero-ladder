@@ -151,20 +151,20 @@ CuDNN<net_t>::CuDNN(const int gpu, const bool silent) {
     m_device_prop = best_device;
 }
 
-template <typename net_t>
-CuDNN<net_t>::~CuDNN() {
-std::cerr << "####################################################### CuDNN Destructor " << std::this_thread::get_id() << std::endl;
-    m_trt.reset();
-    cublasDestroy(m_cublas_handles);
-    cudnnDestroy(m_handle);
-}
+//template <typename net_t>
+//CuDNN<net_t>::~CuDNN() {
+//std::cerr << "####################################################### CuDNN Destructor " << std::this_thread::get_id() << std::endl;
+    //m_trt.reset();
+    //cublasDestroy(m_cublas_handles);
+    //cudnnDestroy(m_handle);
+//}
 
 template <typename net_t>
 void CuDNN<net_t>::initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash) {
     // For compatibility with OpenCL implementation
     (void)channels;
 
-    const char* log_level = "CUDNN_LOGGLEVEL_DBG=0";
+    const char* log_level = "CUDNN_LOGLEVEL_DBG=0";
     putenv((char *)log_level);
     if (cfg_backend == backend_t::CUDNNGRAPH) {
         const char* log_info = "CUDNN_FRONTEND_LOG_INFO=0";
@@ -1529,7 +1529,7 @@ template <typename net_t>
 void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                std::vector<float>& output_pol,
                                                std::vector<float>& output_val,
-                                               CuDNNContext& cudnn_context,
+                                               std::shared_ptr<CuDNNContext> cudnn_context,
                                                const int batch_size) {
 
     const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
@@ -1541,9 +1541,9 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     auto val_net_t = std::vector<net_t>(val_elements);
 
     if (cfg_backend == backend_t::TENSORRT) {
-        if (!cudnn_context.m_buffers_allocated) {
-            cudnn_context.mContext.reset(getCuDNN().m_trt->mEngine->createExecutionContext());
-            assert(cudnn_context.mContext);
+        if (!cudnn_context->m_buffers_allocated) {
+            cudnn_context->mContext.reset(getCuDNN().m_trt->mEngine->createExecutionContext());
+            assert(cudnn_context->mContext);
             for (int i = 0; i < getCuDNN().m_trt->mEngine->getNbIOTensors(); i++) {
                 void* buffer = nullptr;
                 auto name = getCuDNN().m_trt->mEngine->getIOTensorName(i);
@@ -1553,15 +1553,15 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                batch_size * sizeof(net_t),
                                                std::multiplies<size_t>());
                 checkCUDA(cudaMalloc(&buffer, bytes));
-                cudnn_context.mBuffers.emplace(std::make_pair(name, buffer));
-                cudnn_context.mContext->setTensorAddress(name, buffer);
+                cudnn_context->mBuffers.emplace(std::make_pair(name, buffer));
+                cudnn_context->mContext->setTensorAddress(name, buffer);
             }
-            cudnn_context.mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
+            cudnn_context->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
             cudaStreamSynchronize(cudaStreamPerThread);
-            cudnn_context.m_buffers_allocated = true;
+            cudnn_context->m_buffers_allocated = true;
         }
-        auto search = cudnn_context.mBuffers.find("InputFeature");
-        assert(search != cudnn_context.mBuffers.end());
+        auto search = cudnn_context->mBuffers.find("InputFeature");
+        assert(search != cudnn_context->mBuffers.end());
         if (typeid(net_t) == typeid(float) && cfg_NCHW) {
             checkCUDA(cudaMemcpyAsync(
                 search->second,
@@ -1591,18 +1591,18 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         auto dims = getCuDNN().m_trt->mEngine->getTensorShape("InputFeature");
         assert(dims.nbDims != -1);
         dims.d[0] = batch_size;
-        cudnn_context.mContext->setInputShape("InputFeature", dims);
+        cudnn_context->mContext->setInputShape("InputFeature", dims);
         // Asynchronously enqueue the inference work
-        ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
-        search = cudnn_context.mBuffers.find("OutputPolicy");
-        assert(search != cudnn_context.mBuffers.end());
+        ASSERT(cudnn_context->mContext->enqueueV3(cudaStreamPerThread));
+        search = cudnn_context->mBuffers.find("OutputPolicy");
+        assert(search != cudnn_context->mBuffers.end());
         checkCUDA(cudaMemcpy(
             &pol_net_t[0],
             search->second,
             pol_elements * sizeof(net_t),
             cudaMemcpyDeviceToHost));
-        search = cudnn_context.mBuffers.find("OutputValue");
-        assert(search != cudnn_context.mBuffers.end());
+        search = cudnn_context->mBuffers.find("OutputValue");
+        assert(search != cudnn_context->mBuffers.end());
         checkCUDA(cudaMemcpy(
             &val_net_t[0],
             search->second,
@@ -1627,7 +1627,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     // Always allocates enough space for floats
     constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(float);
 
-    if (!cudnn_context.m_buffers_allocated) {
+    if (!cudnn_context->m_buffers_allocated) {
         auto max_wsize = size_t{0};
         auto max_channels = unsigned{0};
         for (const auto& layer : m_layers) {
@@ -1659,11 +1659,11 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         void *d_TempBuffer;
         checkCUDA(cudaMalloc((void**)&d_TempBuffer, alloc_insize));
 
-        cudnn_context.m_workspace = d_workspace;
-        cudnn_context.m_InBuffer = d_InBuffer;
-        cudnn_context.m_OutBuffer = d_OutBuffer;
-        cudnn_context.m_TempBuffer = d_TempBuffer;
-        cudnn_context.m_buffers_allocated = true;
+        cudnn_context->m_workspace = d_workspace;
+        cudnn_context->m_InBuffer = d_InBuffer;
+        cudnn_context->m_OutBuffer = d_OutBuffer;
+        cudnn_context->m_TempBuffer = d_TempBuffer;
+        cudnn_context->m_buffers_allocated = true;
 
         if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
             void *d_IdentityOutBuffer;
@@ -1673,17 +1673,17 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             checkCUDA(cudaMalloc((void**)&d_PoolBuffer,
                                  batch_size * max_channels * sizeof(net_t)));
 
-            cudnn_context.m_IdentityOutBuffer = d_IdentityOutBuffer;
-            cudnn_context.m_PoolBuffer = d_PoolBuffer;
+            cudnn_context->m_IdentityOutBuffer = d_IdentityOutBuffer;
+            cudnn_context->m_PoolBuffer = d_PoolBuffer;
         }
     }
 
-    auto workspace = cudnn_context.m_workspace;
-    auto InBuffer = cudnn_context.m_InBuffer;
-    auto OutBuffer = cudnn_context.m_OutBuffer;
-    auto IdentityOutBuffer = cudnn_context.m_IdentityOutBuffer;
-    auto PoolBuffer = cudnn_context.m_PoolBuffer;
-    auto TempBuffer = cudnn_context.m_TempBuffer;
+    auto workspace = cudnn_context->m_workspace;
+    auto InBuffer = cudnn_context->m_InBuffer;
+    auto OutBuffer = cudnn_context->m_OutBuffer;
+    auto IdentityOutBuffer = cudnn_context->m_IdentityOutBuffer;
+    auto PoolBuffer = cudnn_context->m_PoolBuffer;
+    auto TempBuffer = cudnn_context->m_TempBuffer;
 
 //    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     if (typeid(net_t) == typeid(float) && cfg_NCHW) {
@@ -1920,7 +1920,7 @@ template <typename net_t>
 void CuDNN_Network<net_t>::forward(const std::vector<float>& input,
                                    std::vector<float>& output_pol,
                                    std::vector<float>& output_val,
-                                   CuDNNContext& cudnn_context,
+                                   std::shared_ptr<CuDNNContext> cudnn_context,
                                    const int batch_size) {
 
     forward_activations(input, output_pol, output_val, cudnn_context, batch_size);

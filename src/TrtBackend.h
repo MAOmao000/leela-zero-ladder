@@ -118,10 +118,12 @@ public:
         switch (severity) {
             case Severity::kINTERNAL_ERROR:
                 std::cerr << msg << std::endl;
-                std::exit(EXIT_FAILURE);
+                //std::exit(EXIT_FAILURE);
+                break;
             case Severity::kERROR:
                 std::cerr << msg << std::endl;
-                std::exit(EXIT_FAILURE);
+                //std::exit(EXIT_FAILURE);
+                break;
             case Severity::kWARNING:
                 break;
             case Severity::kINFO:
@@ -150,11 +152,11 @@ public:
           m_cudnn(cudnn) {
     }
 
-    ~TrtResNet() {
-std::cerr << "####################################################### TrtResNet Destructor " << std::this_thread::get_id() << std::endl;
-        if (mEngine) mEngine.reset();
-        if (mRuntime) mRuntime.reset();
-    }
+//    ~TrtResNet() {
+//std::cerr << "####################################################### TrtResNet Destructor " << std::this_thread::get_id() << std::endl;
+//        if (mEngine) mEngine.reset();
+//        if (mRuntime) mRuntime.reset();
+//    }
 
     // Builds the network engine
     bool build();
