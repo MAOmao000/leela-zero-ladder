@@ -35,7 +35,30 @@
 #endif
 
 #if defined(USE_TENSOR_RT)
-#include "TrtBackend.h"
+#include <stdlib.h>
+#include <fstream>
+#include <ostream>
+#include <iostream>
+#include <new>
+#include <string>
+#include <numeric>
+#include <type_traits>
+#include <algorithm>
+#include <functional>
+#include <cstdlib>
+#include <map>
+#include <iterator>
+#include <filesystem>
+#include <stdarg.h>
+
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
+#include <cuda_runtime_api.h>
+#include "NvInfer.h"
+#include "NvInferRuntimeBase.h"
+#include "NvInferSafeRuntime.h"
+#include "NvInferConsistency.h"
+
+#include "sha2.h"
 #endif
 
 auto constexpr CONV_DESC_INPUT = 0;
@@ -63,6 +86,17 @@ template <typename net_t> class CuDNN_Network;
             throw std::runtime_error("cuDNN FrontEnd error");     \
         }                                                         \
     }
+#endif
+
+#if defined(USE_TENSOR_RT)
+#define ASSERT(condition)                                         \
+    do {                                                          \
+        if (!(condition)) {                                       \
+            std::cerr << "Assertion failure " << __FILE__ << "("  \
+                << __LINE__ << "): " << #condition << std::endl;  \
+            throw std::runtime_error("TensorRT error");           \
+        }                                                         \
+    } while (0)
 #endif
 
 #define checkCUDNN(expression)                                   \
@@ -211,9 +245,6 @@ struct conv_descriptor {
 class CuDNN_Layer {
     template <typename> friend class CuDNN_Network;
     template <typename> friend class CuDNNScheduler;
-#if defined(USE_TENSOR_RT)
-    template <typename> friend class TrtResNet;
-#endif
 private:
     unsigned int channels{0};
     unsigned int outputs{0};
@@ -238,14 +269,92 @@ private:
 };
 
 #if defined(USE_TENSOR_RT)
-template <typename net_t> class TrtResNet;
+static std::string vformat(const char *fmt, va_list ap) {
+    // Allocate a buffer on the stack that's big enough for us almost
+    // all the time.  Be prepared to allocate dynamically if it doesn't fit.
+    size_t size = 4096;
+    char stackbuf[4096];
+    std::vector<char> dynamicbuf;
+    char *buf = &stackbuf[0];
+
+    int needed;
+    while (true) {
+        // Try to vsnprintf into our buffer.
+        needed = vsnprintf(buf, size, fmt, ap);
+        // NB. C99 (which modern Linux and OS X follow) says vsnprintf
+        // failure returns the length it would have needed.  But older
+        // glibc and current Windows return -1 for failure, i.e., not
+        // telling us how much was needed.
+
+        if (needed <= (int)size && needed >= 0)
+            break;
+
+        // vsnprintf reported that it wanted to write more characters
+        // than we allotted.  So try again using a dynamic buffer.  This
+        // doesn't happen very often if we chose our initial size well.
+        size = (needed > 0) ? (needed+1) : (size*2);
+        dynamicbuf.resize(size+1);
+        buf = &dynamicbuf[0];
+    }
+    return std::string(buf, (size_t)needed);
+}
+
+inline std::string strprintf(const char* fmt, ...) {
+    va_list ap;
+    va_start (ap, fmt);
+    std::string buf = vformat(fmt, ap);
+    va_end (ap);
+    return buf;
+}
+
+inline std::string readFileBinary(const std::string& filename) {
+    std::ifstream ifs;
+    ifs.open(filename, std::ios::binary);
+    std::string str((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    return str;
+}
+
+// Logger for TensorRT
+class Logger : public nvinfer1::ILogger {
+public:
+    nvinfer1::ILogger& getTRTLogger() noexcept {
+        return *this;
+    }
+
+    void log(ILogger::Severity severity, const char* msg) noexcept override {
+        // suppress information level log
+        switch (severity) {
+            case Severity::kINTERNAL_ERROR:
+                std::cerr << msg << std::endl;
+                break;
+            case Severity::kERROR:
+                std::cerr << msg << std::endl;
+                break;
+            case Severity::kWARNING:
+                break;
+            case Severity::kINFO:
+                break;
+            case Severity::kVERBOSE:
+                break;
+        }
+    }
+};
+
+struct InferDeleter {
+    template <typename T>
+    void operator()(T* obj) const {
+        delete obj;
+    }
+};
+
+template <typename T>
+using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 #endif
 
 class CuDNNContext {
     template <typename> friend class CuDNN;
     template <typename> friend class CuDNN_Network;
 #if defined(USE_TENSOR_RT)
-    template <typename> friend class TrtResNet;
     template <typename> friend class CuDNNScheduler;
 #endif
 private:
@@ -258,7 +367,7 @@ private:
     bool m_is_initialized{false};
     bool m_buffers_allocated{false};
 #if defined(USE_TENSOR_RT)
-    TrtUniquePtr<nvinfer1::IExecutionContext> mContext{nullptr};
+    std::shared_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
     std::map<std::string, void*> mBuffers;
 #endif
 };
@@ -267,13 +376,13 @@ template <typename net_t>
 class CuDNN_Network {
 
 public:
+#if defined(USE_TENSOR_RT)
+    CuDNN_Network(CuDNN<net_t>& cudnn,
+                  std::shared_ptr<Logger> logger) : m_cudnn(cudnn), m_logger(logger) {}
+#else
     CuDNN_Network(CuDNN<net_t>& cudnn) : m_cudnn(cudnn) {}
-//    ~CuDNN_Network() {
-//std::cerr << "####################################################### CuDNN_Network Destructor " << std::this_thread::get_id() << std::endl;
-//#if defined(USE_TENSOR_RT)
-//        m_trt.reset();
-//#endif
-//    }
+#endif
+
     CuDNN<net_t>& getCuDNN() {
         return m_cudnn;
     }
@@ -334,6 +443,18 @@ public:
 
     CuDNN<net_t>& m_cudnn;
     std::vector<CuDNN_Layer> m_layers;
+
+#if defined(USE_TENSOR_RT)
+    // Builds the network engine
+    bool build();
+
+    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr};
+    std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr};
+
+protected:
+    std::map<std::string, nvinfer1::Weights> mWeightMap;
+
+#endif
 private:
     void push_weights(const size_t layer, const std::vector<float>& weights);
     void push_weights_trt(const size_t layer, const std::vector<float>& weights);
@@ -346,14 +467,58 @@ private:
                                     const int row,
                                     const int column);
 
+#if defined(USE_TENSOR_RT)
+    // Create full model using the TensorRT network definition API and build the engine.
+    void constructNetwork(
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        nvinfer1::IOptimizationProfile* profile);
+
+    nvinfer1::ITensor* initInputs(
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        const CuDNN_Layer layer,
+        nvinfer1::IOptimizationProfile* profile);
+
+    nvinfer1::ILayer* buildConvLayer(
+        nvinfer1::ITensor* input,
+        unsigned int filter_size,
+        int64_t weights_size,
+        void* weights,
+        int64_t biases_size,
+        void* biases,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string op_name,
+        unsigned int channels,
+        unsigned int outputs);
+
+    nvinfer1::ILayer* buildActivationLayer(
+        nvinfer1::ITensor* input,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string op_name,
+        nvinfer1::ActivationType act_type);
+
+    nvinfer1::ILayer* applyGPoolLayer(
+        nvinfer1::ITensor* input,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string op_name);
+
+    nvinfer1::ILayer* buildMatMulLayer(
+        nvinfer1::ITensor* input,
+        int64_t weights_size,
+        void* weights,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string op_name,
+        unsigned int channels,
+        unsigned int outputs);
+
+    std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
+    std::shared_ptr<Logger> m_logger;
+#endif
+
 #if defined(USE_CUDNN_GRAPH)
     conv_descriptor m_conv_desc[6][2];
 #else
     conv_descriptor m_conv_desc[4][2];
 #endif
-//#if defined(USE_TENSOR_RT)
-//    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
-//#endif
 };
 
 #if defined(USE_CUDNN_GRAPH)
@@ -363,20 +528,25 @@ template <typename net_t>
 class CuDNN {
     friend class CuDNN_Network<net_t>;
     friend class CuDNN_Layer;
+#ifdef _WIN32
     friend class CuDNNScheduler<net_t>;
+#else
+    template <typename> friend class CuDNNScheduler;
+#endif
 public:
     CuDNN(const int gpu, const bool silent = false);
-//    virtual ~CuDNN();
 
-    void initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash = "");
+    void initialize(const int channels,
+                    const int batch_size,
+                    const int net_type,
+                    const std::string &model_hash = "");
+
     bool has_fp16_compute();
     bool has_tensor_cores();
 
     int m_batch_size = 1;
     cudaDeviceProp m_device_prop;
-#if defined(USE_TENSOR_RT)
     std::string m_model_hash;
-#endif
 
 private:
     void convolve(const void *bufferIn,
@@ -471,9 +641,7 @@ private:
     bool m_tensorcore{false};
     bool m_init_ok{false};
     int m_net_type{0};
-#if defined(USE_TENSOR_RT)
-    std::unique_ptr<TrtResNet<net_t> > m_trt{nullptr};
-#endif
+
 #if defined(USE_CUDNN_GRAPH)
     using graph_and_tensors1 = std::tuple<fe::graph::Graph,
                                           std::shared_ptr<fe::graph::Tensor_attributes>,  // X

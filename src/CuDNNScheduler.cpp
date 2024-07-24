@@ -44,7 +44,6 @@ static void bn_stddivs_to_conv(std::vector<float>& w,
 
 template <typename net_t>
 CuDNNScheduler<net_t>::~CuDNNScheduler() {
-//std::cerr << "####################################################### CuDNNScheduler Destructor " << std::this_thread::get_id() << std::endl;
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_running = false;
@@ -58,50 +57,82 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             const auto& layer = *iter;
             for (auto it = layer.weights.begin(); it != layer.weights.end(); ++it) {
                 if (cfg_backend == backend_t::TENSORRT) {
-                    free(*it);
+                    void *w_mem;
+                    cudaHostGetDevicePointer((void**)&w_mem, *it, 0);
+                    if (w_mem) cudaFreeAsync(w_mem, cudaStreamDefault);
+                    cudaFreeHost(*it);
                 } else {
-                    cudaFree(*it);
+                    cudaFreeAsync(*it, cudaStreamDefault);
                 }
             }
         }
     }
+
     for (int i = 0; i < 2; i++) {
         for (size_t j = 0; j < m_context[i].size(); j++) {
             for (size_t k = 0; k < m_context[i][j].size(); k++) {
                 if (cfg_backend == backend_t::TENSORRT) {
-                    m_context[i][j][k]->mContext.reset();
-                    for (auto ptr: m_context[i][j][k]->mBuffers) {
-                        cudaFree(ptr.second);
+                    if (m_context[i][j][k]->m_buffers_allocated) {
+                        for (auto ptr: m_context[i][j][k]->mBuffers) {
+                            cudaFreeAsync(ptr.second, cudaStreamDefault);
+                        }
                     }
                 } else if (m_context[i][j][k]->m_buffers_allocated) {
                     if (m_context[i][j][k]->m_workspace)
-                        cudaFree(m_context[i][j][k]->m_workspace);
+                        cudaFreeAsync(m_context[i][j][k]->m_workspace, cudaStreamDefault);
                     if (m_context[i][j][k]->m_InBuffer)
-                        cudaFree(m_context[i][j][k]->m_InBuffer);
+                        cudaFreeAsync(m_context[i][j][k]->m_InBuffer, cudaStreamDefault);
                     if (m_context[i][j][k]->m_OutBuffer)
-                        cudaFree(m_context[i][j][k]->m_OutBuffer);
+                        cudaFreeAsync(m_context[i][j][k]->m_OutBuffer, cudaStreamDefault);
                     if (m_context[i][j][k]->m_IdentityOutBuffer)
-                        cudaFree(m_context[i][j][k]->m_IdentityOutBuffer);
+                        cudaFreeAsync(m_context[i][j][k]->m_IdentityOutBuffer, cudaStreamDefault);
                     if (m_context[i][j][k]->m_PoolBuffer)
-                        cudaFree(m_context[i][j][k]->m_PoolBuffer);
+                        cudaFreeAsync(m_context[i][j][k]->m_PoolBuffer, cudaStreamDefault);
                     if (m_context[i][j][k]->m_TempBuffer)
-                        cudaFree(m_context[i][j][k]->m_TempBuffer);
+                        cudaFreeAsync(m_context[i][j][k]->m_TempBuffer, cudaStreamDefault);
                 }
             }
         }
     }
-    for (const auto& cudnn : m_cudnn) {
-        if (cfg_backend == backend_t::TENSORRT) {
-            if (cudnn->m_trt->mEngine) cudnn->m_trt->mEngine.reset();
-            if (cudnn->m_trt->mRuntime) cudnn->m_trt->mRuntime.reset();
+    cudaStreamSynchronize(cudaStreamDefault);
+#ifdef _WIN32
+    if (cfg_backend == backend_t::TENSORRT) {
+        for (int i = 0; i < 2; i++) {
+            for (size_t j = 0; j < m_context[i].size(); j++) {
+                for (size_t k = 0; k < m_context[i][j].size(); k++) {
+                    if (m_context[i][j][k]->m_buffers_allocated) {
+                        m_context[i][j][k]->mContext.reset();
+                        cudaStreamSynchronize(nullptr);
+                    }
+                }
+            }
         }
+    }
+#endif
+
+#ifdef _WIN32
+    if (cfg_backend == backend_t::TENSORRT) {
+        for (const auto& cudnn_net : m_networks) {
+            if (cudnn_net->mEngine) cudnn_net->mEngine.reset();
+            if (cudnn_net->mRuntime) cudnn_net->mRuntime.reset();
+        }
+    }
+#endif
+    for (const auto& cudnn : m_cudnn) {
         cublasDestroy(cudnn->m_cublas_handles);
         cudnnDestroy(cudnn->m_handle);
     }
+
+#ifndef _WIN32
+    exit(0);
+#endif
 }
 
 template <typename net_t>
 CuDNNScheduler<net_t>::CuDNNScheduler() {
+#if defined(USE_TENSOR_RT)
+    auto logger = std::make_shared<Logger>();
+#endif
     // multi-gpu?
     auto gpus = cfg_gpus;
 
@@ -115,7 +146,11 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
 
     for (auto gpu : gpus) {
         auto cudnn = std::make_unique<CuDNN<net_t>>(gpu, silent);
+#if defined(USE_TENSOR_RT)
+        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn, logger);
+#else
         auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
+#endif
         m_cudnn.push_back(std::move(cudnn));
         m_networks.push_back(std::move(net));
 
@@ -129,8 +164,7 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
     m_net_type = net_type;
 
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
-    // threads so that we can at least concurrently schedule something to the
-    // GPU.
+    // threads so that we can at least concurrently schedule something to the GPU.
     auto num_worker_threads =
         cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
 
@@ -400,8 +434,6 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
     constexpr auto out_val_size =
         Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE;
 
-//    CuDNNContext context[2];
-
     // batch scheduling heuristic.
     // Returns the batch picked up from the queue (m_forward_queue)
     // 1) Wait for m_waittime milliseconds for full batch
@@ -473,26 +505,6 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
         auto count = inputs.size();
 
         if (!m_running) {
-//std::cerr << "####################################################### batch_worker Destructor " << std::this_thread::get_id() << std::endl;
-/*
-            if (cfg_backend == backend_t::TENSORRT) {
-                for (int i = 0; i < 2; i++) {
-                    context[i].mContext.reset();
-                    for (auto ptr: context[i].mBuffers) {
-                        checkCUDA(cudaFree(ptr.second));
-                    }
-                }
-            } else {
-                for (int i = 0; i < 2; i++) {
-                    if (context[i].m_workspace) checkCUDA(cudaFree(context[i].m_workspace));
-                    if (context[i].m_InBuffer) checkCUDA(cudaFree(context[i].m_InBuffer));
-                    if (context[i].m_OutBuffer) checkCUDA(cudaFree(context[i].m_OutBuffer));
-                    if (context[i].m_IdentityOutBuffer) checkCUDA(cudaFree(context[i].m_IdentityOutBuffer));
-                    if (context[i].m_PoolBuffer) checkCUDA(cudaFree(context[i].m_PoolBuffer));
-                    if (context[i].m_TempBuffer) checkCUDA(cudaFree(context[i].m_TempBuffer));
-                }
-            }
-*/
             return;
         }
 

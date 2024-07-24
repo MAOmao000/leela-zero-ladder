@@ -90,7 +90,6 @@ if(USE_BACKEND STREQUAL "TENSORRT")
     ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
     ${SrcPath}/sha2.cpp
-    ${SrcPath}/TrtBackend.cpp
   )
   set(FEIncludePath "/home/x/cudnn-frontend/include")
 # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
