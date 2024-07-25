@@ -108,7 +108,7 @@ private:
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
     std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;
-    std::vector<std::vector<std::shared_ptr<CuDNNContext>>> m_context[2];
+    std::vector<std::vector<std::shared_ptr<CuDNNContext>>> m_context;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;

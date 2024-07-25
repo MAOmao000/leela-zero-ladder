@@ -68,53 +68,48 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
 
-    for (int i = 0; i < 2; i++) {
-        for (size_t j = 0; j < m_context[i].size(); j++) {
-            for (size_t k = 0; k < m_context[i][j].size(); k++) {
-                if (cfg_backend == backend_t::TENSORRT) {
-                    if (m_context[i][j][k]->m_buffers_allocated) {
-                        for (auto ptr: m_context[i][j][k]->mBuffers) {
-                            cudaFreeAsync(ptr.second, cudaStreamDefault);
-                        }
+    for (size_t i = 0; i < m_context.size(); i++) {
+        for (size_t k = 0; k < m_context[i].size(); k++) {
+            if (cfg_backend == backend_t::TENSORRT) {
+                if (m_context[i][k]->m_buffers_allocated) {
+                    for (auto ptr: m_context[i][k]->mBuffers) {
+                        cudaFreeAsync(ptr.second, cudaStreamDefault);
                     }
-                } else if (m_context[i][j][k]->m_buffers_allocated) {
-                    if (m_context[i][j][k]->m_workspace)
-                        cudaFreeAsync(m_context[i][j][k]->m_workspace, cudaStreamDefault);
-                    if (m_context[i][j][k]->m_InBuffer)
-                        cudaFreeAsync(m_context[i][j][k]->m_InBuffer, cudaStreamDefault);
-                    if (m_context[i][j][k]->m_OutBuffer)
-                        cudaFreeAsync(m_context[i][j][k]->m_OutBuffer, cudaStreamDefault);
-                    if (m_context[i][j][k]->m_IdentityOutBuffer)
-                        cudaFreeAsync(m_context[i][j][k]->m_IdentityOutBuffer, cudaStreamDefault);
-                    if (m_context[i][j][k]->m_PoolBuffer)
-                        cudaFreeAsync(m_context[i][j][k]->m_PoolBuffer, cudaStreamDefault);
-                    if (m_context[i][j][k]->m_TempBuffer)
-                        cudaFreeAsync(m_context[i][j][k]->m_TempBuffer, cudaStreamDefault);
                 }
+            } else if (m_context[i][k]->m_buffers_allocated) {
+                if (m_context[i][k]->m_workspace)
+                    cudaFreeAsync(m_context[i][k]->m_workspace, cudaStreamDefault);
+                if (m_context[i][k]->m_InBuffer)
+                    cudaFreeAsync(m_context[i][k]->m_InBuffer, cudaStreamDefault);
+                if (m_context[i][k]->m_OutBuffer)
+                    cudaFreeAsync(m_context[i][k]->m_OutBuffer, cudaStreamDefault);
+                if (m_context[i][k]->m_IdentityOutBuffer)
+                    cudaFreeAsync(m_context[i][k]->m_IdentityOutBuffer, cudaStreamDefault);
+                if (m_context[i][k]->m_PoolBuffer)
+                    cudaFreeAsync(m_context[i][k]->m_PoolBuffer, cudaStreamDefault);
+                if (m_context[i][k]->m_TempBuffer)
+                    cudaFreeAsync(m_context[i][k]->m_TempBuffer, cudaStreamDefault);
             }
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
 #ifdef _WIN32
     if (cfg_backend == backend_t::TENSORRT) {
-        for (int i = 0; i < 2; i++) {
-            for (size_t j = 0; j < m_context[i].size(); j++) {
-                for (size_t k = 0; k < m_context[i][j].size(); k++) {
-                    if (m_context[i][j][k]->m_buffers_allocated) {
-                        m_context[i][j][k]->mContext.reset();
-                        cudaStreamSynchronize(nullptr);
-                    }
+        for (size_t i = 0; i < m_context.size(); i++) {
+            for (size_t k = 0; k < m_context[i].size(); k++) {
+                if (m_context[i][k]->m_buffers_allocated) {
+                    m_context[i][k]->mContext.reset();
+                    cudaStreamSynchronize(nullptr);
                 }
             }
         }
-    }
-#endif
-
-#ifdef _WIN32
-    if (cfg_backend == backend_t::TENSORRT) {
+        auto num_worker_threads =
+            cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
         for (const auto& cudnn_net : m_networks) {
-            if (cudnn_net->mEngine) cudnn_net->mEngine.reset();
-            if (cudnn_net->mRuntime) cudnn_net->mRuntime.reset();
+            for (auto i = 0; i < m_networks.size(); i++) {
+                if (cudnn_net->mEngine[i]) cudnn_net->mEngine[i].reset();
+                if (cudnn_net->mRuntime[i]) cudnn_net->mRuntime[i].reset();
+            }
         }
     }
 #endif
@@ -124,7 +119,8 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
     }
 
 #ifndef _WIN32
-    exit(0);
+    if (cfg_backend == backend_t::TENSORRT)
+        exit(0);
 #endif
 }
 
@@ -176,18 +172,19 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
             cudnn->initialize(channels, cfg_batch_size, net_type, "");
         }
 
-        std::vector<std::shared_ptr<CuDNNContext>> tmp_context[2];
+        std::vector<std::shared_ptr<CuDNNContext>> tmp_context;
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto cudnn_context_0 = std::make_shared<CuDNNContext>();
-            auto cudnn_context_1 = std::make_shared<CuDNNContext>();
+            tmp_context.push_back(cudnn_context_0);
+            if (cfg_backend != backend_t::TENSORRT) {
+                auto cudnn_context_1 = std::make_shared<CuDNNContext>();
+                tmp_context.push_back(cudnn_context_1);
+            }
             auto t =
                 std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum, i);
-            tmp_context[0].push_back(cudnn_context_0);
-            tmp_context[1].push_back(cudnn_context_1);
             m_worker_threads.push_back(std::move(t));
         }
-        m_context[0].push_back(tmp_context[0]);
-        m_context[1].push_back(tmp_context[1]);
+        m_context.push_back(tmp_context);
         gnum++;
     }
 
@@ -339,8 +336,15 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
                                           unsigned int outputs,
                                           const std::vector<float>& weights) {
 
-    for (const auto& cudnn_net : m_networks) {
-        cudnn_net->push_convolve(filter_size, channels, outputs, weights);
+    auto num_worker_threads =
+        cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
+    for (auto i = 0; i < m_networks.size(); i++) {
+        if (cfg_backend == backend_t::TENSORRT) {
+            m_networks[i]->push_convolve(filter_size, channels, outputs, weights,
+                                         num_worker_threads, &m_context[i]);
+        } else {
+            m_networks[i]->push_convolve(filter_size, channels, outputs, weights, 0, nullptr);
+        }
     }
 }
 
@@ -362,8 +366,7 @@ void CuDNNScheduler<net_t>::push_weights(
                            weights->m_batchnorm_stddevs[weight_index]);
     weight_index++;
 
-    if (m_net_type == int(NetworkType::LEELA_ZERO))
-    {
+    if (m_net_type == int(NetworkType::LEELA_ZERO)) {
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer
         for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
@@ -376,8 +379,7 @@ void CuDNNScheduler<net_t>::push_weights(
                 weights->m_batchnorm_stddevs[weight_index + 1]);
             weight_index += 2;
         }
-    }
-    else if (m_net_type == int(NetworkType::MINIGO_SE))
+    } else if (m_net_type == int(NetworkType::MINIGO_SE)) {
         // residual blocks : except the first entry,
         // the second ~ last entry is all on residual topwer
         for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
@@ -393,6 +395,7 @@ void CuDNNScheduler<net_t>::push_weights(
                 weights->m_se_weights[weight_index],
                 weights->m_se_biases[weight_index]);
             weight_index += 2;
+        }
     }
 
     // Output head convolutions
@@ -530,14 +533,33 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
         }
 
         // run the NN evaluation
-        if (count == 1) {
-            m_networks[gnum]->forward(batch_input, batch_output_pol,
-                batch_output_val, m_context[0][gnum][tid], (const int)count);
+        if (cfg_backend == backend_t::TENSORRT) {
+            m_networks[gnum]->forward(
+                batch_input,
+                batch_output_pol,
+                batch_output_val,
+                m_context[gnum][tid],
+                (const int)count
+            );
         } else {
-            m_networks[gnum]->forward(batch_input, batch_output_pol,
-                batch_output_val, m_context[1][gnum][tid], (const int)count);
+            if (count == 1) {
+                m_networks[gnum]->forward(
+                    batch_input,
+                    batch_output_pol,
+                    batch_output_val,
+                    m_context[gnum][tid * 2],
+                    (const int)count
+                );
+            } else {
+                m_networks[gnum]->forward(
+                    batch_input,
+                    batch_output_pol,
+                    batch_output_val,
+                    m_context[gnum][tid * 2 + 1],
+                    (const int)count
+                );
+            }
         }
-
         // Get output and copy back
         index = 0;
         for (auto& x : inputs) {

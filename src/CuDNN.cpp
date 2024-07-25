@@ -1066,7 +1066,6 @@ void CuDNN_Network<net_t>::push_weights_trt(const size_t layer,
         auto weightSize = weights.size() * sizeof(float);
 
         void *host_mem;
-        //host_mem = malloc(weightSize);
         cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
         memcpy(host_mem, (net_t*)&weights[0], weightSize);
         m_layers.back().weights.emplace_back(host_mem);
@@ -1434,7 +1433,10 @@ template <typename net_t>
 void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
                                          const unsigned int channels,
                                          const unsigned int outputs,
-                                         const std::vector<float>& weights) {
+                                         const std::vector<float>& weights,
+                                         const int num_worker_threads,
+                                         std::vector<std::shared_ptr<CuDNNContext>>* context) {
+
     size_t layer = get_layer_count();
     if (cfg_backend == backend_t::TENSORRT) {
         if (cfg_NCHW) {
@@ -1454,7 +1456,7 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
         }
         m_layers[layer].name = "val." + std::to_string(layer);
 
-        build();
+        build(num_worker_threads, context);
         return;
     }
     if (cfg_NCHW) {
@@ -1532,25 +1534,6 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
     auto val_net_t = std::vector<net_t>(val_elements);
 
     if (cfg_backend == backend_t::TENSORRT) {
-        if (!cudnn_context->m_buffers_allocated) {
-            cudnn_context->mContext.reset(mEngine->createExecutionContext());
-            assert(cudnn_context->mContext);
-            for (int i = 0; i < mEngine->getNbIOTensors(); i++) {
-                void* buffer = nullptr;
-                auto name = mEngine->getIOTensorName(i);
-                auto dims = mEngine->getTensorShape(name);
-                size_t bytes = std::accumulate(dims.d + 1,
-                                               dims.d + dims.nbDims,
-                                               batch_size * sizeof(net_t),
-                                               std::multiplies<size_t>());
-                checkCUDA(cudaMalloc(&buffer, bytes));
-                cudnn_context->mBuffers.emplace(std::make_pair(name, buffer));
-                cudnn_context->mContext->setTensorAddress(name, buffer);
-            }
-            cudnn_context->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
-            cudaStreamSynchronize(cudaStreamPerThread);
-            cudnn_context->m_buffers_allocated = true;
-        }
         auto search = cudnn_context->mBuffers.find("InputFeature");
         assert(search != cudnn_context->mBuffers.end());
         if (typeid(net_t) == typeid(float) && cfg_NCHW) {
@@ -1577,10 +1560,8 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                 inSize,
                 cudaMemcpyHostToDevice); //);
         }
-        auto dims = mEngine->getTensorShape("InputFeature");
-        assert(dims.nbDims != -1);
-        dims.d[0] = batch_size;
-        cudnn_context->mContext->setInputShape("InputFeature", dims);
+        cudnn_context->mContext->setInputShape("InputFeature",
+            nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
         // Asynchronously enqueue the inference work
         ASSERT(cudnn_context->mContext->enqueueV3(cudaStreamPerThread));
         search = cudnn_context->mBuffers.find("OutputPolicy");
@@ -1939,7 +1920,8 @@ struct StringError : public std::exception {
 };
 
 template <typename net_t>
-bool CuDNN_Network<net_t>::build() {
+bool CuDNN_Network<net_t>::build(const int num_worker_threads,
+                                 std::vector<std::shared_ptr<CuDNNContext>>* context) {
     // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
     static constexpr int tuneSalt = 4;
     if (typeid(net_t) == typeid(float)) {
@@ -2013,7 +1995,6 @@ bool CuDNN_Network<net_t>::build() {
     {
         static std::mutex tuneMutex;
         tuneMutex.lock();
-        //std::string cacheDir = "trtcache";
         std::string cacheDir = Utils::leelaz_file("trtcache");
         std::filesystem::create_directory(cacheDir);
         assert(std::filesystem::exists(cacheDir));
@@ -2031,8 +2012,9 @@ bool CuDNN_Network<net_t>::build() {
 
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s/trt-%d_gpu-%s_net-%s_%d_%s%dx%d_batch%d_fp%d",
+                "%s%strt-%d_gpu-%s_net-%s_%d_%s%dx%d_batch%d_fp%d",
                 cacheDir.c_str(),
+                std::string{std::filesystem::path::preferred_separator},
                 getInferLibVersion(),
                 deviceIdent,
                 network->getName(),
@@ -2125,8 +2107,9 @@ bool CuDNN_Network<net_t>::build() {
             tuneIdent[sizeof(tuneIdent) - 1] = 0;
 
             auto timingCacheFile = strprintf(
-                "%s/trt-%d_gpu-%s_tune-%s_%s%dx%d_batch%d_fp%d",
+                "%s%strt-%d_gpu-%s_tune-%s_%s%dx%d_batch%d_fp%d",
                 cacheDir.c_str(),
+                std::string{std::filesystem::path::preferred_separator},
                 getInferLibVersion(),
                 deviceIdent,
                 tuneIdent,
@@ -2185,25 +2168,45 @@ bool CuDNN_Network<net_t>::build() {
         }
     }
 
-    mRuntime = std::shared_ptr<nvinfer1::IRuntime>(
-        nvinfer1::createInferRuntime(*m_logger));
-    if (!mRuntime) {
-        std::cerr << "createInferRuntime error: " << std::endl;
-        return false;
-    }
-
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan.data(), plan.size()));
-    if (!mEngine) {
-        std::cerr << "deserializeCudaEngine error: " << std::endl;
-        return false;
+    for (auto i = 0; i < num_worker_threads; i++) {
+        auto runtime = std::shared_ptr<nvinfer1::IRuntime>(
+            nvinfer1::createInferRuntime(*m_logger));
+        if (!runtime) {
+            std::cerr << "createInferRuntime error: " << std::endl;
+            return false;
+        }
+        auto engine = std::shared_ptr<nvinfer1::ICudaEngine>(
+            runtime->deserializeCudaEngine(plan.data(), plan.size()));
+        if (!engine) {
+            std::cerr << "deserializeCudaEngine error: " << std::endl;
+            return false;
+        }
+        (*context)[i]->mContext.reset(engine->createExecutionContext());
+        for (auto j = 0; j < engine->getNbIOTensors(); j++) {
+            void* buffer_0 = nullptr;
+            void* buffer_1 = nullptr;
+            auto name = engine->getIOTensorName(j);
+            auto dims = engine->getTensorShape(name);
+            size_t bytes = std::accumulate(dims.d + 1,
+                                           dims.d + dims.nbDims,
+                                           cfg_batch_size * sizeof(net_t),
+                                           std::multiplies<size_t>());
+            checkCUDA(cudaMalloc(&buffer_0, bytes));
+            (*context)[i]->mBuffers.emplace(std::make_pair(name, buffer_0));
+            (*context)[i]->mContext->setTensorAddress(name, buffer_0);
+        }
+        mRuntime.emplace_back(runtime);
+        mEngine.emplace_back(engine);
+        (*context)[i]->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
+        cudaStreamSynchronize(cudaStreamPerThread);
+        (*context)[i]->m_buffers_allocated = true;
     }
     return true;
 }
 
 template <typename net_t>
 void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-                                        nvinfer1::IOptimizationProfile* profile) {
+                                            nvinfer1::IOptimizationProfile* profile) {
     nvinfer1::ITensor* inputFeature;
     nvinfer1::ILayer* initialConvLayer;
     nvinfer1::ITensor* outputConv = nullptr;
