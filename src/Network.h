@@ -127,6 +127,12 @@ public:
         return m_net_type;
     }
 
+#if defined(USE_TENSOR_RT)
+    void manual_destruction() {
+        m_forward->~ForwardPipe();
+    }
+#endif
+
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);

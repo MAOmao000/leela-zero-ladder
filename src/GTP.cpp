@@ -549,6 +549,11 @@ void GTP::execute(GameState& game, const std::string& xinput) {
     if (input == "") {
         return;
     } else if (input == "exit") {
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            GTP::s_network->manual_destruction();
+        }
+#endif
         exit(EXIT_SUCCESS);
     } else if (input.find("#") == 0) {
         return;
@@ -574,6 +579,11 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         return;
     } else if (command == "quit") {
         gtp_printf(id, "");
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            GTP::s_network->manual_destruction();
+        }
+#endif
         exit(EXIT_SUCCESS);
     } else if (command.find("known_command") == 0) {
         std::istringstream cmdstream(command);

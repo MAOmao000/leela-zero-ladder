@@ -742,6 +742,11 @@ void benchmark(GameState& game) {
     auto search = std::make_unique<UCTSearch>(game, *GTP::s_network);
     game.set_to_move(FastBoard::WHITE);
     search->think(FastBoard::WHITE);
+#if defined(USE_TENSOR_RT)
+    if (cfg_backend == backend_t::TENSORRT) {
+        GTP::s_network->manual_destruction();
+    }
+#endif
 }
 
 int main(int argc, char* argv[]) {

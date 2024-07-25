@@ -44,6 +44,11 @@ static void bn_stddivs_to_conv(std::vector<float>& w,
 
 template <typename net_t>
 CuDNNScheduler<net_t>::~CuDNNScheduler() {
+#if defined(USE_TENSOR_RT)
+    if (m_destructed)
+        exit(0);
+    m_destructed = true;
+#endif
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_running = false;
@@ -53,9 +58,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         x.join();
     }
     for (const auto& cudnn_net : m_networks) {
-        if (cfg_backend == backend_t::TENSORRT) {
-            m_trt_logger->set_check_shutdown();
-        }
+        //if (cfg_backend == backend_t::TENSORRT) {
+        //    m_trt_logger->set_check_shutdown();
+        //}
         for (auto iter = std::begin(cudnn_net->m_layers); iter != std::end(cudnn_net->m_layers); iter++) {
             const auto& layer = *iter;
             for (auto it = layer.weights.begin(); it != layer.weights.end(); ++it) {
@@ -95,9 +100,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
-    if (cudaGetLastError() == cudaErrorCudartUnloading ) {
-        exit(0);
-    }
+    //if (cudaGetLastError() == cudaErrorCudartUnloading ) {
+    //    exit(0);
+    //}
     if (cfg_backend == backend_t::TENSORRT) {
         for (size_t i = 0; i < m_context.size(); i++) {
             for (size_t k = 0; k < m_context[i].size(); k++) {

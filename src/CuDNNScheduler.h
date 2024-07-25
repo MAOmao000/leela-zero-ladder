@@ -145,6 +145,9 @@ public:
                        const std::vector<float>& weights);
 
 private:
+#if defined(USE_TENSOR_RT)
+    bool m_destructed{false};
+#endif
     bool m_running = true;
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
