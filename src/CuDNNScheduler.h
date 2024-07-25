@@ -31,6 +31,47 @@
 #include "SMP.h"
 #include "ThreadPool.h"
 
+#if defined(USE_TENSOR_RT)
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
+#include "NvInfer.h"
+
+namespace trtLog {
+// Logger for TensorRT
+class Logger : public nvinfer1::ILogger {
+public:
+    Logger() {}
+    void log(ILogger::Severity severity, const char* msg) noexcept override {
+        // suppress information level log
+        switch (severity) {
+            case Severity::kINTERNAL_ERROR:
+                std::cerr << msg << std::endl;
+                break;
+            case Severity::kERROR:
+                if (!m_check_shutdown) {
+                    std::string check_msg{"Cuda Runtime (driver shutting down)"};
+                    std::string input_msg = msg;
+                    if (input_msg == check_msg) break;
+                }
+                std::cerr << msg << std::endl;
+                break;
+            case Severity::kWARNING:
+                break;
+            case Severity::kINFO:
+                break;
+            case Severity::kVERBOSE:
+                break;
+        }
+    }
+
+    void set_check_shutdown() {
+        m_check_shutdown = true;
+    }
+
+    bool m_check_shutdown{false};
+};
+}
+#endif
+
 #ifndef NDEBUG
 struct batch_stats_t {
     std::atomic<size_t> single_evals{0};
@@ -128,6 +169,9 @@ private:
     virtual void resume();
 
     int m_net_type{0};
+#if defined(USE_TENSOR_RT)
+    std::shared_ptr<trtLog::Logger> m_trt_logger;
+#endif
 };
 
 #endif

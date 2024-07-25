@@ -53,6 +53,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         x.join();
     }
     for (const auto& cudnn_net : m_networks) {
+        if (cfg_backend == backend_t::TENSORRT) {
+            m_trt_logger->set_check_shutdown();
+        }
         for (auto iter = std::begin(cudnn_net->m_layers); iter != std::end(cudnn_net->m_layers); iter++) {
             const auto& layer = *iter;
             for (auto it = layer.weights.begin(); it != layer.weights.end(); ++it) {
@@ -67,7 +70,6 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             }
         }
     }
-
     for (size_t i = 0; i < m_context.size(); i++) {
         for (size_t k = 0; k < m_context[i].size(); k++) {
             if (cfg_backend == backend_t::TENSORRT) {
@@ -93,41 +95,40 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
-#ifdef _WIN32
+    if (cudaGetLastError() == cudaErrorCudartUnloading ) {
+        exit(0);
+    }
     if (cfg_backend == backend_t::TENSORRT) {
         for (size_t i = 0; i < m_context.size(); i++) {
             for (size_t k = 0; k < m_context[i].size(); k++) {
                 if (m_context[i][k]->m_buffers_allocated) {
                     m_context[i][k]->mContext.reset();
-                    cudaStreamSynchronize(nullptr);
                 }
             }
         }
         auto num_worker_threads =
             cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
         for (const auto& cudnn_net : m_networks) {
-            for (auto i = 0; i < m_networks.size(); i++) {
-                if (cudnn_net->mEngine[i]) cudnn_net->mEngine[i].reset();
-                if (cudnn_net->mRuntime[i]) cudnn_net->mRuntime[i].reset();
+            for (auto i = size_t{0}; i < num_worker_threads; i++) {
+                if (cudnn_net->mEngine[i]) {
+                    cudnn_net->mEngine[i].reset();
+                }
+                if (cudnn_net->mRuntime[i]) {
+                    cudnn_net->mRuntime[i].reset();
+                }
             }
         }
     }
-#endif
     for (const auto& cudnn : m_cudnn) {
         cublasDestroy(cudnn->m_cublas_handles);
         cudnnDestroy(cudnn->m_handle);
     }
-
-#ifndef _WIN32
-    if (cfg_backend == backend_t::TENSORRT)
-        exit(0);
-#endif
 }
 
 template <typename net_t>
 CuDNNScheduler<net_t>::CuDNNScheduler() {
 #if defined(USE_TENSOR_RT)
-    auto logger = std::make_shared<Logger>();
+    m_trt_logger = std::make_shared<trtLog::Logger>();
 #endif
     // multi-gpu?
     auto gpus = cfg_gpus;
@@ -143,7 +144,7 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
     for (auto gpu : gpus) {
         auto cudnn = std::make_unique<CuDNN<net_t>>(gpu, silent);
 #if defined(USE_TENSOR_RT)
-        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn, logger);
+        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn, m_trt_logger);
 #else
         auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
 #endif
@@ -338,7 +339,7 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
 
     auto num_worker_threads =
         cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
-    for (auto i = 0; i < m_networks.size(); i++) {
+    for (auto i = size_t{0}; i < m_networks.size(); i++) {
         if (cfg_backend == backend_t::TENSORRT) {
             m_networks[i]->push_convolve(filter_size, channels, outputs, weights,
                                          num_worker_threads, &m_context[i]);

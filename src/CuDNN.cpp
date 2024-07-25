@@ -2010,11 +2010,12 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
         }
         deviceIdent[sizeof(deviceIdent) - 1] = 0;
 
+        std::string sep_char{std::filesystem::path::preferred_separator};
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
                 "%s%strt-%d_gpu-%s_net-%s_%d_%s%dx%d_batch%d_fp%d",
                 cacheDir.c_str(),
-                std::string{std::filesystem::path::preferred_separator},
+                sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
                 network->getName(),
@@ -2109,7 +2110,7 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
             auto timingCacheFile = strprintf(
                 "%s%strt-%d_gpu-%s_tune-%s_%s%dx%d_batch%d_fp%d",
                 cacheDir.c_str(),
-                std::string{std::filesystem::path::preferred_separator},
+                sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
                 tuneIdent,
@@ -2183,17 +2184,17 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
         }
         (*context)[i]->mContext.reset(engine->createExecutionContext());
         for (auto j = 0; j < engine->getNbIOTensors(); j++) {
-            void* buffer_0 = nullptr;
-            void* buffer_1 = nullptr;
+            void* buffer = nullptr;
+            //void* buffer_1 = nullptr;
             auto name = engine->getIOTensorName(j);
             auto dims = engine->getTensorShape(name);
             size_t bytes = std::accumulate(dims.d + 1,
                                            dims.d + dims.nbDims,
                                            cfg_batch_size * sizeof(net_t),
                                            std::multiplies<size_t>());
-            checkCUDA(cudaMalloc(&buffer_0, bytes));
-            (*context)[i]->mBuffers.emplace(std::make_pair(name, buffer_0));
-            (*context)[i]->mContext->setTensorAddress(name, buffer_0);
+            checkCUDA(cudaMalloc(&buffer, bytes));
+            (*context)[i]->mBuffers.emplace(std::make_pair(name, buffer));
+            (*context)[i]->mContext->setTensorAddress(name, buffer);
         }
         mRuntime.emplace_back(runtime);
         mEngine.emplace_back(engine);

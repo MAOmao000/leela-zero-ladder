@@ -58,7 +58,9 @@
 #include "NvInferSafeRuntime.h"
 #include "NvInferConsistency.h"
 
+#if defined(USE_TENSOR_RT)
 #include "sha2.h"
+#endif
 #endif
 
 auto constexpr CONV_DESC_INPUT    = 0;
@@ -316,32 +318,6 @@ inline std::string readFileBinary(
     return str;
 }
 
-// Logger for TensorRT
-class Logger : public nvinfer1::ILogger {
-public:
-    nvinfer1::ILogger& getTRTLogger() noexcept {
-        return *this;
-    }
-
-    void log(ILogger::Severity severity, const char* msg) noexcept override {
-        // suppress information level log
-        switch (severity) {
-            case Severity::kINTERNAL_ERROR:
-                std::cerr << msg << std::endl;
-                break;
-            case Severity::kERROR:
-                std::cerr << msg << std::endl;
-                break;
-            case Severity::kWARNING:
-                break;
-            case Severity::kINFO:
-                break;
-            case Severity::kVERBOSE:
-                break;
-        }
-    }
-};
-
 struct InferDeleter {
     template <typename T>
     void operator()(T* obj) const {
@@ -381,7 +357,7 @@ public:
 #if defined(USE_TENSOR_RT)
     CuDNN_Network(
         CuDNN<net_t>& cudnn,
-        std::shared_ptr<Logger> logger)
+        std::shared_ptr<nvinfer1::ILogger> logger)
     : m_cudnn(cudnn),
     m_logger(logger) {}
 #else
@@ -549,7 +525,7 @@ private:
     );
 
     std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
-    std::shared_ptr<Logger> m_logger;
+    std::shared_ptr<nvinfer1::ILogger> m_logger;
 #endif
 
 #if defined(USE_CUDNN_GRAPH)
