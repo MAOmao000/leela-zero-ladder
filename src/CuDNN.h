@@ -220,6 +220,28 @@ void se_scale_half_NHWC(
     const int spatial
     );
 
+void se_scale_float_stream(
+    float *outbuf,
+    const float *buf,
+    const float *biases,
+    const float *bufferIn,
+    const int batch_size,
+    const int channels,
+    const int spatial,
+    cudaStream_t stream
+    );
+
+void se_scale_half_stream(
+    __half *outbuf,
+    const __half *buf,
+    const __half *biases,
+    const __half *bufferIn,
+    const int batch_size,
+    const int channels,
+    const int spatial,
+    cudaStream_t stream
+    );
+
 struct conv_descriptor {
     cudnnTensorDescriptor_t input_descriptor;
     cudnnTensorDescriptor_t output_descriptor;
@@ -518,6 +540,8 @@ private:
         nvinfer1::ITensor* input,
         int64_t weights_size,
         void* weights,
+        int64_t biases_size,
+        void* biases,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name,
         unsigned int channels,

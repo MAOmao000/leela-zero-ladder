@@ -1,4 +1,5 @@
 #include "config.h"
+#include "Utils.h"
 
 #ifdef USE_CUDNN
 #include <stdint.h>
@@ -13,7 +14,8 @@ inline int DivUp(int a, int b) {
     return (a + b - 1) / b;
 }
 
-void splitThreadsAcrossDim01(int dim0Size,
+void splitThreadsAcrossDim01(
+    int dim0Size,
     int dim1Size,
     int& threads0,
     int& blocks0,
@@ -40,7 +42,8 @@ void splitThreadsAcrossDim01(int dim0Size,
     }
 }
 
-__global__ void global_average_pooling_kernel_float(const float* input,
+__global__ void global_average_pooling_kernel_float(
+    const float* input,
     float* output,
     const int N,
     const int C,
@@ -86,7 +89,8 @@ __global__ void global_average_pooling_kernel_float(const float* input,
     }
 }
 
-void global_average_pooling_float(const float* input,
+void global_average_pooling_float(
+    const float* input,
     float* output,
     const int N,
     const int C,
@@ -101,11 +105,12 @@ void global_average_pooling_float(const float* input,
     const int blocks = DivUp(total_elements, block_size);
     const int shared_size = sizeof(float) * shared_size_base * 2;
 
-    global_average_pooling_kernel_float << <blocks, block_size, shared_size >> > (
+    global_average_pooling_kernel_float<<<blocks, block_size, shared_size>>>(
         input, output, N, C, spatial);
 }
 
-__global__ void global_average_pooling_kernel_float_NHWC(const float* input,
+__global__ void global_average_pooling_kernel_float_NHWC(
+    const float* input,
     float* output,
     const int inputSize,
     const int outputSize) {
@@ -127,18 +132,20 @@ __global__ void global_average_pooling_kernel_float_NHWC(const float* input,
     if (opIndex < outputSize) output[opIndex] = avg;
 }
 
-void global_average_pooling_float_NHWC(const float* input,
+void global_average_pooling_float_NHWC(
+    const float* input,
     float* output,
     const int N,
     const int C,
     const int spatial) {
 
     // For NHWC fp32, simply launch N blocks, each with C threads.
-    global_average_pooling_kernel_float_NHWC << <N, C >> > (
+    global_average_pooling_kernel_float_NHWC<<<N, C>>>(
         input, output, N * C * spatial, N * C);
 }
 
-__global__ void global_average_pooling_kernel_half(const __half* input,
+__global__ void global_average_pooling_kernel_half(
+    const __half* input,
     __half* output,
     const int N,
     const int C,
@@ -183,7 +190,8 @@ __global__ void global_average_pooling_kernel_half(const __half* input,
     }
 }
 
-void global_average_pooling_half(const __half* input,
+void global_average_pooling_half(
+    const __half* input,
     __half* output,
     const int N,
     const int C,
@@ -201,7 +209,8 @@ void global_average_pooling_half(const __half* input,
         input, output, N, C, spatial);
 }
 
-__global__ void global_average_pooling_kernel_half_NHWC(const __half* input,
+__global__ void global_average_pooling_kernel_half_NHWC(
+    const __half* input,
     __half* output,
     const int inputSize,
     const int outputSize) {
@@ -223,18 +232,20 @@ __global__ void global_average_pooling_kernel_half_NHWC(const __half* input,
     if (opIndex < outputSize) output[opIndex] = __float2half(avg);
 }
 
-void global_average_pooling_half_NHWC(const __half* input,
+void global_average_pooling_half_NHWC(
+    const __half* input,
     __half* output,
     const int N,
     const int C,
     const int spatial) {
 
     // For NHWC fp16, simply launch N blocks, each with C threads.
-    global_average_pooling_kernel_half_NHWC << <N, C >> > (
+    global_average_pooling_kernel_half_NHWC<<<N, C>>>(
         (__half*)input, (__half*)output, N * C * spatial, N * C);
 }
 
-__global__ void add_bias_kernel_float(float* buf,
+__global__ void add_bias_kernel_float(
+    float* buf,
     const float* biases,
     const int N,
     const int C,
@@ -251,7 +262,8 @@ __global__ void add_bias_kernel_float(float* buf,
     }
 }
 
-void add_bias_float(float* buf,
+void add_bias_float(
+    float* buf,
     const float* biases,
     const int N,
     const int C,
@@ -266,10 +278,11 @@ void add_bias_float(float* buf,
         throw std::runtime_error("add_bias_float: batch size too large given channel size");
     dim3 grid(cBlocks, nBlocks, 1);
     dim3 threads(cThreads, nThreads, 1);
-    add_bias_kernel_float << <grid, threads >> > (buf, biases, N, C, is_relu);
+    add_bias_kernel_float<<<grid, threads>>>(buf, biases, N, C, is_relu);
 }
 
-__global__ void add_bias_kernel_half(__half* buf,
+__global__ void add_bias_kernel_half(
+    __half* buf,
     const __half* biases,
     const int N,
     const int C,
@@ -290,7 +303,8 @@ __global__ void add_bias_kernel_half(__half* buf,
     }
 }
 
-void add_bias_half(__half* buf,
+void add_bias_half(
+    __half* buf,
     const __half* biases,
     const int N,
     const int C,
@@ -305,10 +319,11 @@ void add_bias_half(__half* buf,
         throw std::runtime_error("add_bias_half: batch size too large given channel size");
     dim3 grid(cBlocks, nBlocks, 1);
     dim3 threads(cThreads, nThreads, 1);
-    add_bias_kernel_half << <grid, threads >> > (buf, biases, N, C, is_relu);
+    add_bias_kernel_half<<<grid, threads>>>(buf, biases, N, C, is_relu);
 }
 
-__global__ void se_scale_kernel_float(float* output,
+__global__ void se_scale_kernel_float(
+    float* output,
     const float* input,
     const float* biases,
     const float* residual,
@@ -340,7 +355,8 @@ __global__ void se_scale_kernel_float(float* output,
     }
 }
 
-void se_scale_float(float* out_buf,
+void se_scale_float(
+    float* out_buf,
     const float* buf,
     const float* biases,
     const float* bufferIn,
@@ -351,11 +367,12 @@ void se_scale_float(float* out_buf,
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_float << <blocks, block_size >> > (
+    se_scale_kernel_float<<<blocks, block_size>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
-__global__ void se_scale_kernel_float_NHWC(float* output,
+__global__ void se_scale_kernel_float_NHWC(
+    float* output,
     const float* input,
     const float* biases,
     const float* residual,
@@ -387,7 +404,8 @@ __global__ void se_scale_kernel_float_NHWC(float* output,
     }
 }
 
-void se_scale_float_NHWC(float* out_buf,
+void se_scale_float_NHWC(
+    float* out_buf,
     const float* buf,
     const float* biases,
     const float* bufferIn,
@@ -399,11 +417,12 @@ void se_scale_float_NHWC(float* out_buf,
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
 
-    se_scale_kernel_float_NHWC << <blocks, block_size >> > (
+    se_scale_kernel_float_NHWC<<<blocks, block_size>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
-__global__ void se_scale_kernel_half(__half* output,
+__global__ void se_scale_kernel_half(
+    __half* output,
     const __half* input,
     const __half* biases,
     const __half* residual,
@@ -435,7 +454,8 @@ __global__ void se_scale_kernel_half(__half* output,
     }
 }
 
-void se_scale_half(__half* out_buf,
+void se_scale_half(
+    __half* out_buf,
     const __half* buf,
     const __half* biases,
     const __half* bufferIn,
@@ -446,12 +466,12 @@ void se_scale_half(__half* out_buf,
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-
-    se_scale_kernel_half << <blocks, block_size >> > (
+    se_scale_kernel_half<<<blocks, block_size>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
-__global__ void se_scale_kernel_half_NHWC(__half* output,
+__global__ void se_scale_kernel_half_NHWC(
+    __half* output,
     const __half* input,
     const __half* biases,
     const __half* residual,
@@ -483,7 +503,8 @@ __global__ void se_scale_kernel_half_NHWC(__half* output,
     }
 }
 
-void se_scale_half_NHWC(__half* out_buf,
+void se_scale_half_NHWC(
+    __half* out_buf,
     const __half* buf,
     const __half* biases,
     const __half* bufferIn,
@@ -494,9 +515,41 @@ void se_scale_half_NHWC(__half* out_buf,
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-
-    se_scale_kernel_half_NHWC << <blocks, block_size >> > (
+    se_scale_kernel_half_NHWC<<<blocks, block_size>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
+void se_scale_float_stream(
+    float* out_buf,
+    const float* buf,
+    const float* biases,
+    const float* bufferIn,
+    const int N,
+    const int C,
+    const int spatial,
+    cudaStream_t stream) {
+
+    const int total_elements = C * spatial * N;
+    const int block_size = 256;
+    const int blocks = DivUp(total_elements, block_size);
+    se_scale_kernel_float<<<blocks, block_size , 0, stream>>> (
+        out_buf, buf, biases, bufferIn, N, C, spatial);
+}
+
+void se_scale_half_stream(
+    __half* out_buf,
+    const __half* buf,
+    const __half* biases,
+    const __half* bufferIn,
+    const int N,
+    const int C,
+    const int spatial,
+    cudaStream_t stream) {
+
+    const int total_elements = C * spatial * N;
+    const int block_size = 256;
+    const int blocks = DivUp(total_elements, block_size);
+    se_scale_kernel_half<<<blocks, block_size, 0, stream>>>(
+        out_buf, buf, biases, bufferIn, N, C, spatial);
+}
 #endif

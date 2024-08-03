@@ -55,10 +55,13 @@ public:
                 std::cerr << msg << std::endl;
                 break;
             case Severity::kWARNING:
+                //std::cerr << msg << std::endl;
                 break;
             case Severity::kINFO:
+                //std::cerr << msg << std::endl;
                 break;
             case Severity::kVERBOSE:
+                //std::cerr << msg << std::endl;
                 break;
         }
     }

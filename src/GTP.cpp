@@ -575,7 +575,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         gtp_printf(id, PROGRAM_NAME);
         return;
     } else if (command == "version") {
-        gtp_printf(id, PROGRAM_VERSION);
+        gtp_printf(id, "%s.%s", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
         return;
     } else if (command == "quit") {
         gtp_printf(id, "");

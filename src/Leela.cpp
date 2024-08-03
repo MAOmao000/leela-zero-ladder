@@ -60,11 +60,11 @@ using namespace Utils;
 static void license_blurb() {
     printf(
         "Leela Zero 0.17  Copyright (C) 2017-2019  Gian-Carlo Pascutto and contributors\n"
-        "%s %s  Copyright (C) 2024  MAOmao000 \n"
+        "%s %s.%s  Copyright (C) 2024  MAOmao000 \n"
         "This program comes with ABSOLUTELY NO WARRANTY.\n"
         "This is free software, and you are welcome to redistribute it\n"
         "under certain conditions; see the COPYING file for details.\n\n",
-        PROGRAM_NAME, PROGRAM_VERSION);
+        PROGRAM_NAME, PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
 }
 
 static void calculate_thread_count_cpu(
@@ -194,7 +194,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_OPENCL
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
         ("backend", po::value<std::string>()->default_value("opencl"),
-                      "[opencl|cudnn|cudnngraph|tensort] Which backend engine to use.")
+                      "[opencl|cudnn|cudnngraph|tensorrt] Which backend engine to use.")
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
 #endif

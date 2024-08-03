@@ -454,7 +454,8 @@ std::string SGFTree::state_to_string(GameState& pstate, const int compcolor) {
     header.append(state->get_timecontrol().to_text_sgf());
 
     auto leela_name = std::string{PROGRAM_NAME};
-    leela_name.append(" " + std::string(PROGRAM_VERSION));
+    leela_name.append(" " + std::string(PROGRAM_VERSION_MAJOR)
+                    + "." + std::string(PROGRAM_VERSION_MINOR));
     if (!cfg_weightsfile.empty()) {
         auto pos = cfg_weightsfile.find_last_of("\\/");
         if (std::string::npos == pos) {

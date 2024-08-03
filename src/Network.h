@@ -50,9 +50,6 @@
 #endif
 #include "ForwardPipe.h"
 #include "GameState.h"
-//#ifdef USE_OPENCL
-//#include "OpenCLScheduler.h"
-//#endif
 #ifdef USE_OPENCL_SELFCHECK
 #include "SMP.h"
 #endif

@@ -40,17 +40,17 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#ifndef USE_BLAS //1
+#ifndef USE_BLAS
 #include <Eigen/Dense>
-#endif //0
+#endif
 
-#ifdef __APPLE__ //1
+#ifdef __APPLE__
 #include <Accelerate/Accelerate.h>
-#endif //0
-#ifdef USE_MKL //1
+#endif
+#ifdef USE_MKL
 #include <mkl.h>
-#endif //0
-#ifdef USE_OPENBLAS //1
+#endif
+#ifdef USE_OPENBLAS
 #include <cblas.h>
 #endif
 #include "CPUPipe.h"
@@ -265,12 +265,12 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
         m_net_type = NetworkType::MINIGO_SE;
         residual_blocks /= 12;
         myprintf("%d blocks (MiniGo SE).\n", residual_blocks);
-        if (cfg_backend == backend_t::TENSORRT) {
-            myprintf_error("\nTensorRT backend cannot handle MiniGo SE weights.\n");
-            myprintf_error("\nSwitch the engine backend to 'OpenCL'.\n");
-            cfg_backend = backend_t::OPENCL;
-            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
-        }
+        //if (cfg_backend == backend_t::TENSORRT) {
+        //    myprintf_error("\nTensorRT backend cannot handle MiniGo SE weights.\n");
+        //    myprintf_error("\nSwitch the engine backend to 'OpenCL'.\n");
+        //    cfg_backend = backend_t::OPENCL;
+        //    myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
+        //}
     }
     else {
         myprintf_error("\nInconsistent number of weights in the file.\n");
@@ -573,13 +573,19 @@ void Network::select_precision(const int channels) {
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
         myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
+        if (cfg_backend == backend_t::TENSORRT) {
+            m_forward =
+                init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+            myprintf("Using %s single precision.\n", backend.c_str());
+            return;
+        }
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
         } else {
             fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
         }
-        if (!fp16_net->needs_autodetect()) {
+        if (cfg_backend != backend_t::TENSORRT && !fp16_net->needs_autodetect()) {
             try {
                 myprintf("%s: using fp16/half or tensor core compute support.\n", backend.c_str());
                 m_forward = init_net(channels, std::move(fp16_net));
@@ -649,9 +655,10 @@ void Network::select_precision(const int channels) {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
             }
+        } else {
             myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
         }
-            return;
+        return;
     } else if (cfg_precision == precision_t::SINGLE) {
         myprintf("Initializing %s (single precision).\n", backend.c_str());
         if (cfg_backend == backend_t::OPENCL) {
