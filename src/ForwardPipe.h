@@ -63,7 +63,7 @@ public:
 
     virtual ~ForwardPipe() = default;
 
-    virtual void initialize(const int channels, const int net_type, const std::string &model_hash = nullptr) = 0;
+    virtual void initialize(const int channels, const int net_type, const std::string &model_hash = "") = 0;
     virtual bool needs_autodetect() {
         return false;
     };

@@ -399,7 +399,19 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;
 #endif
     cfg_cache_plan = false;
+#ifdef USE_TENSOR_RT
+    cfg_backend = backend_t::TENSORRT;
+#else
+#ifdef USE_CUDNN_GRAPH
+    cfg_backend = backend_t::CUDNNGRAPH;
+#else
+#ifdef USE_CUDNN
+    cfg_backend = backend_t::CUDNN;
+#else
     cfg_backend = backend_t::OPENCL;
+#endif
+#endif
+#endif
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;
@@ -549,11 +561,6 @@ void GTP::execute(GameState& game, const std::string& xinput) {
     if (input == "") {
         return;
     } else if (input == "exit") {
-#if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            GTP::s_network->manual_destruction();
-        }
-#endif
         exit(EXIT_SUCCESS);
     } else if (input.find("#") == 0) {
         return;
@@ -579,11 +586,6 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         return;
     } else if (command == "quit") {
         gtp_printf(id, "");
-#if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            GTP::s_network->manual_destruction();
-        }
-#endif
         exit(EXIT_SUCCESS);
     } else if (command.find("known_command") == 0) {
         std::istringstream cmdstream(command);

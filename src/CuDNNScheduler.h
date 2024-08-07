@@ -47,11 +47,6 @@ public:
                 std::cerr << msg << std::endl;
                 break;
             case Severity::kERROR:
-                if (!m_check_shutdown) {
-                    std::string check_msg{"Cuda Runtime (driver shutting down)"};
-                    std::string input_msg = msg;
-                    if (input_msg == check_msg) break;
-                }
                 std::cerr << msg << std::endl;
                 break;
             case Severity::kWARNING:
@@ -65,12 +60,6 @@ public:
                 break;
         }
     }
-
-    void set_check_shutdown() {
-        m_check_shutdown = true;
-    }
-
-    bool m_check_shutdown{false};
 };
 }
 #endif
@@ -111,36 +100,36 @@ public:
         unsigned int filter_size, unsigned int channels, unsigned int outputs,
         std::shared_ptr<const ForwardPipeWeights> weights);
 
-    virtual void push_input_convolution(unsigned int filter_size,
-                                        unsigned int channels,
-                                        unsigned int outputs,
-                                        const std::vector<float>& weights,
-                                        const std::vector<float>& means,
-                                        const std::vector<float>& variances);
+    void push_input_convolution(unsigned int filter_size,
+                                unsigned int channels,
+                                unsigned int outputs,
+                                const std::vector<float>& weights,
+                                const std::vector<float>& means,
+                                const std::vector<float>& variances);
 
-    virtual void push_residual(unsigned int filter_size,
-                               unsigned int channels,
-                               unsigned int outputs,
-                               const std::vector<float>& weights_1,
-                               const std::vector<float>& means_1,
-                               const std::vector<float>& variances_1,
-                               const std::vector<float>& weights_2,
-                               const std::vector<float>& means_2,
-                               const std::vector<float>& variances_2);
+    void push_residual(unsigned int filter_size,
+                       unsigned int channels,
+                       unsigned int outputs,
+                       const std::vector<float>& weights_1,
+                       const std::vector<float>& means_1,
+                       const std::vector<float>& variances_1,
+                       const std::vector<float>& weights_2,
+                       const std::vector<float>& means_2,
+                       const std::vector<float>& variances_2);
 
-    virtual void push_residual_se(unsigned int filter_size,
-                               unsigned int channels,
-                               unsigned int outputs,
-                               const std::vector<float>& weights_1,
-                               const std::vector<float>& means_1,
-                               const std::vector<float>& variances_1,
-                               const std::vector<float>& weights_2,
-                               const std::vector<float>& means_2,
-                               const std::vector<float>& variances_2,
-                               const std::vector<float>& fc1_w,
-                               const std::vector<float>& fc1_b,
-                               const std::vector<float>& fc2_w,
-                               const std::vector<float>& fc2_b);
+    void push_residual_se(unsigned int filter_size,
+                       unsigned int channels,
+                       unsigned int outputs,
+                       const std::vector<float>& weights_1,
+                       const std::vector<float>& means_1,
+                       const std::vector<float>& variances_1,
+                       const std::vector<float>& weights_2,
+                       const std::vector<float>& means_2,
+                       const std::vector<float>& variances_2,
+                       const std::vector<float>& fc1_w,
+                       const std::vector<float>& fc1_b,
+                       const std::vector<float>& fc2_w,
+                       const std::vector<float>& fc2_b);
 
     void push_convolve(unsigned int filter_size,
                        unsigned int channels,
@@ -148,10 +137,7 @@ public:
                        const std::vector<float>& weights);
 
 private:
-#if defined(USE_TENSOR_RT)
-    bool m_destructed{false};
-#endif
-    bool m_running = true;
+    bool m_running{true};
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
     std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;

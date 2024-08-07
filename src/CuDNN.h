@@ -423,7 +423,7 @@ public:
         const std::vector<float>& se_fc1_w,
         const std::vector<float>& se_fc1_b,
         const std::vector<float>& se_fc2_w,
-        const std::vector<float>& se_fc2_b, // );
+        const std::vector<float>& se_fc2_b,
         const float scale_1,
         const float scale_2,
         const float scale_3
@@ -468,8 +468,8 @@ public:
         std::vector<std::shared_ptr<CuDNNContext>>* context
     );
 
-    std::vector<std::shared_ptr<nvinfer1::IRuntime>> mRuntime;
-    std::vector<std::shared_ptr<nvinfer1::ICudaEngine>> mEngine;
+    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr};
+    std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr};
 
 protected:
     std::map<std::string, nvinfer1::Weights> mWeightMap;
@@ -584,9 +584,9 @@ public:
     bool has_fp16_compute();
     bool has_tensor_cores();
 
-    int m_batch_size = 1;
-    cudaDeviceProp m_device_prop;
-    std::string m_model_hash;
+    int m_batch_size{1};
+    cudaDeviceProp m_device_prop{0};
+    std::string m_model_hash{""};
 
 private:
     void convolve(
@@ -695,8 +695,8 @@ private:
     );
 #endif
 
-    cudnnHandle_t m_handle;
-    cublasHandle_t m_cublas_handles;
+    cudnnHandle_t m_handle{nullptr};
+    cublasHandle_t m_cublas_handles{nullptr};
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};

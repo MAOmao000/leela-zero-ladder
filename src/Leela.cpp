@@ -193,8 +193,21 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "-m0 -t1 -s1.")
 #ifdef USE_OPENCL
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
-        ("backend", po::value<std::string>()->default_value("opencl"),
+#ifdef USE_TENSOR_RT
+        ("backend", po::value<std::string>()->default_value("tensorrt"),
                       "[opencl|cudnn|cudnngraph|tensorrt] Which backend engine to use.")
+#else
+#ifdef USE_CUDNN_GRAPH
+        ("backend", po::value<std::string>()->default_value("cudnngraph"),
+                      "[opencl|cudnn|cudnngraph] Which backend engine to use.")
+#else
+#ifdef USE_CUDNN
+        ("backend", po::value<std::string>()->default_value("cudnn"),
+                      "[opencl|cudnn] Which backend engine to use.")
+#endif
+#endif
+#endif
+
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
 #endif
@@ -742,11 +755,6 @@ void benchmark(GameState& game) {
     auto search = std::make_unique<UCTSearch>(game, *GTP::s_network);
     game.set_to_move(FastBoard::WHITE);
     search->think(FastBoard::WHITE);
-#if defined(USE_TENSOR_RT)
-    if (cfg_backend == backend_t::TENSORRT) {
-        GTP::s_network->manual_destruction();
-    }
-#endif
 }
 
 int main(int argc, char* argv[]) {

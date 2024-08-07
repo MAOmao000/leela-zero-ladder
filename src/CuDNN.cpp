@@ -55,249 +55,6 @@ namespace fe = cudnn_frontend;
 #define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
 #include "NvInferRuntime.h"
 using namespace nvinfer1;
-
-class SEScalePlugin : public IPluginV3,
-                      public IPluginV3OneCore,
-                      public IPluginV3OneBuild,
-                      public IPluginV3OneRuntime {
-public:
-    SEScalePlugin(SEScalePlugin const& p) = default;
-
-    SEScalePlugin(int netType) : mNetType(netType) {
-        initFieldsToSerialize();
-    }
-
-    void initFieldsToSerialize() {
-        mDataToSerialize.clear();
-        mDataToSerialize.emplace_back(PluginField(
-            "netType", &mNetType, PluginFieldType::kINT32, 1));
-        mFCToSerialize.nbFields = mDataToSerialize.size();
-        mFCToSerialize.fields = mDataToSerialize.data();
-    }
-
-    // IPluginV3 methods
-    IPluginCapability* getCapabilityInterface(
-        PluginCapabilityType type) noexcept override {
-        try {
-            if (type == PluginCapabilityType::kBUILD) {
-                return static_cast<IPluginV3OneBuild*>(this);
-            } else if (type == PluginCapabilityType::kRUNTIME) {
-                return static_cast<IPluginV3OneRuntime*>(this);
-            }
-            ASSERT(type == PluginCapabilityType::kCORE);
-            return static_cast<IPluginV3OneCore*>(this);
-        } catch (std::exception const& e) {
-            std::cerr << e.what() << std::endl;
-        }
-        return nullptr;
-    }
-
-    IPluginV3* clone() noexcept override {
-        auto clone = std::make_unique<SEScalePlugin>(*this);
-        clone->initFieldsToSerialize();
-
-        return clone.release();
-    }
-
-    // IPluginV3OneCore methods
-    char const* getPluginName() const noexcept override {
-        return "SEScalePlugin";
-    }
-
-    char const* getPluginVersion() const noexcept override {
-        return "0";
-    }
-
-    char const* getPluginNamespace() const noexcept override {
-        return "";
-    }
-
-    // IPluginV3OneBuild methods
-    int32_t getNbOutputs() const noexcept override {
-        return 1;
-    }
-
-    int32_t configurePlugin(
-        DynamicPluginTensorDesc const* in,
-        int32_t nbInputs,
-        DynamicPluginTensorDesc const* out,
-        int32_t nbOutputs) noexcept override {
-
-        return 0;
-    }
-
-    bool supportsFormatCombination(
-        int32_t pos,
-        DynamicPluginTensorDesc const* inOut,
-        int32_t nbInputs,
-        int32_t nbOutputs) noexcept override {
-
-        assert(nbInputs == 3 && nbOutputs == 1 && pos < nbInputs + nbOutputs);
-        auto const* in = inOut;
-        auto const* out = inOut + nbInputs;
-        bool typeOk{false};
-        if (mNetType == static_cast<int>(DataType::kFLOAT)) {
-            switch (pos) {
-                case 0: typeOk = in[0].desc.type == DataType::kFLOAT; break;
-                case 1: typeOk = in[1].desc.type == in[0].desc.type; break;
-                case 2: typeOk = in[2].desc.type == in[0].desc.type; break;
-                case 3: typeOk = out[0].desc.type == in[0].desc.type; break;
-            }
-            return inOut[pos].desc.format == PluginFormat::kLINEAR && typeOk;
-        } else {
-            switch (pos) {
-                case 0: typeOk = in[0].desc.type == DataType::kHALF; break;
-                case 1: typeOk = in[1].desc.type == in[0].desc.type; break;
-                case 2: typeOk = in[2].desc.type == in[0].desc.type; break;
-                case 3: typeOk = out[0].desc.type == in[0].desc.type; break;
-            }
-            return inOut[pos].desc.format == PluginFormat::kLINEAR && typeOk;
-        }
-        return false;
-    }
-
-    int32_t getOutputDataTypes(
-        DataType* outputTypes,
-        int32_t nbOutputs,
-        DataType const* inputTypes,
-        int32_t nbInputs) const noexcept override {
-
-        outputTypes[0] = inputTypes[0];
-        return 0;
-    }
-
-    int32_t getOutputShapes(
-        DimsExprs const* inputs,
-        int32_t nbInputs,
-        DimsExprs const* shapeInputs,
-        int32_t nbShapeInputs,
-        DimsExprs* outputs,
-        int32_t nbOutputs,
-        IExprBuilder& exprBuilder) noexcept override {
-        // The input tensor must be 4-D
-        if (inputs[0].nbDims != 4) {
-            return -1;
-        }
-
-        outputs[0].nbDims = 4;
-
-        outputs[0].d[0] = inputs[0].d[0];
-        outputs[0].d[1] = inputs[0].d[1];
-        outputs[0].d[2] = inputs[0].d[2];
-        outputs[0].d[3] = inputs[0].d[3];
-        return 0;
-    }
-
-    int32_t enqueue(
-        PluginTensorDesc const* inputDesc,
-        PluginTensorDesc const* outputDesc,
-        void const* const* inputs,
-        void* const* outputs,
-        void* workspace,
-        cudaStream_t stream) noexcept override {
-        // launch the kernel
-        int const batch_size = inputDesc[0].dims.d[0];
-        int const channels = inputDesc[0].dims.d[1];
-        int const spatial = inputDesc[0].dims.d[2] * inputDesc[0].dims.d[3];
-        if (mNetType == static_cast<int>(DataType::kFLOAT)) {
-            se_scale_float_stream(
-                static_cast<float*>(outputs[0]),      // out: squeeze_excitation output
-                static_cast<float const*>(inputs[0]), // in: residual output
-                static_cast<float const*>(inputs[1]), // in: fc2_weights * B + fc2_biases
-                static_cast<float const*>(inputs[2]), // in: residual input(before convolve)
-                batch_size,
-                channels,
-                spatial,                              // H * W
-                stream
-            );
-        } else {
-            se_scale_half_stream(
-                static_cast<__half*>(outputs[0]),      // out: squeeze_excitation output
-                static_cast<__half const*>(inputs[0]), // in: residual output
-                static_cast<__half const*>(inputs[1]), // in: fc2_weights * B + fc2_biases
-                static_cast<__half const*>(inputs[2]), // in: residual input(before convolve)
-                batch_size,
-                channels,
-                spatial,                               // H * W
-                stream
-            );
-        }
-        return 0;
-    }
-
-    int32_t onShapeChange(
-        PluginTensorDesc const* in,
-        int32_t nbInputs,
-        PluginTensorDesc const* out,
-        int32_t nbOutputs) noexcept override {
-
-        return 0;
-    }
-
-    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override {
-        return clone();
-    }
-
-    PluginFieldCollection const* getFieldsToSerialize() noexcept override {
-        return &mFCToSerialize;
-    }
-
-private:
-    int mNetType{0};
-    std::vector<nvinfer1::PluginField> mDataToSerialize;
-    nvinfer1::PluginFieldCollection mFCToSerialize;
-};
-
-class SEScalePluginCreator : public nvinfer1::IPluginCreatorV3One {
-public:
-    SEScalePluginCreator() {
-        mPluginAttributes.clear();
-        mPluginAttributes.emplace_back(PluginField(
-            "netType", nullptr, PluginFieldType::kINT32, 1));
-        mFC.nbFields = mPluginAttributes.size();
-        mFC.fields = mPluginAttributes.data();
-    }
-
-    char const* getPluginName() const noexcept override {
-        return "SEScalePlugin";
-    }
-
-    char const* getPluginVersion() const noexcept override {
-        return "0";
-    }
-
-    PluginFieldCollection const* getFieldNames() noexcept override {
-        return &mFC;
-    }
-
-    IPluginV3* createPlugin(
-        char const* name,
-        PluginFieldCollection const* fc,
-        TensorRTPhase phase) noexcept override {
-
-        try {
-            int netType{0};
-            for (int32_t i = 0; i < fc->nbFields; ++i) {
-                auto const fieldName(fc->fields[i].name);
-                if (std::strcmp(fieldName, "netType") == 0) {
-                    netType = *static_cast<int const*>(fc->fields[i].data);
-                }
-            }
-            return new SEScalePlugin(netType);
-        } catch (std::exception const& e) {
-            std::cerr << e.what() << std::endl;
-        }
-        return nullptr;
-    }
-
-    char const* getPluginNamespace() const noexcept override {
-        return "";
-    }
-
-private:
-    nvinfer1::PluginFieldCollection mFC;
-    std::vector<nvinfer1::PluginField> mPluginAttributes;
-};
 #endif
 
 template <typename T>
@@ -416,15 +173,19 @@ void CuDNN<net_t>::initialize(const int channels, const int batch_size, const in
     m_net_type = net_type;
     m_batch_size = batch_size;
 
-    cudnnHandle_t cudnn;
-    checkCUDNN(cudnnCreate(&cudnn));
+    if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
+        cudnnHandle_t cudnn;
+        checkCUDNN(cudnnCreate(&cudnn));
+        m_handle = cudnn;
+        if (net_type == int(NetworkType::MINIGO_SE)) {
+            cublasHandle_t cublas;
+            checkCUBLAS(cublasCreate(&cublas));
+            m_cublas_handles = cublas;
+        }
+    } else {
+        m_model_hash = model_hash;
+    }
 
-    cublasHandle_t cublas;
-    checkCUBLAS(cublasCreate(&cublas));
-
-    m_handle = cudnn;
-    m_cublas_handles = cublas;
-    m_model_hash = model_hash;
     m_init_ok = true;
 }
 
@@ -1811,6 +1572,20 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         }
         cudnn_context->mContext->setInputShape("InputFeature",
             nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+
+        if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
+            search = cudnn_context->mBuffers.find("BatchSize");
+            assert(search != cudnn_context->mBuffers.end());
+            auto input_batch = std::vector<int32_t>(batch_size * m_layers[1].channels);
+            checkCUDA(cudaMemcpyAsync(
+                search->second,
+                (int32_t*)&input_batch[0],
+                batch_size * m_layers[1].channels * sizeof(int32_t),
+                cudaMemcpyHostToDevice));
+            cudnn_context->mContext->setInputShape("BatchSize",
+                nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
+        }
+
         // Asynchronously enqueue the inference work
         ASSERT(cudnn_context->mContext->enqueueV3(cudaStreamPerThread));
         search = cudnn_context->mBuffers.find("OutputPolicy");
@@ -1827,6 +1602,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             search->second,
             val_elements * sizeof(net_t),
             cudaMemcpyDeviceToHost));
+
         if (cfg_NCHW) {
             std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
             std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
@@ -2191,9 +1967,6 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
     }
     config->setFlag(nvinfer1::BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
 
-    auto pluginCreator = std::make_unique<SEScalePluginCreator>();
-    getPluginRegistry()->registerCreator(*pluginCreator.get(), "");
-
     auto network = TrtUniquePtr<nvinfer1::INetworkDefinition>(
         builder->createNetworkV2(1U << static_cast<int>(
             nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));
@@ -2413,24 +2186,22 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
         }
     }
 
+    mRuntime.reset(nvinfer1::createInferRuntime(*m_logger));
+    if (!mRuntime) {
+        std::cerr << "createInferRuntime error: " << std::endl;
+        return false;
+    }
+    mEngine.reset(mRuntime->deserializeCudaEngine(plan.data(), plan.size()));
+    if (!mEngine) {
+        std::cerr << "deserializeCudaEngine error: " << std::endl;
+        return false;
+    }
     for (auto i = 0; i < num_worker_threads; i++) {
-        auto runtime = std::shared_ptr<nvinfer1::IRuntime>(
-            nvinfer1::createInferRuntime(*m_logger));
-        if (!runtime) {
-            std::cerr << "createInferRuntime error: " << std::endl;
-            return false;
-        }
-        auto engine = std::shared_ptr<nvinfer1::ICudaEngine>(
-            runtime->deserializeCudaEngine(plan.data(), plan.size()));
-        if (!engine) {
-            std::cerr << "deserializeCudaEngine error: " << std::endl;
-            return false;
-        }
-        (*context)[i]->mContext.reset(engine->createExecutionContext());
-        for (auto j = 0; j < engine->getNbIOTensors(); j++) {
+        (*context)[i]->mContext.reset(mEngine->createExecutionContext());
+        for (auto j = 0; j < mEngine->getNbIOTensors(); j++) {
             void* buffer = nullptr;
-            auto name = engine->getIOTensorName(j);
-            auto dims = engine->getTensorShape(name);
+            auto name = mEngine->getIOTensorName(j);
+            auto dims = mEngine->getTensorShape(name);
             size_t bytes = std::accumulate(dims.d + 1,
                                            dims.d + dims.nbDims,
                                            cfg_batch_size * sizeof(net_t),
@@ -2439,8 +2210,6 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
             (*context)[i]->mBuffers.emplace(std::make_pair(name, buffer));
             (*context)[i]->mContext->setTensorAddress(name, buffer);
         }
-        mRuntime.emplace_back(runtime);
-        mEngine.emplace_back(engine);
         (*context)[i]->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
         cudaStreamSynchronize(cudaStreamPerThread);
         (*context)[i]->m_buffers_allocated = true;
@@ -2449,36 +2218,43 @@ bool CuDNN_Network<net_t>::build(const int num_worker_threads,
 }
 
 template <typename net_t>
-void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-                                            nvinfer1::IOptimizationProfile* profile) {
+void CuDNN_Network<net_t>::constructNetwork(
+    TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+    nvinfer1::IOptimizationProfile* profile) {
+
     nvinfer1::ITensor* inputFeature = nullptr;
     nvinfer1::ILayer* initialConvLayer = nullptr;
     nvinfer1::ITensor* outputConv = nullptr;
     nvinfer1::ILayer* policyConvLayer = nullptr;
     nvinfer1::ILayer* valueConvLayer = nullptr;
+    nvinfer1::IElementWiseLayer* shapeLayer = nullptr;
+    nvinfer1::IShapeLayer* inShapeLayer;
+    nvinfer1::IConstantLayer* base = nullptr;
+    nvinfer1::ICastLayer* castLayer;
+    nvinfer1::ITensor* batch_size = nullptr;
+    std::vector<int32_t> baseValue(1, 1);
+    nvinfer1::Weights baseWeight{nvinfer1::DataType::kINT32, baseValue.data(), 1};
 
-    int netType;
-    if (typeid(net_t) == typeid(float)) {
-         netType = static_cast<int>(DataType::kFLOAT);
-    } else {
-         netType = static_cast<int>(DataType::kHALF);
+    if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
+        batch_size
+            = network->addInput(
+                "BatchSize",
+                nvinfer1::DataType::kINT32,
+                {nvinfer1::Dims{4, {-1, m_layers[1].channels, 1, 1}}});
+        batch_size->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
+
+        // See. https://github.com/NVIDIA/TensorRT/issues/2282
+        nvinfer1::Dims inputDims = batch_size->getDimensions();
+        inShapeLayer = network->addShape(*batch_size);
+        castLayer = network->addCast(*inShapeLayer->getOutput(0), nvinfer1::DataType::kINT32);
+
+        std::vector<int32_t> baseValue(1, 0);
+        base = network->addConstant({nvinfer1::Dims{1, {1}}}, baseWeight);
+        shapeLayer = network->addElementWise(
+            *castLayer->getOutput(0),
+            *base->getOutput(0),
+            nvinfer1::ElementWiseOperation::kPROD);
     }
-    std::vector<nvinfer1::PluginField> const vecPF{
-        {"netType", &netType, nvinfer1::PluginFieldType::kINT32, 1}
-    };
-    nvinfer1::PluginFieldCollection pfc{
-        static_cast<int32_t>(vecPF.size()), vecPF.data()};
-
-    auto pluginCreator = static_cast<IPluginCreatorV3One*>(
-        getPluginRegistry()->getCreator("SEScalePlugin", "0", ""));
-    auto plugin = std::unique_ptr<nvinfer1::IPluginV3>(
-        pluginCreator->createPlugin(
-            "SEScalePlugin",
-            &pfc,
-            nvinfer1::TensorRTPhase::kBUILD
-        )
-    );
-    std::vector<nvinfer1::ITensor*> pluginVec(3);
 
     for (auto iter = std::begin(m_layers);
          iter != std::end(m_layers); iter++) {
@@ -2507,9 +2283,9 @@ void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefin
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && !layer.is_se_block) {
             auto conv1_weights = begin(layer.weights);
-            auto conv1_biases = begin(layer.weights) + 1;
+            auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
-            auto conv2_biases = begin(layer.weights) + 3;
+            auto conv2_biases  = begin(layer.weights) + 3;
             auto firstConvLayer = buildConvLayer(
                 outputConv,
                 layer.filter_size,
@@ -2548,13 +2324,13 @@ void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefin
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && layer.is_se_block) {
             auto conv1_weights = begin(layer.weights);
-            auto conv1_biases = begin(layer.weights) + 1;
+            auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
-            auto conv2_biases = begin(layer.weights) + 3;
-            auto fc1_weights = begin(layer.weights) + 4;
-            auto fc1_biases = begin(layer.weights) + 5;
-            auto fc2_weights = begin(layer.weights) + 6;
-            auto fc2_biases = begin(layer.weights) + 7;
+            auto conv2_biases  = begin(layer.weights) + 3;
+            auto fc1_weights   = begin(layer.weights) + 4;
+            auto fc1_biases    = begin(layer.weights) + 5;
+            auto fc2_weights   = begin(layer.weights) + 6;
+            auto fc2_biases    = begin(layer.weights) + 7;
             auto firstConvLayer = buildConvLayer(
                 outputConv,
                 layer.filter_size,
@@ -2612,16 +2388,54 @@ void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefin
                 layer.channels / 2,
                 layer.outputs * 2);
 
-            pluginVec[0] = secondConvLayer->getOutput(0); // residual output
-            pluginVec[1] = fourthMatMulLayer->getOutput(0); // fc2_weights * B + fc2_biases
-            pluginVec[2] = outputConv; // residual input(before convolve)
-            auto pluginSEScaleLayer = network->addPluginV3(
-                pluginVec.data(), pluginVec.size(), nullptr, 0, *plugin);
-            auto op_name = layer.name + ".plugin";
-            pluginSEScaleLayer->setName(op_name.c_str());
-            auto out_name = layer.name + ".pluginOut";
-            pluginSEScaleLayer->getOutput(0)->setName(out_name.c_str());
-            outputConv = pluginSEScaleLayer->getOutput(0);
+            nvinfer1::ISliceLayer* gammaLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, 0, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            gammaLayer->setInput(2, *shapeLayer->getOutput(0));
+            gammaLayer->setName((layer.name + ".gamma").c_str());
+
+            nvinfer1::ISliceLayer* biasLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, layer.channels, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            biasLayer->setInput(2, *shapeLayer->getOutput(0));
+            biasLayer->setName((layer.name + ".bias").c_str());
+
+            auto sigLayer = buildActivationLayer(
+                gammaLayer->getOutput(0),
+                network,
+                layer.name + ".activation.sig",
+                nvinfer1::ActivationType::kSIGMOID);
+            sigLayer->setName((layer.name + ".sig").c_str());
+
+            auto scaleLayer = network->addElementWise(
+                *sigLayer->getOutput(0),
+                *secondConvLayer->getOutput(0),
+                nvinfer1::ElementWiseOperation::kPROD
+            );
+            scaleLayer->setName((layer.name + ".scale").c_str());
+            auto excitationLayer = network->addElementWise(
+                *scaleLayer->getOutput(0),
+                *biasLayer->getOutput(0),
+                nvinfer1::ElementWiseOperation::kSUM
+            );
+            excitationLayer->setName((layer.name + ".excitation").c_str());
+            auto mergeLayer = network->addElementWise(
+                *outputConv,
+                *excitationLayer->getOutput(0),
+                nvinfer1::ElementWiseOperation::kSUM);
+            mergeLayer->setName((layer.name + ".merge").c_str());
+            auto outputConvLayer = buildActivationLayer(
+                mergeLayer->getOutput(0),
+                network,
+                layer.name + ".activation.final",
+                nvinfer1::ActivationType::kRELU);
+            outputConv = outputConvLayer->getOutput(0);
         } else {
             const auto niter = std::next(iter);
             if (niter == std::end(m_layers)) {
@@ -2670,6 +2484,21 @@ void CuDNN_Network<net_t>::constructNetwork(TrtUniquePtr<nvinfer1::INetworkDefin
         outputValue->setType(nvinfer1::DataType::kHALF);
     }
     outputValue->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
+
+    if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kMIN,
+                               nvinfer1::Dims({4,
+                                   {1, m_layers[1].channels, 1, 1}}));
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kOPT,
+                               nvinfer1::Dims({4,
+                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kMAX,
+                               nvinfer1::Dims({4,
+                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
+    }
     std::cout << "Done constructing network..." << std::endl;
 }
 
@@ -2827,8 +2656,11 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::applyGPoolLayer(
     TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
     std::string op_name) {
 
-    nvinfer1::ILayer* gpoolMeanLayer
-        = network->addReduce(*input, nvinfer1::ReduceOperation::kAVG, 1U << 2 | 1U << 3, true);
+    nvinfer1::IPoolingLayer* gpoolMeanLayer
+        = network->addPoolingNd(
+            *input,
+            nvinfer1::PoolingType::kAVERAGE,
+            nvinfer1::DimsHW{BOARD_SIZE, BOARD_SIZE});
     auto gpoolMeanLayerName = op_name + "/gpmean";
     gpoolMeanLayer->setName(gpoolMeanLayerName.c_str());
     return gpoolMeanLayer;

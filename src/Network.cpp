@@ -549,7 +549,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 #if defined(USE_TENSOR_RT)
     pipe->initialize(channels, int(m_net_type), m_model_hash);
 #else
-    pipe->initialize(channels, int(m_net_type));
+    pipe->initialize(channels, int(m_net_type), "");
 #endif
     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 
@@ -573,17 +573,21 @@ void Network::select_precision(const int channels) {
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
         myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
+#ifdef USE_TENSOR_RT
         if (cfg_backend == backend_t::TENSORRT) {
             m_forward =
                 init_net(channels, std::make_unique<CuDNNScheduler<float>>());
             myprintf("Using %s single precision.\n", backend.c_str());
             return;
         }
+#endif
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
         } else {
             fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
+#endif
         }
         if (cfg_backend != backend_t::TENSORRT && !fp16_net->needs_autodetect()) {
             try {
@@ -598,9 +602,11 @@ void Network::select_precision(const int channels) {
                 if (cfg_backend == backend_t::OPENCL) {
                     m_forward = init_net(
                         channels, std::make_unique<OpenCLScheduler<float>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
                 } else {
                     m_forward = init_net(
                         channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
                 }
             }
             return;
@@ -612,9 +618,11 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
             }
             score_fp32 = benchmark_time(100);
         } catch (...) {
@@ -639,9 +647,11 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
             }
         } else if (score_fp32 < 0.0f) {
             myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
@@ -651,9 +661,11 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
             }
         } else {
             myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
@@ -664,18 +676,22 @@ void Network::select_precision(const int channels) {
         if (cfg_backend == backend_t::OPENCL) {
             m_forward =
                 init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
         } else {
             m_forward =
                 init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+#endif
         }
     } else if (cfg_precision == precision_t::HALF) {
         myprintf("Initializing %s (half precision).\n", backend.c_str());
         if (cfg_backend == backend_t::OPENCL) {
             m_forward = init_net(
                 channels, std::make_unique<OpenCLScheduler<half_float::half>>());
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
         } else {
             m_forward = init_net(
                 channels, std::make_unique<CuDNNScheduler<half_float::half>>());
+#endif
         }
     }
 }
