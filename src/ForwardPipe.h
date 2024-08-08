@@ -33,6 +33,10 @@
 #include "config.h"
 #ifdef USE_OPENCL
 #include "OpenCL.h"
+#else
+#ifdef USE_BLAS
+# include <string>
+#endif
 #endif
 
 #include <memory>
