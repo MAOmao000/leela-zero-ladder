@@ -2227,13 +2227,10 @@ void CuDNN_Network<net_t>::constructNetwork(
     nvinfer1::ITensor* outputConv = nullptr;
     nvinfer1::ILayer* policyConvLayer = nullptr;
     nvinfer1::ILayer* valueConvLayer = nullptr;
-    nvinfer1::IElementWiseLayer* shapeLayer = nullptr;
+    nvinfer1::ILayer* shapeLayer = nullptr;
     nvinfer1::IShapeLayer* inShapeLayer;
-    nvinfer1::IConstantLayer* base = nullptr;
     nvinfer1::ICastLayer* castLayer;
     nvinfer1::ITensor* batch_size = nullptr;
-    std::vector<int32_t> baseValue(1, 1);
-    nvinfer1::Weights baseWeight{nvinfer1::DataType::kINT32, baseValue.data(), 1};
 
     if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
         batch_size
@@ -2242,18 +2239,26 @@ void CuDNN_Network<net_t>::constructNetwork(
                 nvinfer1::DataType::kINT32,
                 {nvinfer1::Dims{4, {-1, m_layers[1].channels, 1, 1}}});
         batch_size->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kMIN,
+                               nvinfer1::Dims({4,
+                                   {1, m_layers[1].channels, 1, 1}}));
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kOPT,
+                               nvinfer1::Dims({4,
+                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
+        profile->setDimensions("BatchSize",
+                               nvinfer1::OptProfileSelector::kMAX,
+                               nvinfer1::Dims({4,
+                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
-        nvinfer1::Dims inputDims = batch_size->getDimensions();
         inShapeLayer = network->addShape(*batch_size);
         castLayer = network->addCast(*inShapeLayer->getOutput(0), nvinfer1::DataType::kINT32);
 
-        std::vector<int32_t> baseValue(1, 0);
-        base = network->addConstant({nvinfer1::Dims{1, {1}}}, baseWeight);
-        shapeLayer = network->addElementWise(
+        shapeLayer = network->addUnary(
             *castLayer->getOutput(0),
-            *base->getOutput(0),
-            nvinfer1::ElementWiseOperation::kPROD);
+            nvinfer1::UnaryOperation::kABS);
     }
 
     for (auto iter = std::begin(m_layers);
@@ -2484,21 +2489,6 @@ void CuDNN_Network<net_t>::constructNetwork(
         outputValue->setType(nvinfer1::DataType::kHALF);
     }
     outputValue->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
-
-    if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE)) {
-        profile->setDimensions("BatchSize",
-                               nvinfer1::OptProfileSelector::kMIN,
-                               nvinfer1::Dims({4,
-                                   {1, m_layers[1].channels, 1, 1}}));
-        profile->setDimensions("BatchSize",
-                               nvinfer1::OptProfileSelector::kOPT,
-                               nvinfer1::Dims({4,
-                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
-        profile->setDimensions("BatchSize",
-                               nvinfer1::OptProfileSelector::kMAX,
-                               nvinfer1::Dims({4,
-                                   {(unsigned int)cfg_batch_size, m_layers[1].channels, 1, 1}}));
-    }
     std::cout << "Done constructing network..." << std::endl;
 }
 

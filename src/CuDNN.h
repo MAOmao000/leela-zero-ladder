@@ -585,7 +585,7 @@ public:
     bool has_tensor_cores();
 
     int m_batch_size{1};
-    cudaDeviceProp m_device_prop{0};
+    cudaDeviceProp m_device_prop;
     std::string m_model_hash{""};
 
 private:
