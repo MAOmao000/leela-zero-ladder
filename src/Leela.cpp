@@ -210,6 +210,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
+        ("engine", po::value<std::string>()->default_value("single"),
+                      "[single|pair|multi] Number of engine units to start.")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -464,80 +466,89 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_TENSOR_RT
         if ("tensorrt" == backend) {
             cfg_backend = backend_t::TENSORRT;
-            cfg_NCHW = true;
-            if (vm.count("cache-plan")) {
-                cfg_cache_plan = true;
-            }
-            calculate_thread_count_gpu(vm);
-            myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
 #if defined(USE_CUDNN_GRAPH)
         } else if ("cudnngraph" == backend) {
             cfg_backend = backend_t::CUDNNGRAPH;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
 #endif
 #if defined(USE_CUDNN)
         } else if ("cudnn" == backend) {
             cfg_backend = backend_t::CUDNN;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
 #endif
         } else if ("opencl" == backend) {
             cfg_backend = backend_t::OPENCL;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #else // USE_TENSOR_RT
 #if defined(USE_CUDNN_GRAPH)
         if ("cudnngraph" == backend) {
             cfg_backend = backend_t::CUDNNGRAPH;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
 #if defined(USE_CUDNN)
         } else if ("cudnn" == backend) {
             cfg_backend = backend_t::CUDNN;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
 #endif
         } else if ("opencl" == backend) {
             cfg_backend = backend_t::OPENCL;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #else // USE_CUDNN_GRAPH
 #if defined(USE_CUDNN)
         if ("cudnn" == backend) {
             cfg_backend = backend_t::CUDNN;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
         } else if ("opencl" == backend) {
             cfg_backend = backend_t::OPENCL;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #else
         if ("opencl" == backend) {
             cfg_backend = backend_t::OPENCL;
-            calculate_thread_count_gpu(vm);
-            myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #endif // USE_CUDNN
 #endif // USE_CUDNN_GRAPH
 #endif // USE_TENSOR_RT
         } else {
-            printf("Unexpected option for --backend,\n");
+            printf("Unexpected option for --backend.\n");
             exit(EXIT_FAILURE);
         }
     } else {
         cfg_backend = backend_t::OPENCL;
-        calculate_thread_count_gpu(vm);
-        myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
     }
-    if (cfg_backend == backend_t::CUDNN) {
+    if (cfg_backend == backend_t::TENSORRT) {
+        if (vm.count("channel-first")) {
+            printf("'--channel-first' option is only available for the cudnn backend.\n");
+            exit(EXIT_FAILURE);
+        }
+        cfg_NCHW = true;
+        if (vm.count("cache-plan")) {
+            cfg_cache_plan = true;
+        }
+        if (vm.count("engine")) {
+            auto engine = vm["engine"].as<std::string>();
+            if ("single" == engine) {
+                cfg_engine_units = 1;
+            } else if ("pair" == engine) {
+                cfg_engine_units = 2;
+            } else if ("multi" == engine) {
+                cfg_engine_units = 3;
+            } else {
+                printf("Unexpected option for --engine, expecting single/pair/multi\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        calculate_thread_count_gpu(vm);
+        myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
+    } else if (cfg_backend == backend_t::CUDNNGRAPH) {
+        if (vm.count("channel-first")) {
+            printf("'--channel-first' option is only available for the cudnn backend.\n");
+            exit(EXIT_FAILURE);
+        }
+        calculate_thread_count_gpu(vm);
+        myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
+    } else if (cfg_backend == backend_t::CUDNN) {
         if (vm.count("channel-first")) {
             cfg_NCHW = true;
         }
+        calculate_thread_count_gpu(vm);
+        myprintf("Using CuDNN batch size of %d\n", cfg_batch_size);
     } else {
         if (vm.count("channel-first")) {
             printf("'--channel-first' option is only available for the cudnn backend.\n");
             exit(EXIT_FAILURE);
         }
+        calculate_thread_count_gpu(vm);
+        myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
 #endif // USE_OPENCL
     }
     myprintf("Using %d thread(s).\n", cfg_num_threads);

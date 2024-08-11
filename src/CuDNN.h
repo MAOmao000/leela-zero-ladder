@@ -82,9 +82,8 @@ template <typename net_t> class CuDNN_Network;
     {                                                             \
         cudnn_frontend::error_t err = (expression);               \
         if (err.is_bad()) {                                       \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                <<  __LINE__ << "): "                             \
-                << err.get_message() << std::endl;                \
+            myprintf_error("Error on %s(%d): %s\n",               \
+                __FILE__, __LINE__, err.get_message());           \
             throw std::runtime_error("cuDNN FrontEnd error");     \
         }                                                         \
     }
@@ -94,8 +93,8 @@ template <typename net_t> class CuDNN_Network;
 #define ASSERT(condition)                                         \
     do {                                                          \
         if (!(condition)) {                                       \
-            std::cerr << "Assertion failure " << __FILE__ << "("  \
-                << __LINE__ << "): " << #condition << std::endl;  \
+            myprintf_error("Assertion failure %s(%d): %s\n",      \
+                __FILE__, __LINE__, #condition);                  \
             throw std::runtime_error("TensorRT error");           \
         }                                                         \
     } while (0)
@@ -105,9 +104,8 @@ template <typename net_t> class CuDNN_Network;
     {                                                             \
         cudnnStatus_t status = (expression);                      \
         if (status != CUDNN_STATUS_SUCCESS) {                     \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                << __LINE__ << "): "                              \
-                << cudnnGetErrorString(status) << std::endl;      \
+            myprintf_error("Error on %s(%d): %s\n",               \
+                __FILE__, __LINE__, cudnnGetErrorString(status)); \
             throw std::runtime_error("cuDNN error");              \
         }                                                         \
     }
@@ -115,21 +113,19 @@ template <typename net_t> class CuDNN_Network;
 #define checkCUDA(error)                                          \
     {                                                             \
         if (error != cudaSuccess) {                               \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                << __LINE__ << "): "                              \
-                << cudaGetErrorString(error) << std::endl;        \
+            myprintf_error("Error on %s(%d): %s\n",               \
+                __FILE__, __LINE__, cudaGetErrorString(error));   \
             throw std::runtime_error("CUDA error");               \
         }                                                         \
     }
 
-#define checkCUBLAS(status)                                       \
-    {                                                             \
-        if (status != CUBLAS_STATUS_SUCCESS) {                    \
-            std::cerr << "Error on " << __FILE__ << "("           \
-                << __LINE__ << "): "                              \
-                << cublasGetStatusString(status) << std::endl;    \
-            throw std::runtime_error("cuBlas error");             \
-        }                                                         \
+#define checkCUBLAS(status)                                         \
+    {                                                               \
+        if (status != CUBLAS_STATUS_SUCCESS) {                      \
+            myprintf_error("Error on %s(%d): %s\n",                 \
+                __FILE__, __LINE__, cublasGetStatusString(status)); \
+            throw std::runtime_error("cuBlas error");               \
+        }                                                           \
     }
 
 void global_average_pooling_float(
@@ -364,7 +360,6 @@ private:
     void *m_IdentityOutBuffer{nullptr};
     void *m_PoolBuffer{nullptr};
     void *m_TempBuffer{nullptr};
-    bool m_is_initialized{false};
     bool m_buffers_allocated{false};
 #if defined(USE_TENSOR_RT)
     std::shared_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
@@ -434,8 +429,7 @@ public:
         const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const int num_worker_threads,
-        std::vector<std::shared_ptr<CuDNNContext>>* context
+        const int num_worker_threads //,
     );
 
     size_t get_layer_count() const {
@@ -446,7 +440,7 @@ public:
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
-        std::shared_ptr<CuDNNContext> cudnn_context,
+        const int tid,
         const int batch_size = 1
     );
 
@@ -460,16 +454,17 @@ public:
 
     CuDNN<net_t>& m_cudnn;
     std::vector<CuDNN_Layer> m_layers;
+    std::vector<std::shared_ptr<CuDNNContext>> m_context;
 
 #if defined(USE_TENSOR_RT)
     // Builds the network engine
     bool build(
         const int num_worker_threads,
-        std::vector<std::shared_ptr<CuDNNContext>>* context
+        const int batch_size //,
     );
 
-    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr};
-    std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr};
+    std::vector<std::shared_ptr<nvinfer1::IRuntime>> mRuntime;
+    std::vector<std::shared_ptr<nvinfer1::ICudaEngine>> mEngine;
 
 protected:
     std::map<std::string, nvinfer1::Weights> mWeightMap;
@@ -501,13 +496,15 @@ private:
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        nvinfer1::IOptimizationProfile* profile
+        nvinfer1::IOptimizationProfile* profile,
+        const int batch_size
     );
 
     nvinfer1::ITensor* initInputs(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         const CuDNN_Layer layer,
-        nvinfer1::IOptimizationProfile* profile
+        nvinfer1::IOptimizationProfile* profile,
+        const int batch_size
     );
 
     nvinfer1::ILayer* buildConvLayer(

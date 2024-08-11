@@ -141,7 +141,8 @@ private:
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
     std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;
-    std::vector<std::vector<std::shared_ptr<CuDNNContext>>> m_context;
+//    std::vector<std::vector<std::shared_ptr<CuDNNContext>>> m_context;
+//    std::vector<std::shared_ptr<CuDNNContext>> m_context;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;
@@ -161,6 +162,7 @@ private:
     virtual void resume();
 
     int m_net_type{0};
+    std::exception_ptr m_ep;
 #if defined(USE_TENSOR_RT)
     std::shared_ptr<trtLog::Logger> m_trt_logger;
 #endif

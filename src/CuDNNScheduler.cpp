@@ -72,45 +72,49 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             }
         }
     }
-    for (size_t i = 0; i < m_context.size(); i++) {
-        for (size_t k = 0; k < m_context[i].size(); k++) {
+    for (const auto& cudnn_net : m_networks) {
+        for (const auto& context : cudnn_net->m_context) {
             if (cfg_backend == backend_t::TENSORRT) {
-                if (m_context[i][k]->m_buffers_allocated) {
-                    for (auto ptr: m_context[i][k]->mBuffers) {
+                if (context->m_buffers_allocated) {
+                    for (auto ptr: context->mBuffers) {
                         cudaFreeAsync(ptr.second, cudaStreamDefault);
                     }
                 }
-            } else if (m_context[i][k]->m_buffers_allocated) {
-                if (m_context[i][k]->m_workspace)
-                    cudaFreeAsync(m_context[i][k]->m_workspace, cudaStreamDefault);
-                if (m_context[i][k]->m_InBuffer)
-                    cudaFreeAsync(m_context[i][k]->m_InBuffer, cudaStreamDefault);
-                if (m_context[i][k]->m_OutBuffer)
-                    cudaFreeAsync(m_context[i][k]->m_OutBuffer, cudaStreamDefault);
-                if (m_context[i][k]->m_IdentityOutBuffer)
-                    cudaFreeAsync(m_context[i][k]->m_IdentityOutBuffer, cudaStreamDefault);
-                if (m_context[i][k]->m_PoolBuffer)
-                    cudaFreeAsync(m_context[i][k]->m_PoolBuffer, cudaStreamDefault);
-                if (m_context[i][k]->m_TempBuffer)
-                    cudaFreeAsync(m_context[i][k]->m_TempBuffer, cudaStreamDefault);
+            } else if (context->m_buffers_allocated) {
+                if (context->m_workspace)
+                    cudaFreeAsync(context->m_workspace, cudaStreamDefault);
+                if (context->m_InBuffer)
+                    cudaFreeAsync(context->m_InBuffer, cudaStreamDefault);
+                if (context->m_OutBuffer)
+                    cudaFreeAsync(context->m_OutBuffer, cudaStreamDefault);
+                if (context->m_IdentityOutBuffer)
+                    cudaFreeAsync(context->m_IdentityOutBuffer, cudaStreamDefault);
+                if (context->m_PoolBuffer)
+                    cudaFreeAsync(context->m_PoolBuffer, cudaStreamDefault);
+                if (context->m_TempBuffer)
+                    cudaFreeAsync(context->m_TempBuffer, cudaStreamDefault);
             }
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
     if (cfg_backend == backend_t::TENSORRT) {
-        for (size_t i = 0; i < m_context.size(); i++) {
-            for (size_t k = 0; k < m_context[i].size(); k++) {
-                if (m_context[i][k]->m_buffers_allocated) {
-                    m_context[i][k]->mContext.reset();
+        for (const auto& cudnn_net : m_networks) {
+            for (const auto& context : cudnn_net->m_context) {
+                if (context->m_buffers_allocated) {
+                    context->mContext.reset();
                 }
             }
         }
-        for (const auto& cudnn_net : m_networks) {
-            if (cudnn_net->mEngine) {
-                cudnn_net->mEngine.reset();
+        for (auto& cudnn_net : m_networks) {
+            for (auto& engine : cudnn_net->mEngine) {
+                if (engine) {
+                    engine.reset();
+                }
             }
-            if (cudnn_net->mRuntime) {
-                cudnn_net->mRuntime.reset();
+            for (auto& runtime : cudnn_net->mRuntime) {
+                if (runtime) {
+                    runtime.reset();
+                }
             }
         }
     }
@@ -147,8 +151,8 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
 #else
         auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
 #endif
-        m_cudnn.push_back(std::move(cudnn));
-        m_networks.push_back(std::move(net));
+        m_cudnn.emplace_back(std::move(cudnn));
+        m_networks.emplace_back(std::move(net));
 
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
@@ -172,22 +176,21 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
             cudnn->initialize(channels, cfg_batch_size, net_type, "");
         }
 
-        std::vector<std::shared_ptr<CuDNNContext>> tmp_context;
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
-            auto cudnn_context_0 = std::make_shared<CuDNNContext>();
-            tmp_context.push_back(cudnn_context_0);
-            if (cfg_backend != backend_t::TENSORRT) {
-                auto cudnn_context_1 = std::make_shared<CuDNNContext>();
-                tmp_context.push_back(cudnn_context_1);
-            }
             auto t =
                 std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum, i);
-            m_worker_threads.push_back(std::move(t));
+            m_worker_threads.emplace_back(std::move(t));
         }
-        m_context.push_back(tmp_context);
         gnum++;
     }
-
+    if (cfg_backend != backend_t::TENSORRT) {
+        for (auto& network : m_networks) {
+            for (auto i = unsigned{0}; i < num_worker_threads; i++) {
+                std::shared_ptr<CuDNNContext> context = std::make_shared<CuDNNContext>();
+                network->m_context.emplace_back(context);
+            }
+        }
+    }
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
     if (cfg_tune_only) {
@@ -275,18 +278,18 @@ void CuDNNScheduler<net_t>::push_residual(unsigned int filter_size,
 
 template <typename net_t>
 void CuDNNScheduler<net_t>::push_residual_se(unsigned int filter_size,
-                                          unsigned int channels,
-                                          unsigned int outputs,
-                                          const std::vector<float>& weights_1,
-                                          const std::vector<float>& means_1,
-                                          const std::vector<float>& variances_1,
-                                          const std::vector<float>& weights_2,
-                                          const std::vector<float>& means_2,
-                                          const std::vector<float>& variances_2,
-                                          const std::vector<float>& fc1_w,
-                                          const std::vector<float>& fc1_b,
-                                          const std::vector<float>& fc2_w,
-                                          const std::vector<float>& fc2_b) {
+                                             unsigned int channels,
+                                             unsigned int outputs,
+                                             const std::vector<float>& weights_1,
+                                             const std::vector<float>& means_1,
+                                             const std::vector<float>& variances_1,
+                                             const std::vector<float>& weights_2,
+                                             const std::vector<float>& means_2,
+                                             const std::vector<float>& variances_2,
+                                             const std::vector<float>& fc1_w,
+                                             const std::vector<float>& fc1_b,
+                                             const std::vector<float>& fc2_w,
+                                             const std::vector<float>& fc2_b) {
 
     for (const auto& cudnn_net : m_networks) {
         std::vector<float> weights_1_conv = std::vector<float>(weights_1);
@@ -315,7 +318,10 @@ void CuDNNScheduler<net_t>::push_residual_se(unsigned int filter_size,
         float scale_2 = 1.0f;
         /* Residual add alpha */
         float scale_3 = 1.0f;
-        cudnn_net->push_residual_se(filter_size, channels, outputs,
+        cudnn_net->push_residual_se(
+            filter_size,
+            channels,
+            outputs,
             weights_1_conv,
             means_1_conv,
             weights_2_conv,
@@ -340,10 +346,9 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
         cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
     for (auto i = size_t{0}; i < m_networks.size(); i++) {
         if (cfg_backend == backend_t::TENSORRT) {
-            m_networks[i]->push_convolve(filter_size, channels, outputs, weights,
-                                         num_worker_threads, &m_context[i]);
+            m_networks[i]->push_convolve(filter_size, channels, outputs, weights, num_worker_threads);
         } else {
-            m_networks[i]->push_convolve(filter_size, channels, outputs, weights, 0, nullptr);
+            m_networks[i]->push_convolve(filter_size, channels, outputs, weights, 0);
         }
     }
 }
@@ -411,7 +416,7 @@ void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
     std::unique_lock<std::mutex> lk(entry->mutex);
     {
         std::unique_lock<std::mutex> lk(m_mutex);
-        m_forward_queue.push_back(entry);
+        m_forward_queue.emplace_back(entry);
 
         if (m_single_eval_in_progress.load()) {
             m_waittime += 2;
@@ -420,6 +425,9 @@ void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
     m_cv.notify_one();
     entry->cv.wait(lk);
 
+    if (m_ep) {
+        throw NetworkHaltException();
+    }
     if (m_draining) {
         throw NetworkHaltException();
     }
@@ -533,32 +541,32 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
         }
 
         // run the NN evaluation
-        if (cfg_backend == backend_t::TENSORRT) {
-            m_networks[gnum]->forward(
-                batch_input,
-                batch_output_pol,
-                batch_output_val,
-                m_context[gnum][tid],
-                (const int)count
-            );
-        } else {
-            if (count == 1) {
+        try {
+            if (count == 1 ||
+                cfg_backend != backend_t::TENSORRT ||
+                cfg_engine_units == 1) {
+
                 m_networks[gnum]->forward(
                     batch_input,
                     batch_output_pol,
                     batch_output_val,
-                    m_context[gnum][tid * 2],
+                    tid,
                     (const int)count
                 );
             } else {
+                auto num_worker_threads =
+                    cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
                 m_networks[gnum]->forward(
                     batch_input,
                     batch_output_pol,
                     batch_output_val,
-                    m_context[gnum][tid * 2 + 1],
+                    tid + num_worker_threads,
                     (const int)count
                 );
             }
+        } catch(...) {
+            m_ep = std::current_exception();
+            m_running = false;
         }
         // Get output and copy back
         index = 0;
