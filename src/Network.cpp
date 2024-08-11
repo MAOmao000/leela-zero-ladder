@@ -1038,16 +1038,21 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     const auto input_data = gather_features(state, symmetry);
     std::vector<float> policy_data(OUTPUTS_POLICY * width * height);
     std::vector<float> value_data(OUTPUTS_VALUE * width * height);
+    try {
 #ifdef USE_OPENCL_SELFCHECK
-    if (selfcheck) {
-        m_forward_cpu->forward(input_data, policy_data, value_data);
-    } else {
-        m_forward->forward(input_data, policy_data, value_data);
-    }
+        if (selfcheck) {
+            m_forward_cpu->forward(input_data, policy_data, value_data);
+        } else {
+            m_forward->forward(input_data, policy_data, value_data);
+        }
 #else
-    m_forward->forward(input_data, policy_data, value_data);
-    (void)selfcheck;
+        m_forward->forward(input_data, policy_data, value_data);
+        (void)selfcheck;
 #endif
+
+    } catch(...) {
+        throw;
+    }
 
     // Get the moves
     batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY, policy_data,
