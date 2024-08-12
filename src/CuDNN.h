@@ -83,7 +83,7 @@ template <typename net_t> class CuDNN_Network;
         cudnn_frontend::error_t err = (expression);               \
         if (err.is_bad()) {                                       \
             myprintf_error("Error on %s(%d): %s\n",               \
-                __FILE__, __LINE__, err.get_message());           \
+                __FILE__, __LINE__, err.get_message().c_str());   \
             throw std::runtime_error("cuDNN FrontEnd error");     \
         }                                                         \
     }

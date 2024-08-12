@@ -52,11 +52,6 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
     for (auto& x : m_worker_threads) {
         x.join();
     }
-#ifndef _WIN32
-    if (cfg_backend == backend_t::TENSORRT) {
-        exit(0);
-    }
-#endif
     for (const auto& cudnn_net : m_networks) {
         for (auto iter = std::begin(cudnn_net->m_layers); iter != std::end(cudnn_net->m_layers); iter++) {
             const auto& layer = *iter;
@@ -97,6 +92,11 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
+#ifndef _WIN32
+    if (cfg_backend == backend_t::TENSORRT) {
+        exit(0);
+    }
+#endif
     if (cfg_backend == backend_t::TENSORRT) {
         for (const auto& cudnn_net : m_networks) {
             for (const auto& context : cudnn_net->m_context) {
