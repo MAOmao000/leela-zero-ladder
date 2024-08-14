@@ -102,6 +102,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             for (const auto& context : cudnn_net->m_context) {
                 if (context->m_buffers_allocated) {
                     context->mContext.reset();
+                    if (cfg_engine_units == 2) {
+                        context->mContext_n.reset();
+                    }
                 }
             }
         }
@@ -542,28 +545,15 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
 
         // run the NN evaluation
         try {
-            if (count == 1 ||
-                cfg_backend != backend_t::TENSORRT ||
-                cfg_engine_units == 1) {
-
-                m_networks[gnum]->forward(
-                    batch_input,
-                    batch_output_pol,
-                    batch_output_val,
-                    tid,
-                    (const int)count
-                );
-            } else {
-                auto num_worker_threads =
-                    cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
-                m_networks[gnum]->forward(
-                    batch_input,
-                    batch_output_pol,
-                    batch_output_val,
-                    tid + num_worker_threads,
-                    (const int)count
-                );
-            }
+            auto num_worker_threads =
+                cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
+            m_networks[gnum]->forward(
+                batch_input,
+                batch_output_pol,
+                batch_output_val,
+                tid,
+                (const int)count
+            );
         } catch(...) {
             m_ep = std::current_exception();
             m_running = false;

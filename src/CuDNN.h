@@ -363,6 +363,7 @@ private:
     bool m_buffers_allocated{false};
 #if defined(USE_TENSOR_RT)
     std::shared_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
+    std::shared_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
     std::map<std::string, void*> mBuffers;
 #endif
 };
@@ -497,6 +498,7 @@ private:
     void constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         nvinfer1::IOptimizationProfile* profile,
+        nvinfer1::IOptimizationProfile* profile_n,
         const int batch_size
     );
 
@@ -504,6 +506,7 @@ private:
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         const CuDNN_Layer layer,
         nvinfer1::IOptimizationProfile* profile,
+        nvinfer1::IOptimizationProfile* profile_n,
         const int batch_size
     );
 
