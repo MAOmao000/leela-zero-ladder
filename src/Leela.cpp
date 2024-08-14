@@ -211,7 +211,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
         ("engine", po::value<std::string>()->default_value("single"),
-                      "[single|pair|multi] Number of engine units to start.")
+                      "[single|pair] Number of engine units to start.")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -520,10 +520,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 cfg_engine_units = 1;
             } else if ("pair" == engine) {
                 cfg_engine_units = 2;
-            } else if ("multi" == engine) {
-                cfg_engine_units = 3;
             } else {
-                printf("Unexpected option for --engine, expecting single/pair/multi\n");
+                printf("Unexpected option for --engine, expecting single/pair\n");
                 exit(EXIT_FAILURE);
             }
         }
