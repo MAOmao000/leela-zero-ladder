@@ -545,8 +545,6 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
 
         // run the NN evaluation
         try {
-            auto num_worker_threads =
-                cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
             m_networks[gnum]->forward(
                 batch_input,
                 batch_output_pol,
