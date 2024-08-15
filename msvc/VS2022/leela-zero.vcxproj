@@ -82,6 +82,9 @@
     <ClCompile Include="..\..\src\SearchBoard.cpp" />
     <ClCompile Include="..\..\src\SGFParser.cpp" />
     <ClCompile Include="..\..\src\SGFTree.cpp" />
+    <ClCompile Include="..\..\src\sha2.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\SMP.cpp" />
     <ClCompile Include="..\..\src\TimeControl.cpp" />
     <ClCompile Include="..\..\src\Timing.cpp" />
@@ -176,7 +179,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>leelaz_cudnnfe</TargetName>
+    <TargetName>leelaz_trt</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
     <IncludePath>..\..\src\Eigen;$(IncludePath)</IncludePath>
   </PropertyGroup>
@@ -234,25 +237,34 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_CUDNN;USE_CUDNN_GRAPH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\;C:\lib\nvidia\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\cudnn-frontend-1.5.2\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_CUDNN;USE_CUDNN_GRAPH;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\nvidia\include;C:\lib\cudnn-frontend-1.5.2\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\TensorRT-10.0.0.6\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DisableSpecificWarnings>4244;4267;4819</DisableSpecificWarnings>
+      <DebugInformationFormat>None</DebugInformationFormat>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\lib\nvidia\lib\x64;C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libopenblas.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\lib\nvidia\lib\x64;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\TensorRT-10.0.0.6\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libopenblas.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ForceSymbolReferences>
+      </ForceSymbolReferences>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <CudaCompile>
       <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>
       <CodeGeneration>compute_52,sm_52;%(CodeGeneration)</CodeGeneration>
       <FastMath>true</FastMath>
       <Optimization>InheritFromHost</Optimization>
+      <Runtime>MT</Runtime>
+      <CudaRuntime>Shared</CudaRuntime>
     </CudaCompile>
     <CudaLink>
       <GPUDebugInfo>false</GPUDebugInfo>
