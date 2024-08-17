@@ -59,7 +59,7 @@
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
 #include "UCTNode.h"
-#ifdef USE_CUDNN
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
 #include "CuDNNScheduler.h"
 #endif
 #endif

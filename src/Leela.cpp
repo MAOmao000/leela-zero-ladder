@@ -194,24 +194,44 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_OPENCL
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #ifdef USE_TENSOR_RT
+#if defined(USE_CUDNN_GRAPH) && defined(USE_CUDNN)
         ("backend", po::value<std::string>()->default_value("tensorrt"),
                       "[opencl|cudnn|cudnngraph|tensorrt] Which backend engine to use.")
 #else
-#ifdef USE_CUDNN_GRAPH
-        ("backend", po::value<std::string>()->default_value("cudnngraph"),
+#if defined(USE_CUDNN_GRAPH)
+        ("backend", po::value<std::string>()->default_value("tensorrt"),
+                      "[opencl|cudnngraph|tensorrt] Which backend engine to use.")
+#else
+#if defined(USE_CUDNN)
+        ("backend", po::value<std::string>()->default_value("tensorrt"),
+                      "[opencl|cudnn|tensorrt] Which backend engine to use.")
+#else
+        ("backend", po::value<std::string>()->default_value("tensorrt"),
+                      "[opencl|tensorrt] Which backend engine to use.")
+#endif
+#endif
+#endif
+#else
+#if defined(USE_CUDNN_GRAPH) && defined(USE_CUDNN)
+        ("backend", po::value<std::string>()->default_value("opencl"),
                       "[opencl|cudnn|cudnngraph] Which backend engine to use.")
 #else
+#ifdef USE_CUDNN_GRAPH
+        ("backend", po::value<std::string>()->default_value("opencl"),
+                      "[opencl|cudnngraph] Which backend engine to use.")
+#else
 #ifdef USE_CUDNN
-        ("backend", po::value<std::string>()->default_value("cudnn"),
+        ("backend", po::value<std::string>()->default_value("opencl"),
                       "[opencl|cudnn] Which backend engine to use.")
+#endif
 #endif
 #endif
 #endif
 
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
-        ("engine", po::value<std::string>()->default_value("single"),
-                      "[single|pair] Number of engine units to start.")
+        ("execute-context", po::value<std::string>()->default_value("single"),
+                            "[single|double] Number of engine units to start.")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -514,14 +534,14 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (vm.count("cache-plan")) {
             cfg_cache_plan = true;
         }
-        if (vm.count("engine")) {
-            auto engine = vm["engine"].as<std::string>();
-            if ("single" == engine) {
-                cfg_engine_units = 1;
-            } else if ("pair" == engine) {
-                cfg_engine_units = 2;
+        if (vm.count("execute-context")) {
+            auto execute_context = vm["execute-context"].as<std::string>();
+            if ("single" == execute_context) {
+                cfg_execute_context = execute_t::SINGLE;
+            } else if ("double" == execute_context) {
+                cfg_execute_context = execute_t::DOUBLE;
             } else {
-                printf("Unexpected option for --engine, expecting single/pair\n");
+                printf("Unexpected option for --execute-context, expecting single/pair\n");
                 exit(EXIT_FAILURE);
             }
         }

@@ -132,7 +132,10 @@ extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
 extern bool cfg_cache_plan;
-extern int cfg_engine_units;
+enum class execute_t {
+    NONE, SINGLE, DOUBLE, MULTI
+};
+extern execute_t cfg_execute_context;
 enum class backend_t {
     OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
 };

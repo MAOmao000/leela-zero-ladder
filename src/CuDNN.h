@@ -472,11 +472,8 @@ protected:
 
 #endif
 private:
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void push_weights(
-        const size_t layer,
-        const std::vector<float>& weights
-    );
-    void push_weights_trt(
         const size_t layer,
         const std::vector<float>& weights
     );
@@ -486,14 +483,18 @@ private:
         const int row,
         const int column
     );
+#endif
+#if defined(USE_TENSOR_RT)
+    void push_weights_trt(
+        const size_t layer,
+        const std::vector<float>& weights
+    );
     void push_weights_trt_col_major(
         const size_t layer,
         const std::vector<float>& weights,
         const int row,
         const int column
     );
-
-#if defined(USE_TENSOR_RT)
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
@@ -589,6 +590,7 @@ public:
     std::string m_model_hash{""};
 
 private:
+#if defined(USE_CUDNN)
     void convolve(
         const void *bufferIn,
         void *bufferOut,
@@ -621,7 +623,8 @@ private:
         const float alpha,
         const float alpha2 = 1.0f
     );
-
+#endif
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void squeeze_excitation_float(
         const void *bufferIn1,
         const void *bufferIn2,
@@ -651,7 +654,7 @@ private:
         const int channels,
         const int spatial
     );
-
+#endif
 #if defined(USE_CUDNN_GRAPH)
     void convolve_fe_init(
         const int channels,
@@ -676,7 +679,7 @@ private:
         const int batch_size = 1
     );
 #endif
-
+#if defined(USE_CUDNN)
     void convolve_init(
         const int channels,
         const int outputs,
@@ -684,7 +687,7 @@ private:
         conv_descriptor& conv_desc,
         const int batch_size = 1
     );
-
+#endif
 #if defined(USE_CUDNN_GRAPH)
     void convolve_fe_head_init(
         const int channels,
@@ -695,8 +698,10 @@ private:
     );
 #endif
 
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     cudnnHandle_t m_handle{nullptr};
     cublasHandle_t m_cublas_handles{nullptr};
+#endif
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};

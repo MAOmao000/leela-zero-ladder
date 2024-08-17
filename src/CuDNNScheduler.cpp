@@ -17,7 +17,7 @@
 */
 #include "config.h"
 
-#ifdef USE_CUDNN
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
 #include "GTP.h"
 #include "Random.h"
 #include "Network.h"
@@ -102,7 +102,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             for (const auto& context : cudnn_net->m_context) {
                 if (context->m_buffers_allocated) {
                     context->mContext.reset();
-                    if (cfg_engine_units == 2) {
+                    if (cfg_execute_context == execute_t::MULTI) {
                         context->mContext_n.reset();
                     }
                 }
@@ -121,6 +121,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             }
         }
     }
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
         for (const auto& cudnn : m_cudnn) {
             if (cudnn->m_cublas_handles)
@@ -129,6 +130,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
                 cudnnDestroy(cudnn->m_handle);
         }
     }
+#endif
 }
 
 template <typename net_t>

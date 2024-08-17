@@ -109,7 +109,7 @@ std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
 bool cfg_cache_plan;
-int cfg_engine_units;
+execute_t cfg_execute_context;
 backend_t cfg_backend;
 bool cfg_NCHW;
 bool cfg_alpha_zero_search;
@@ -402,17 +402,10 @@ void GTP::setup_default_parameters() {
     cfg_cache_plan = false;
 #ifdef USE_TENSOR_RT
     cfg_backend = backend_t::TENSORRT;
-    cfg_engine_units = 1;
-#else
-#ifdef USE_CUDNN_GRAPH
-    cfg_backend = backend_t::CUDNNGRAPH;
-#else
-#ifdef USE_CUDNN
-    cfg_backend = backend_t::CUDNN;
+    cfg_execute_context = execute_t::SINGLE;
 #else
     cfg_backend = backend_t::OPENCL;
-#endif
-#endif
+    cfg_execute_context = execute_t::NONE;
 #endif
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
