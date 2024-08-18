@@ -1175,6 +1175,11 @@ void CuDNN_Network<net_t>::push_input_convolution(const unsigned int filter_size
                                                   const std::vector<float>& weights,
                                                   const std::vector<float>& biases,
                                                   const float scale) {
+
+#if !defined(USE_CUDNN) && !defined(USE_CUDNN_GRAPH)
+    (void)scale;
+#endif
+
     size_t layer = get_layer_count();
 
     if (cfg_NCHW) {
@@ -1394,6 +1399,13 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
                                             const float scale_1,
                                             const float scale_2,
                                             const float scale_3) {
+
+#if !defined(USE_CUDNN) && !defined(USE_CUDNN_GRAPH)
+    (void)scale_1;
+    (void)scale_2;
+    (void)scale_3;
+#endif
+
     size_t layer = get_layer_count();
 
     if (cfg_NCHW) {

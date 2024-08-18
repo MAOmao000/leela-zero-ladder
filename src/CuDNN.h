@@ -567,11 +567,7 @@ template <typename net_t>
 class CuDNN {
     friend class CuDNN_Network<net_t>;
     friend class CuDNN_Layer;
-#ifdef _WIN32
-    friend class CuDNNScheduler<net_t>;
-#else
     template <typename> friend class CuDNNScheduler;
-#endif
 public:
     CuDNN(const int gpu, const bool silent = false);
 
