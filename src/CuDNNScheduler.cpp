@@ -69,6 +69,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
     }
     for (const auto& cudnn_net : m_networks) {
         for (const auto& context : cudnn_net->m_context) {
+#if defined(USE_TENSOR_RT)
             if (cfg_backend == backend_t::TENSORRT) {
                 if (context->m_buffers_allocated) {
                     for (auto ptr: context->mBuffers) {
@@ -76,6 +77,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
                     }
                 }
             } else if (context->m_buffers_allocated) {
+#else
+            if (context->m_buffers_allocated) {
+#endif
                 if (context->m_workspace)
                     cudaFreeAsync(context->m_workspace, cudaStreamDefault);
                 if (context->m_InBuffer)
@@ -92,6 +96,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
+#if defined(USE_TENSOR_RT)
 #ifndef _WIN32
     if (cfg_backend == backend_t::TENSORRT) {
         exit(0);
@@ -121,6 +126,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             }
         }
     }
+#endif
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
         for (const auto& cudnn : m_cudnn) {

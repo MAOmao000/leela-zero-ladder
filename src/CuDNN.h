@@ -274,7 +274,7 @@ private:
     bool is_se_block{false};
     bool is_convolve1{false};
     conv_descriptor conv_desc[2];
-#if defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     conv_descriptor conv_no_relu_desc[2];
     conv_descriptor conv_add_relu_desc[2];
 #endif
@@ -350,9 +350,7 @@ using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 class CuDNNContext {
     template <typename> friend class CuDNN;
     template <typename> friend class CuDNN_Network;
-#if defined(USE_TENSOR_RT)
     template <typename> friend class CuDNNScheduler;
-#endif
 private:
     void *m_workspace{nullptr};
     void *m_InBuffer{nullptr};
