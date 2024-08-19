@@ -40,6 +40,7 @@
 #include <sstream>
 #include <string>
 #ifndef USE_BLAS
+#define EIGEN_NO_DEBUG // Disable assertions in your code．
 #include <Eigen/Dense>
 #endif
 

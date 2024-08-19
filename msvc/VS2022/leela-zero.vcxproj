@@ -151,6 +151,7 @@
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
     <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+    <LLVMToolsVersion>17</LLVMToolsVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -245,8 +246,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\nvidia\include;C:\lib\cudnn-frontend-1.5.2\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\TensorRT-10.0.0.6\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\lib\oneDNN\include;C:\lib\oneDNN\build\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\nvidia\include;C:\lib\cudnn-frontend-1.5.2\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\TensorRT-10.0.0.6\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -262,6 +263,10 @@
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <UseFullPaths>false</UseFullPaths>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <OpenMPSupport>
+      </OpenMPSupport>
+      <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -270,8 +275,8 @@
       <OptimizeReferences>
       </OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\lib\nvidia\lib\x64;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\TensorRT-10.0.0.6\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libopenblas.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\lib\oneDNN\build\src\Release;C:\lib\OpenBLAS-0.3.21-x64\lib;C:\lib\OpenCL-SDK_x64\install\lib;C:\lib\vcpkg\installed\x64-windows-static\lib;C:\lib\nvidia\lib\x64;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64;C:\lib\TensorRT-10.0.0.6\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libopenblas.lib;dnnl.lib;OpenCL.lib;boost_program_options-vc140-mt.lib;boost_filesystem-vc140-mt.lib;boost_system-vc140-mt.lib;zlib.lib;cuda.lib;cudart_static.lib;cudnn.lib;cublas.lib;nvinfer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ForceSymbolReferences>
       </ForceSymbolReferences>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>

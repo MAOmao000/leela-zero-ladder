@@ -37,8 +37,10 @@
 #endif
 #ifdef USE_OPENBLAS
 #include <cblas.h>
+#include <dnnl.hpp>
 #endif
 #ifndef USE_BLAS
+#define EIGEN_NO_DEBUG // Disable assertions in your code．
 #include <Eigen/Dense>
 #endif
 
@@ -201,11 +203,12 @@ void CPUPipe::winograd_sgemm(const std::vector<float>& U,
         const auto offset_v = b * C * P;
         const auto offset_m = b * K * P;
 #ifdef USE_BLAS
-        cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
-                    K, P, C,
+        //cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+        dnnl_sgemm('T', 'N',
+                K, P, C,
                     1.0f,
-                    &U[offset_u], K,
-                    &V[offset_v], P,
+                    &U[offset_u], K, //&V[offset_v], K, //&U[offset_u], K,
+                    &V[offset_v], P, //&U[offset_u], P, //&V[offset_v], P,
                     0.0f,
                     &M[offset_m], P);
 #else
@@ -336,8 +339,9 @@ void convolve(const size_t outputs,
     //    cblas_sgemm(CblasRowMajor, TransA, TransB, M, N, K, alpha, A, lda, B,
     //                ldb, beta, C, N);
 #ifdef USE_BLAS
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                // M        N            K
+    //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+    dnnl_sgemm('N', 'N',
+            // M        N            K
                 outputs, num_intersections, filter_dim,
                 1.0f, &weights[0], filter_dim,
                 &col[0], num_intersections,
@@ -387,9 +391,12 @@ void innerproduct(const size_t inputs,
     std::vector<float>& output) {
 
 #ifdef USE_BLAS
-    cblas_sgemv(CblasRowMajor, CblasNoTrans,
+    //cblas_sgemv(CblasRowMajor, CblasNoTrans,
+    //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+    dnnl_sgemm('N', 'N',
         // M     K
-        outputs, inputs,
+        //outputs, inputs,
+        outputs, 1, inputs,
         1.0f, &weights[0], inputs,
         &input[0], 1,
         0.0f, &output[0], 1);
