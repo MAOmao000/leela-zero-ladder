@@ -1241,13 +1241,17 @@ void CuDNN_Network<net_t>::push_input_convolution(const unsigned int filter_size
             m_cudnn.convolve_fe_init(channels, outputs, filter_size,
                                      m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
                                      cfg_batch_size);
+#if defined(USE_CUDNN)
         } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH]);
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
                                   cfg_batch_size);
+#endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
@@ -1366,6 +1370,7 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
             m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES].is_initialized = true;
         } else {
 #endif
+#if defined(USE_CUDNN)
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1373,6 +1378,7 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
                                   cfg_batch_size);
             m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+#endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
@@ -1530,6 +1536,7 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
             m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
         } else {
 #endif
+#if defined(USE_CUDNN)
             m_cudnn.convolve_init(channels, outputs, filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
             m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
@@ -1537,6 +1544,7 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
                                   m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
                                   cfg_batch_size);
             m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+#endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
@@ -1593,8 +1601,7 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
         }
         exit(EXIT_FAILURE);
     }
-#endif
-
+#else
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
@@ -1617,13 +1624,17 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
                                               cfg_batch_size);
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH]);
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
                                       cfg_batch_size);
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
@@ -1643,13 +1654,17 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
                 m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
                                               m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
                                               cfg_batch_size);
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
                 m_cudnn.convolve_init(channels, outputs, filter_size,
                                       m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
                                       cfg_batch_size);
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
@@ -1661,6 +1676,7 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
         m_layers[layer].conv_desc[MULTIPLE_BATCHES]
             = m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES];
     }
+#endif
 #endif
 }
 
@@ -1856,8 +1872,11 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, OutBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                           variant_pack, workspace));
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolveActivation(InBuffer,
                                            OutBuffer,
                                            conv_weights[0],
@@ -1867,6 +1886,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                            layer.conv_desc[conv_desc_idx],
                                            layer.scale_1,
                                            1.0f);
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
@@ -1906,8 +1926,11 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                                                    variant_pack3, workspace));
                 std::swap(InBuffer, OutBuffer);
                 // output: OutBuffer
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolveActivation(OutBuffer,
                                            InBuffer,
                                            conv1_weights[0],
@@ -1928,6 +1951,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                            layer.scale_2,
                                            layer.scale_3);
                 // output: OutBuffer
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
@@ -1963,8 +1987,11 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                                                   variant_pack2, workspace));
 
                 std::swap(TempBuffer, IdentityOutBuffer);
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolveActivation(OutBuffer,        // *bufferIn
                                            InBuffer,         // *bufferOut
                                            conv1_weights[0],
@@ -1984,6 +2011,7 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                    layer.conv_desc[conv_desc_idx],
                                                    layer.scale_2,
                                                    layer.scale_3);
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
@@ -2016,7 +2044,9 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             }
             std::swap(InBuffer, OutBuffer);
             // output: OutBuffer
+#if defined(USE_CUDNN)
         } else {
+#endif
             // input: OutBuffer(net_t is float or __half)
             assert(layer.is_convolve1);
 #if defined(USE_CUDNN_GRAPH)
@@ -2027,14 +2057,18 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                     {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
                 checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
                                                                           variant_pack, workspace));
+#if defined(USE_CUDNN)
             } else {
 #endif
+#endif
+#if defined(USE_CUDNN)
                 m_cudnn.convolve(OutBuffer,
                                  InBuffer,
                                  layer.weights[0],
                                  workspace,
                                  layer.conv_desc[conv_desc_idx],
                                  layer.scale_1);
+#endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif

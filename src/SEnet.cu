@@ -1,7 +1,7 @@
 #include "config.h"
 #include "Utils.h"
 
-#ifdef USE_CUDNN
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
 #include <stdint.h>
 #include <stdexcept>
 #define CUDA_API_PER_THREAD_DEFAULT_STREAM

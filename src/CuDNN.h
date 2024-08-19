@@ -58,9 +58,7 @@
 #include "NvInferSafeRuntime.h"
 #include "NvInferConsistency.h"
 
-#if defined(USE_TENSOR_RT)
 #include "sha2.h"
-#endif
 #endif
 
 auto constexpr CONV_DESC_INPUT    = 0;
