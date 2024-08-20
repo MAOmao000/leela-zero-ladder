@@ -273,15 +273,21 @@ if(USE_BACKEND STREQUAL "TENSORRT")
 #  endif()
 #  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS REQUIRED)
-  find_path(BLAS_INCLUDE_DIRS openblas_config.h
-    /usr/include
-    /usr/local/include
-    /usr/include/openblas
-    /opt/OpenBLAS/include
-    /usr/include/x86_64-linux-gnu
-    $ENV{BLAS_HOME}/include)
-  add_definitions(-DUSE_BLAS)
+  find_package(BLAS)
+  if(BLAS_FOUND)
+    find_path(BLAS_INCLUDE_DIRS openblas_config.h
+      /usr/include
+      /usr/local/include
+      /usr/include/openblas
+      /opt/OpenBLAS/include
+      /usr/include/x86_64-linux-gnu
+      $ENV{BLAS_HOME}/include)
+    add_definitions(-DUSE_BLAS)
+    if((UNIX AND NOT APPLE) OR WIN32)
+      include_directories(${BLAS_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(leelaz ${BLAS_LIBRARIES})
+  endif()
 #  add_definitions(-DUSE_CUDNN)
 #  add_definitions(-DUSE_CUDNN_GRAPH)
   add_definitions(-DUSE_TENSOR_RT)
@@ -292,10 +298,6 @@ if(USE_BACKEND STREQUAL "TENSORRT")
 #  target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
 #  target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-  if((UNIX AND NOT APPLE) OR WIN32)
-    include_directories(${BLAS_INCLUDE_DIRS})
-  endif()
-  target_link_libraries(leelaz ${BLAS_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   message(STATUS "Looking for system CuDNN library.")
   find_package(CUDAToolkit REQUIRED)
@@ -305,15 +307,21 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   endif()
   find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS REQUIRED)
-  find_path(BLAS_INCLUDE_DIRS openblas_config.h
-    /usr/include
-    /usr/local/include
-    /usr/include/openblas
-    /opt/OpenBLAS/include
-    /usr/include/x86_64-linux-gnu
-    $ENV{BLAS_HOME}/include)
-  add_definitions(-DUSE_BLAS)
+  find_package(BLAS)
+  if(BLAS_FOUND)
+    find_path(BLAS_INCLUDE_DIRS openblas_config.h
+      /usr/include
+      /usr/local/include
+      /usr/include/openblas
+      /opt/OpenBLAS/include
+      /usr/include/x86_64-linux-gnu
+      $ENV{BLAS_HOME}/include)
+    add_definitions(-DUSE_BLAS)
+    if((UNIX AND NOT APPLE) OR WIN32)
+      include_directories(${BLAS_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(leelaz ${BLAS_LIBRARIES})
+  endif()
   add_definitions(-DUSE_CUDNN)
   add_definitions(-DUSE_CUDNN_GRAPH)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR} ${FEIncludePath})
@@ -321,10 +329,6 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
   target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-  if((UNIX AND NOT APPLE) OR WIN32)
-    include_directories(${BLAS_INCLUDE_DIRS})
-  endif()
-  target_link_libraries(leelaz ${BLAS_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   message(STATUS "Looking for system CuDNN library.")
   find_package(CUDAToolkit REQUIRED)
@@ -334,42 +338,46 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   endif()
   find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS REQUIRED)
-  find_path(BLAS_INCLUDE_DIRS openblas_config.h
-    /usr/include
-    /usr/local/include
-    /usr/include/openblas
-    /opt/OpenBLAS/include
-    /usr/include/x86_64-linux-gnu
-    $ENV{BLAS_HOME}/include)
-  add_definitions(-DUSE_BLAS)
+  find_package(BLAS)
+  if(BLAS_FOUND)
+    find_path(BLAS_INCLUDE_DIRS openblas_config.h
+      /usr/include
+      /usr/local/include
+      /usr/include/openblas
+      /opt/OpenBLAS/include
+      /usr/include/x86_64-linux-gnu
+      $ENV{BLAS_HOME}/include)
+    add_definitions(-DUSE_BLAS)
+    if((UNIX AND NOT APPLE) OR WIN32)
+      include_directories(${BLAS_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(leelaz ${BLAS_LIBRARIES})
+  endif()
   add_definitions(-DUSE_CUDNN)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
   include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
   target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-  if((UNIX AND NOT APPLE) OR WIN32)
-    include_directories(${BLAS_INCLUDE_DIRS})
-  endif()
-  target_link_libraries(leelaz ${BLAS_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "OPENCL")
   find_package(OpenCL REQUIRED)
-  find_package(BLAS REQUIRED)
-  find_path(BLAS_INCLUDE_DIRS openblas_config.h
-    /usr/include
-    /usr/local/include
-    /usr/include/openblas
-    /opt/OpenBLAS/include
-    /usr/include/x86_64-linux-gnu
-    $ENV{BLAS_HOME}/include)
-  add_definitions(-DUSE_BLAS)
+  find_package(BLAS)
+  if(BLAS_FOUND)
+    find_path(BLAS_INCLUDE_DIRS openblas_config.h
+      /usr/include
+      /usr/local/include
+      /usr/include/openblas
+      /opt/OpenBLAS/include
+      /usr/include/x86_64-linux-gnu
+      $ENV{BLAS_HOME}/include)
+    add_definitions(-DUSE_BLAS)
+    if((UNIX AND NOT APPLE) OR WIN32)
+      include_directories(${BLAS_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(leelaz ${BLAS_LIBRARIES})
+  endif()
   include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-  if((UNIX AND NOT APPLE) OR WIN32)
-    include_directories(${BLAS_INCLUDE_DIRS})
-  endif()
-  target_link_libraries(leelaz ${BLAS_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "BLAS")
   message(STATUS "Looking for system BLAS/OpenBLAS library.")
   find_package(BLAS REQUIRED)
@@ -392,6 +400,11 @@ else()
 endif()
 if(APPLE)
   include_directories("/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers")
+endif()
+if(DNNL_ROOT_DIR)
+  add_definitions(-DUSE_DNNL)
+  include_directories(${DNNL_ROOT_DIR}/include ${DNNL_ROOT_DIR}/build/include)
+  target_link_libraries(leelaz ${DNNL_ROOT_DIR}/build/src/libdnnl.a)
 endif()
 target_link_libraries(leelaz ${Boost_LIBRARIES})
 target_link_libraries(leelaz ${ZLIB_LIBRARIES})
