@@ -161,7 +161,11 @@ CuDNN<net_t>::CuDNN(const int gpu, const bool silent) {
 }
 
 template <typename net_t>
-void CuDNN<net_t>::initialize(const int channels, const int batch_size, const int net_type, const std::string &model_hash) {
+void CuDNN<net_t>::initialize(const int channels,
+                              const int batch_size,
+                              const int net_type,
+                              const int num_worker_threads,
+                              const std::string &model_hash) {
     // For compatibility with OpenCL implementation
     (void)channels;
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
@@ -178,16 +182,28 @@ void CuDNN<net_t>::initialize(const int channels, const int batch_size, const in
 #endif
     m_net_type = net_type;
     m_batch_size = batch_size;
+    m_num_worker_threads = num_worker_threads;
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
-        cudnnHandle_t cudnn;
-        checkCUDNN(cudnnCreate(&cudnn));
-        m_handle = cudnn;
-        if (net_type == int(NetworkType::MINIGO_SE)) {
-            cublasHandle_t cublas;
-            checkCUBLAS(cublasCreate(&cublas));
-            m_cublas_handles = cublas;
+        m_conv_desc.resize(num_worker_threads);
+        for (auto i = unsigned{0}; i < num_worker_threads; i++) {
+            cudnnHandle_t cudnn;
+            checkCUDNN(cudnnCreate(&cudnn));
+            m_handle.emplace_back(cudnn);
+            m_conv_desc[i].resize(6);
+            for (auto j = 0; j < 6; j++) {
+                m_conv_desc[i][j].resize(2);
+                for (auto k = 0; k < 2; k++) {
+                    conv_descriptor conv_desc;
+                    m_conv_desc[i][j][k] = conv_desc;
+                }
+            }
+            if (net_type == int(NetworkType::MINIGO_SE)) {
+                cublasHandle_t cublas;
+                checkCUBLAS(cublasCreate(&cublas));
+                m_cublas_handles.emplace_back(cublas);
+            }
         }
 #if defined(USE_TENSOR_RT)
     } else {
@@ -204,7 +220,8 @@ void CuDNN<net_t>::initialize(const int channels, const int batch_size, const in
 
 #if defined(USE_CUDNN)
 template <typename net_t>
-void CuDNN<net_t>::convolve(const void *bufferIn,
+void CuDNN<net_t>::convolve(const int tid,
+                            const void *bufferIn,
                             void *bufferOut,
                             const void *weights,
                             void *workspace,
@@ -215,7 +232,7 @@ void CuDNN<net_t>::convolve(const void *bufferIn,
 
     // dstValue = alpha[0] * result + beta[0] * priorDstValue
     checkCUDNN(cudnnConvolutionForward(
-        /* handle               */m_handle,
+        /* handle               */m_handle[tid],
         /* *alpha               */&alpha,
         /* xDesc                */conv_desc.input_descriptor,
         /* *x                   */bufferIn,
@@ -231,7 +248,8 @@ void CuDNN<net_t>::convolve(const void *bufferIn,
 }
 
 template <typename net_t>
-void CuDNN<net_t>::convolveActivation(const void *bufferIn,
+void CuDNN<net_t>::convolveActivation(const int tid,
+                                      const void *bufferIn,
                                       void *bufferOut,
                                       const void *weights,
                                       void *residualBuffer,
@@ -251,7 +269,7 @@ void CuDNN<net_t>::convolveActivation(const void *bufferIn,
 
     // y = act (alpha1 * conv(x) + alpha2 * z + bias)
     checkCUDNN(cudnnConvolutionBiasActivationForward(
-        /* handle         */m_handle,
+        /* handle         */m_handle[tid],
         /* *alpha1        */&alpha1,
         /* xDesc          */conv_desc.input_descriptor,
         /* *x             */bufferIn,
@@ -272,7 +290,8 @@ void CuDNN<net_t>::convolveActivation(const void *bufferIn,
 }
 
 template <typename net_t>
-void CuDNN<net_t>::convolveIdentityActivation(const void *bufferIn,
+void CuDNN<net_t>::convolveIdentityActivation(const int tid,
+                                              const void *bufferIn,
                                               void *bufferOut,
                                               const void *weights,
                                               void *residualBuffer,
@@ -292,7 +311,7 @@ void CuDNN<net_t>::convolveIdentityActivation(const void *bufferIn,
 
     // y = act (alpha1 * conv(x) + alpha2 * z + bias)
     checkCUDNN(cudnnConvolutionBiasActivationForward(
-        /* handle         */m_handle,
+        /* handle         */m_handle[tid],
         /* *alpha1        */&alpha1,
         /* xDesc          */conv_desc.input_descriptor,
         /* *x             */bufferIn,
@@ -315,7 +334,8 @@ void CuDNN<net_t>::convolveIdentityActivation(const void *bufferIn,
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
 template <typename net_t>
-void CuDNN<net_t>::squeeze_excitation_float(const void *bufferIn1,   // residual input(before convolve)
+void CuDNN<net_t>::squeeze_excitation_float(cublasHandle_t cublas_handle,
+                                            const void *bufferIn1,   // residual input(before convolve)
                                             const void *bufferIn2,   // residual output
                                             void *TempBuffer,
                                             const void *fc1_weights, // [256, 128]
@@ -354,7 +374,7 @@ void CuDNN<net_t>::squeeze_excitation_float(const void *bufferIn1,   // residual
 
     // A[channels / 2, channels], B[channels, 1], C[channels / 2, 1]
     checkCUBLAS(cublasSgemmStridedBatched(
-        m_cublas_handles,        // handle: handle to the cuBLAS library context
+        cublas_handle,           // handle: handle to the cuBLAS library context
         CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
         CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
         channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
@@ -394,7 +414,7 @@ void CuDNN<net_t>::squeeze_excitation_float(const void *bufferIn1,   // residual
 
     // A[channels * 2, channels / 2], B[channels / 2, 1], C[channels * 2, 1]
     checkCUBLAS(cublasSgemmStridedBatched(
-        m_cublas_handles,        // handle: handle to the cuBLAS library context
+        cublas_handle,           // handle: handle to the cuBLAS library context
         CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
         CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
         channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
@@ -455,7 +475,8 @@ void CuDNN<net_t>::squeeze_excitation_float(const void *bufferIn1,   // residual
 }
 
 template <typename net_t>
-void CuDNN<net_t>::squeeze_excitation_half(const void *bufferIn1,   // residual input(before convolve)
+void CuDNN<net_t>::squeeze_excitation_half(cublasHandle_t cublas_handle,
+                                           const void *bufferIn1,   // residual input(before convolve)
                                            const void *bufferIn2,   // residual output
                                            void *TempBuffer,
                                            const void *fc1_weights, // [256, 128]
@@ -494,7 +515,7 @@ void CuDNN<net_t>::squeeze_excitation_half(const void *bufferIn1,   // residual 
 
     // A[channels / 2, channels], B[channels, 1], C[channels / 2, 1]
     checkCUBLAS(cublasHgemmStridedBatched(
-        m_cublas_handles,        // handle: handle to the cuBLAS library context
+        cublas_handle,           // handle: handle to the cuBLAS library context
         CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
         CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
         channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
@@ -534,7 +555,7 @@ void CuDNN<net_t>::squeeze_excitation_half(const void *bufferIn1,   // residual 
 
     // A[channels * 2, channels / 2], B[channels / 2, 1], C[channels * 2, 1]
     checkCUBLAS(cublasHgemmStridedBatched(
-        m_cublas_handles,        // handle: handle to the cuBLAS library context
+        cublas_handle,           // handle: handle to the cuBLAS library context
         CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
         CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
         channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
@@ -597,7 +618,8 @@ void CuDNN<net_t>::squeeze_excitation_half(const void *bufferIn1,   // residual 
 
 #if defined(USE_CUDNN_GRAPH)
 template <typename net_t>
-void CuDNN<net_t>::convolve_fe_init(const int channels,
+void CuDNN<net_t>::convolve_fe_init(cudnnHandle_t handle,
+                                    const int channels,
                                     const int outputs,
                                     const int filter_size,
                                     conv_descriptor& conv_desc,
@@ -676,7 +698,7 @@ void CuDNN<net_t>::convolve_fe_init(const int channels,
         return std::make_tuple(graph, X, W, B, Y);
     };
 
-    auto [graph, X, W, B, Y] = build_new_graph(m_handle);
+    auto [graph, X, W, B, Y] = build_new_graph(handle);
     conv_desc.graph = graph;
     conv_desc.X = X;
     conv_desc.W = W;
@@ -686,7 +708,8 @@ void CuDNN<net_t>::convolve_fe_init(const int channels,
 }
 
 template <typename net_t>
-void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
+void CuDNN<net_t>::convolve_fe_no_relu_init(cudnnHandle_t handle,
+                                            const int channels,
                                             const int outputs,
                                             const int filter_size,
                                             conv_descriptor& conv_desc,
@@ -763,7 +786,7 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
         return std::make_tuple(graph, X, W, B, Y);
     };
 
-    auto [graph, X, W, B, Y] = build_new_graph(m_handle);
+    auto [graph, X, W, B, Y] = build_new_graph(handle);
     conv_desc.graph = graph;
     conv_desc.X = X;
     conv_desc.W = W;
@@ -773,7 +796,8 @@ void CuDNN<net_t>::convolve_fe_no_relu_init(const int channels,
 }
 
 template <typename net_t>
-void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
+void CuDNN<net_t>::convolve_fe_add_relu_init(cudnnHandle_t handle,
+                                             const int channels,
                                              const int outputs,
                                              conv_descriptor& conv_desc,
                                              const int batch_size) {
@@ -835,7 +859,7 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
         return std::make_tuple(graph, X, Z, Y);
     };
 
-    auto [graph, X, Z, Y] = build_new_graph(m_handle);
+    auto [graph, X, Z, Y] = build_new_graph(handle);
     conv_desc.graph = graph;
     conv_desc.X = X;
     conv_desc.Z = Z;
@@ -844,7 +868,8 @@ void CuDNN<net_t>::convolve_fe_add_relu_init(const int channels,
 }
 
 template <typename net_t>
-void CuDNN<net_t>::convolve_fe_head_init(const int channels,
+void CuDNN<net_t>::convolve_fe_head_init(cudnnHandle_t handle,
+                                         const int channels,
                                          const int outputs,
                                          const int filter_size,
                                          conv_descriptor& conv_desc,
@@ -908,7 +933,7 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
         return std::make_tuple(graph, X, W, Y);
     };
 
-    auto [graph, X, W, Y] = build_new_graph(m_handle);
+    auto [graph, X, W, Y] = build_new_graph(handle);
     conv_desc.graph = graph;
     conv_desc.X = X;
     conv_desc.W = W;
@@ -919,7 +944,8 @@ void CuDNN<net_t>::convolve_fe_head_init(const int channels,
 
 #if defined(USE_CUDNN)
 template <typename net_t>
-void CuDNN<net_t>::convolve_init(const int channels,
+void CuDNN<net_t>::convolve_init(cudnnHandle_t handle,
+                                 const int channels,
                                  const int outputs,
                                  const int filter_size,
                                  conv_descriptor& conv_desc,
@@ -1006,11 +1032,11 @@ void CuDNN<net_t>::convolve_init(const int channels,
 
     using perf_t = cudnnConvolutionFwdAlgoPerf_t;
     int num_algos = 0;
-    checkCUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(m_handle, &num_algos));
+    checkCUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(handle, &num_algos));
     int returned_algo_count = 0;
     std::unique_ptr<perf_t[]> perf_results(new perf_t[num_algos]);
     checkCUDNN(cudnnGetConvolutionForwardAlgorithm_v7(
-                              /* handle             */m_handle,
+                              /* handle             */handle,
                               /* xDesc              */conv_desc.input_descriptor,
                               /* wDesc              */conv_desc.filter_descriptor,
                               /* convDesc           */conv_desc.convolution_descriptor,
@@ -1022,7 +1048,7 @@ void CuDNN<net_t>::convolve_init(const int channels,
     conv_desc.convolution_algorithm = perf_results[0].algo;
 
     checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
-                                     /* handle       */m_handle,
+                                     /* handle       */handle,
                                      /* xDesc        */conv_desc.input_descriptor,
                                      /* wDesc        */conv_desc.filter_descriptor,
                                      /* convDesc     */conv_desc.convolution_descriptor,
@@ -1042,7 +1068,7 @@ void CuDNN<net_t>::convolve_init(const int channels,
         conv_desc.convolution_identity_algorithm = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
 
         checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
-                                         /* handle       */m_handle,
+                                         /* handle       */handle,
                                          /* xDesc        */conv_desc.input_descriptor,
                                          /* wDesc        */conv_desc.filter_descriptor,
                                          /* convDesc     */conv_desc.convolution_descriptor,
@@ -1233,35 +1259,45 @@ void CuDNN_Network<net_t>::push_input_convolution(const unsigned int filter_size
     m_layers[layer].scale_2 = 1.0f / scale;
     m_layers[layer].scale_3 = 1.0f;
 
-    if (!m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH].is_initialized) {
+    if (!m_cudnn.m_conv_desc[0][CONV_DESC_INPUT][SINGLE_BATCH].is_initialized) {
 #if defined(USE_CUDNN_GRAPH)
         if (cfg_backend == backend_t::CUDNNGRAPH) {
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH]);
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
-                                     cfg_batch_size);
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][MULTIPLE_BATCHES],
+                                         cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][MULTIPLE_BATCHES].is_initialized = true;
+            }
 #if defined(USE_CUDNN)
         } else {
 #endif
 #endif
 #if defined(USE_CUDNN)
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH]);
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES],
-                                  cfg_batch_size);
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                      m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                      m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][MULTIPLE_BATCHES],
+                                      cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][MULTIPLE_BATCHES].is_initialized = true;
+            }
 #endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
-        m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH].is_initialized = true;
-        m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES].is_initialized = true;
     }
-    m_layers[layer].conv_desc[SINGLE_BATCH]
-        = m_conv_desc[CONV_DESC_INPUT][SINGLE_BATCH];
-    m_layers[layer].conv_desc[MULTIPLE_BATCHES]
-        = m_conv_desc[CONV_DESC_INPUT][MULTIPLE_BATCHES];
+    m_layers[layer].conv_desc.resize(m_cudnn.m_num_worker_threads);
+    for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+        m_layers[layer].conv_desc[i].resize(2);
+        m_layers[layer].conv_desc[i][SINGLE_BATCH]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][SINGLE_BATCH];
+        m_layers[layer].conv_desc[i][MULTIPLE_BATCHES]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_INPUT][MULTIPLE_BATCHES];
+    }
 #endif
 }
 
@@ -1342,62 +1378,76 @@ void CuDNN_Network<net_t>::push_residual(const unsigned int filter_size,
     m_layers[layer].scale_3 = 1.0f / scale_3;
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-    if (!m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
+    if (!m_cudnn.m_conv_desc[0][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
 #if defined(USE_CUDNN_GRAPH)
         if (cfg_backend == backend_t::CUDNNGRAPH) {
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
-                                     cfg_batch_size);
-            m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
+                                         cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
 
-            m_cudnn.convolve_fe_no_relu_init(channels, outputs, filter_size,
-                                             m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_no_relu_init(channels, outputs, filter_size,
-                                             m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES],
-                                             cfg_batch_size);
-            m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
+                m_cudnn.convolve_fe_no_relu_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                 m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_no_relu_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                 m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES],
+                                                 cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
 
-            m_cudnn.convolve_fe_add_relu_init(channels, outputs,
-                                              m_conv_desc[CONV_DESC_ADD_RELU][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_ADD_RELU][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_add_relu_init(channels, outputs,
-                                              m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES],
-                                              cfg_batch_size);
-            m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES].is_initialized = true;
+                m_cudnn.convolve_fe_add_relu_init(m_cudnn.m_handle[i], channels, outputs,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_add_relu_init(m_cudnn.m_handle[i], channels, outputs,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][MULTIPLE_BATCHES],
+                                                  cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][MULTIPLE_BATCHES].is_initialized = true;
+            }
         } else {
 #endif
 #if defined(USE_CUDNN)
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
-                                  cfg_batch_size);
-            m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                      m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                      m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
+                                      cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            }
 #endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
     }
 
-    m_layers[layer].conv_desc[SINGLE_BATCH]
-        = m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH];
-    m_layers[layer].conv_desc[MULTIPLE_BATCHES]
-        = m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
+    m_layers[layer].conv_desc.resize(m_cudnn.m_num_worker_threads);
+    for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+        m_layers[layer].conv_desc[i].resize(2);
+        m_layers[layer].conv_desc[i][SINGLE_BATCH]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH];
+        m_layers[layer].conv_desc[i][MULTIPLE_BATCHES]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
+    }
 #if defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNNGRAPH) {
-        m_layers[layer].conv_no_relu_desc[SINGLE_BATCH]
-            = m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH];
-        m_layers[layer].conv_no_relu_desc[MULTIPLE_BATCHES]
-            = m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES];
-        m_layers[layer].conv_add_relu_desc[SINGLE_BATCH]
-            = m_conv_desc[CONV_DESC_ADD_RELU][SINGLE_BATCH];
-        m_layers[layer].conv_add_relu_desc[MULTIPLE_BATCHES]
-            = m_conv_desc[CONV_DESC_ADD_RELU][MULTIPLE_BATCHES];
+        m_layers[layer].conv_no_relu_desc.resize(m_cudnn.m_num_worker_threads);
+        m_layers[layer].conv_add_relu_desc.resize(m_cudnn.m_num_worker_threads);
+        for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+            m_layers[layer].conv_no_relu_desc[i].resize(2);
+            m_layers[layer].conv_no_relu_desc[i][SINGLE_BATCH]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH];
+            m_layers[layer].conv_no_relu_desc[i][MULTIPLE_BATCHES]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES];
+            m_layers[layer].conv_add_relu_desc[i].resize(2);
+            m_layers[layer].conv_add_relu_desc[i][SINGLE_BATCH]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][SINGLE_BATCH];
+            m_layers[layer].conv_add_relu_desc[i][MULTIPLE_BATCHES]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_ADD_RELU][MULTIPLE_BATCHES];
+        }
     }
 #endif
 #endif
@@ -1516,50 +1566,62 @@ void CuDNN_Network<net_t>::push_residual_se(const unsigned int filter_size,
     m_layers[layer].scale_2 = 1.0f / scale_2;
     m_layers[layer].scale_3 = 1.0f / scale_3;
 
-    if (!m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
+    if (!m_cudnn.m_conv_desc[0][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized) {
 #if defined(USE_CUDNN_GRAPH)
         if (cfg_backend == backend_t::CUDNNGRAPH) {
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_init(channels, outputs, filter_size,
-                                     m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
-                                     cfg_batch_size);
-            m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                         m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
+                                         cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
 
-            m_cudnn.convolve_fe_no_relu_init(channels, outputs, filter_size,
-                                             m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_fe_no_relu_init(channels, outputs, filter_size,
-                                             m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES],
-                                             cfg_batch_size);
-            m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
+                m_cudnn.convolve_fe_no_relu_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                 m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH]);
+                m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH].is_initialized = true;
+                m_cudnn.convolve_fe_no_relu_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                 m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES],
+                                                 cfg_batch_size);
+                m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES].is_initialized = true;
+            }
         } else {
 #endif
 #if defined(USE_CUDNN)
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH]);
-            m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
-            m_cudnn.convolve_init(channels, outputs, filter_size,
-                                  m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
-                                  cfg_batch_size);
-            m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                 m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                       m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH]);
+                 m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH].is_initialized = true;
+                 m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                       m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES],
+                                       cfg_batch_size);
+                 m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES].is_initialized = true;
+            }
 #endif
 #if defined(USE_CUDNN_GRAPH)
         }
 #endif
     }
 
-    m_layers[layer].conv_desc[SINGLE_BATCH]
-        = m_conv_desc[CONV_DESC_RESIDUAL][SINGLE_BATCH];
-    m_layers[layer].conv_desc[MULTIPLE_BATCHES]
-        = m_conv_desc[CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
+    m_layers[layer].conv_desc.resize(m_cudnn.m_num_worker_threads);
+    for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+        m_layers[layer].conv_desc[i].resize(2);
+        m_layers[layer].conv_desc[i][SINGLE_BATCH]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][SINGLE_BATCH];
+        m_layers[layer].conv_desc[i][MULTIPLE_BATCHES]
+            = m_cudnn.m_conv_desc[i][CONV_DESC_RESIDUAL][MULTIPLE_BATCHES];
+    }
 #if defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNNGRAPH) {
-        m_layers[layer].conv_no_relu_desc[SINGLE_BATCH]
-            = m_conv_desc[CONV_DESC_NO_RELU][SINGLE_BATCH];
-        m_layers[layer].conv_no_relu_desc[MULTIPLE_BATCHES]
-            = m_conv_desc[CONV_DESC_NO_RELU][MULTIPLE_BATCHES];
+        m_layers[layer].conv_no_relu_desc.resize(m_cudnn.m_num_worker_threads);
+        for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+            m_layers[layer].conv_no_relu_desc[i].resize(2);
+            m_layers[layer].conv_no_relu_desc[i][SINGLE_BATCH]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][SINGLE_BATCH];
+            m_layers[layer].conv_no_relu_desc[i][MULTIPLE_BATCHES]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_NO_RELU][MULTIPLE_BATCHES];
+        }
     }
 #endif
 #endif
@@ -1616,65 +1678,85 @@ void CuDNN_Network<net_t>::push_convolve(const unsigned int filter_size,
     m_layers[layer].filter_size = filter_size;
 
     if (outputs == Network::OUTPUTS_VALUE) {
-        if (!m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH].is_initialized) {
+        if (!m_cudnn.m_conv_desc[0][CONV_DESC_VALUE][SINGLE_BATCH].is_initialized) {
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
-                m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
-                                              m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH]);
-                m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
-                                              m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
-                                              cfg_batch_size);
+                for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                    m_cudnn.convolve_fe_head_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][SINGLE_BATCH]);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][SINGLE_BATCH].is_initialized = true;
+                    m_cudnn.convolve_fe_head_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][MULTIPLE_BATCHES],
+                                                  cfg_batch_size);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][MULTIPLE_BATCHES].is_initialized = true;
+                }
 #if defined(USE_CUDNN)
             } else {
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolve_init(channels, outputs, filter_size,
-                                      m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH]);
-                m_cudnn.convolve_init(channels, outputs, filter_size,
-                                      m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES],
-                                      cfg_batch_size);
+                for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                    m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                          m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][SINGLE_BATCH]);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][SINGLE_BATCH].is_initialized = true;
+                    m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                          m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][MULTIPLE_BATCHES],
+                                          cfg_batch_size);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][MULTIPLE_BATCHES].is_initialized = true;
+                }
 #endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
-            m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH].is_initialized = true;
-            m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES].is_initialized = true;
         }
-        m_layers[layer].conv_desc[SINGLE_BATCH]
-            = m_conv_desc[CONV_DESC_VALUE][SINGLE_BATCH];
-        m_layers[layer].conv_desc[MULTIPLE_BATCHES]
-            = m_conv_desc[CONV_DESC_VALUE][MULTIPLE_BATCHES];
+        m_layers[layer].conv_desc.resize(m_cudnn.m_num_worker_threads);
+        for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+            m_layers[layer].conv_desc[i].resize(2);
+            m_layers[layer].conv_desc[i][SINGLE_BATCH]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][SINGLE_BATCH];
+            m_layers[layer].conv_desc[i][MULTIPLE_BATCHES]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_VALUE][MULTIPLE_BATCHES];
+        }
     } else {
-        if (!m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH].is_initialized) {
+        if (!m_cudnn.m_conv_desc[0][CONV_DESC_POLICY][SINGLE_BATCH].is_initialized) {
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
-                m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
-                                              m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
-                m_cudnn.convolve_fe_head_init(channels, outputs, filter_size,
-                                              m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
-                                              cfg_batch_size);
+                for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                    m_cudnn.convolve_fe_head_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][SINGLE_BATCH]);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][SINGLE_BATCH].is_initialized = true;
+                    m_cudnn.convolve_fe_head_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                                  m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][MULTIPLE_BATCHES],
+                                                  cfg_batch_size);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][MULTIPLE_BATCHES].is_initialized = true;
+                }
 #if defined(USE_CUDNN)
             } else {
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolve_init(channels, outputs, filter_size,
-                                      m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH]);
-                m_cudnn.convolve_init(channels, outputs, filter_size,
-                                      m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES],
-                                      cfg_batch_size);
+                for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+                    m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                          m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][SINGLE_BATCH]);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][SINGLE_BATCH].is_initialized = true;
+                    m_cudnn.convolve_init(m_cudnn.m_handle[i], channels, outputs, filter_size,
+                                          m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][MULTIPLE_BATCHES],
+                                          cfg_batch_size);
+                    m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][MULTIPLE_BATCHES].is_initialized = true;
+                }
 #endif
 #if defined(USE_CUDNN_GRAPH)
             }
 #endif
-            m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH].is_initialized = true;
-            m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES].is_initialized = true;
         }
-        m_layers[layer].conv_desc[SINGLE_BATCH]
-            = m_conv_desc[CONV_DESC_POLICY][SINGLE_BATCH];
-        m_layers[layer].conv_desc[MULTIPLE_BATCHES]
-            = m_conv_desc[CONV_DESC_POLICY][MULTIPLE_BATCHES];
+        m_layers[layer].conv_desc.resize(m_cudnn.m_num_worker_threads);
+        for (auto i = 0; i < m_cudnn.m_num_worker_threads; i++) {
+            m_layers[layer].conv_desc[i].resize(2);
+            m_layers[layer].conv_desc[i][SINGLE_BATCH]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][SINGLE_BATCH];
+            m_layers[layer].conv_desc[i][MULTIPLE_BATCHES]
+                = m_cudnn.m_conv_desc[i][CONV_DESC_POLICY][MULTIPLE_BATCHES];
+        }
     }
 #endif
 #endif
@@ -1685,8 +1767,12 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                std::vector<float>& output_pol,
                                                std::vector<float>& output_val,
                                                std::shared_ptr<CuDNNContext> cudnn_context,
+                                               const int tid,
                                                const int batch_size) {
 
+#if !defined(USE_CUDNN) && !defined(USE_CUDNN_GRAPH)
+    (void)tid;
+#endif
     const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     const auto pol_elements
         = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
@@ -1787,16 +1873,16 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
         auto max_channels = unsigned{0};
         for (const auto& layer : m_layers) {
             max_wsize = std::max(max_wsize,
-                                 layer.conv_desc[conv_desc_idx].workspace_size);
+                                 layer.conv_desc[tid][conv_desc_idx].workspace_size);
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 max_wsize = std::max(max_wsize,
-                                     layer.conv_no_relu_desc[conv_desc_idx].workspace_size);
+                                     layer.conv_no_relu_desc[tid][conv_desc_idx].workspace_size);
                 max_wsize = std::max(max_wsize,
-                                     layer.conv_add_relu_desc[conv_desc_idx].workspace_size);
+                                     layer.conv_add_relu_desc[tid][conv_desc_idx].workspace_size);
             }
             if (m_cudnn.m_net_type == int(NetworkType::MINIGO_SE))
                 max_wsize = std::max(max_wsize,
-                                     layer.conv_desc[conv_desc_idx].workspace_identity_size);
+                                     layer.conv_desc[tid][conv_desc_idx].workspace_identity_size);
             max_channels = std::max(max_channels,
                                     std::max(layer.channels, layer.outputs));
         }
@@ -1866,24 +1952,25 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
-                    {layer.conv_desc[conv_desc_idx].X, InBuffer},
-                    {layer.conv_desc[conv_desc_idx].W, conv_weights[0]},
-                    {layer.conv_desc[conv_desc_idx].B, conv_biases[0]},
-                    {layer.conv_desc[conv_desc_idx].Y, OutBuffer} };
-                checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_desc[tid][conv_desc_idx].X, InBuffer},
+                    {layer.conv_desc[tid][conv_desc_idx].W, conv_weights[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].B, conv_biases[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].Y, OutBuffer} };
+                checkCUDNNFE(layer.conv_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                           variant_pack, workspace));
 #if defined(USE_CUDNN)
             } else {
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolveActivation(InBuffer,
+                m_cudnn.convolveActivation(tid,
+                                           InBuffer,
                                            OutBuffer,
                                            conv_weights[0],
                                            nullptr,
                                            conv_biases[0],
                                            workspace,
-                                           layer.conv_desc[conv_desc_idx],
+                                           layer.conv_desc[tid][conv_desc_idx],
                                            layer.scale_1,
                                            1.0f);
 #endif
@@ -1903,26 +1990,26 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack1 = {
-                    {layer.conv_desc[conv_desc_idx].X, OutBuffer},
-                    {layer.conv_desc[conv_desc_idx].W, conv1_weights[0]},
-                    {layer.conv_desc[conv_desc_idx].B, conv1_biases[0]},
-                    {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
-                checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_desc[tid][conv_desc_idx].X, OutBuffer},
+                    {layer.conv_desc[tid][conv_desc_idx].W, conv1_weights[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].B, conv1_biases[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].Y, InBuffer} };
+                checkCUDNNFE(layer.conv_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                           variant_pack1, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
-                    {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
-                    {layer.conv_no_relu_desc[conv_desc_idx].W, conv2_weights[0]},
-                    {layer.conv_no_relu_desc[conv_desc_idx].B, conv2_biases[0]},
-                    {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
-                checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].X, InBuffer},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].W, conv2_weights[0]},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].B, conv2_biases[0]},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].Y, TempBuffer} };
+                checkCUDNNFE(layer.conv_no_relu_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                                   variant_pack2, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack3 = {
-                    {layer.conv_add_relu_desc[conv_desc_idx].X, TempBuffer},
-                    {layer.conv_add_relu_desc[conv_desc_idx].Z, OutBuffer},
-                    {layer.conv_add_relu_desc[conv_desc_idx].Y, InBuffer} };
-                checkCUDNNFE(layer.conv_add_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_add_relu_desc[tid][conv_desc_idx].X, TempBuffer},
+                    {layer.conv_add_relu_desc[tid][conv_desc_idx].Z, OutBuffer},
+                    {layer.conv_add_relu_desc[tid][conv_desc_idx].Y, InBuffer} };
+                checkCUDNNFE(layer.conv_add_relu_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                                    variant_pack3, workspace));
                 std::swap(InBuffer, OutBuffer);
                 // output: OutBuffer
@@ -1931,23 +2018,25 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolveActivation(OutBuffer,
+                m_cudnn.convolveActivation(tid,
+                                           OutBuffer,
                                            InBuffer,
                                            conv1_weights[0],
                                            nullptr,
                                            conv1_biases[0],
                                            workspace,
-                                           layer.conv_desc[conv_desc_idx],
+                                           layer.conv_desc[tid][conv_desc_idx],
                                            layer.scale_1,
                                            1.0f);
 
-                m_cudnn.convolveActivation(InBuffer,
+                m_cudnn.convolveActivation(tid,
+                                           InBuffer,
                                            OutBuffer,
                                            conv2_weights[0],
                                            OutBuffer,          // *residualBuffer: first input
                                            conv2_biases[0],
                                            workspace,
-                                           layer.conv_desc[conv_desc_idx],
+                                           layer.conv_desc[tid][conv_desc_idx],
                                            layer.scale_2,
                                            layer.scale_3);
                 // output: OutBuffer
@@ -1971,19 +2060,19 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack1 = {
-                    {layer.conv_desc[conv_desc_idx].X, OutBuffer},
-                    {layer.conv_desc[conv_desc_idx].W, conv1_weights[0]},
-                    {layer.conv_desc[conv_desc_idx].B, conv1_biases[0]},
-                    {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
-                checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_desc[tid][conv_desc_idx].X, OutBuffer},
+                    {layer.conv_desc[tid][conv_desc_idx].W, conv1_weights[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].B, conv1_biases[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].Y, InBuffer} };
+                checkCUDNNFE(layer.conv_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                           variant_pack1, workspace));
 
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack2 = {
-                    {layer.conv_no_relu_desc[conv_desc_idx].X, InBuffer},
-                    {layer.conv_no_relu_desc[conv_desc_idx].W, conv2_weights[0]},
-                    {layer.conv_no_relu_desc[conv_desc_idx].B, conv2_biases[0]},
-                    {layer.conv_no_relu_desc[conv_desc_idx].Y, TempBuffer} };
-                checkCUDNNFE(layer.conv_no_relu_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].X, InBuffer},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].W, conv2_weights[0]},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].B, conv2_biases[0]},
+                    {layer.conv_no_relu_desc[tid][conv_desc_idx].Y, TempBuffer} };
+                checkCUDNNFE(layer.conv_no_relu_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                                   variant_pack2, workspace));
 
                 std::swap(TempBuffer, IdentityOutBuffer);
@@ -1992,23 +2081,25 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolveActivation(OutBuffer,        // *bufferIn
+                m_cudnn.convolveActivation(tid,
+                                           OutBuffer,        // *bufferIn
                                            InBuffer,         // *bufferOut
                                            conv1_weights[0],
                                            nullptr,
                                            conv1_biases[0],
                                            workspace,
-                                           layer.conv_desc[conv_desc_idx],
+                                           layer.conv_desc[tid][conv_desc_idx],
                                            layer.scale_1,
                                            1.0f);
 
-                m_cudnn.convolveIdentityActivation(InBuffer,          // *bufferIn
+                m_cudnn.convolveIdentityActivation(tid,
+                                                   InBuffer,          // *bufferIn
                                                    IdentityOutBuffer, // *bufferOut
                                                    conv2_weights[0],
                                                    nullptr,
                                                    conv2_biases[0],
                                                    workspace,
-                                                   layer.conv_desc[conv_desc_idx],
+                                                   layer.conv_desc[tid][conv_desc_idx],
                                                    layer.scale_2,
                                                    layer.scale_3);
 #endif
@@ -2016,7 +2107,8 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
             }
 #endif
             if (typeid(net_t) == typeid(float)) {
-                m_cudnn.squeeze_excitation_float(OutBuffer,         // *bufferIn1: first input
+                m_cudnn.squeeze_excitation_float(getCuDNN().m_cublas_handles[tid],
+                                                 OutBuffer,         // *bufferIn1: first input
                                                  IdentityOutBuffer, // *bufferIn2: second output
                                                  TempBuffer,
                                                  fc1_weights[0],
@@ -2029,7 +2121,8 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
                                                  layer.outputs,
                                                  NUM_INTERSECTIONS);
             } else {
-                m_cudnn.squeeze_excitation_half(OutBuffer,         // *bufferIn1: first input
+                m_cudnn.squeeze_excitation_half(getCuDNN().m_cublas_handles[tid],
+                                                OutBuffer,         // *bufferIn1: first input
                                                 IdentityOutBuffer, // *bufferIn2: second output
                                                 TempBuffer,
                                                 fc1_weights[0],
@@ -2052,21 +2145,22 @@ void CuDNN_Network<net_t>::forward_activations(const std::vector<float>& input,
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
-                    {layer.conv_desc[conv_desc_idx].X, OutBuffer},
-                    {layer.conv_desc[conv_desc_idx].W, layer.weights[0]},
-                    {layer.conv_desc[conv_desc_idx].Y, InBuffer} };
-                checkCUDNNFE(layer.conv_desc[conv_desc_idx].graph.execute(getCuDNN().m_handle,
+                    {layer.conv_desc[tid][conv_desc_idx].X, OutBuffer},
+                    {layer.conv_desc[tid][conv_desc_idx].W, layer.weights[0]},
+                    {layer.conv_desc[tid][conv_desc_idx].Y, InBuffer} };
+                checkCUDNNFE(layer.conv_desc[tid][conv_desc_idx].graph.execute(getCuDNN().m_handle[tid],
                                                                           variant_pack, workspace));
 #if defined(USE_CUDNN)
             } else {
 #endif
 #endif
 #if defined(USE_CUDNN)
-                m_cudnn.convolve(OutBuffer,
+                m_cudnn.convolve(tid,
+                                 OutBuffer,
                                  InBuffer,
                                  layer.weights[0],
                                  workspace,
-                                 layer.conv_desc[conv_desc_idx],
+                                 layer.conv_desc[tid][conv_desc_idx],
                                  layer.scale_1);
 #endif
 #if defined(USE_CUDNN_GRAPH)
@@ -2108,7 +2202,7 @@ void CuDNN_Network<net_t>::forward(const std::vector<float>& input,
                                    const int tid,
                                    const int batch_size) {
 
-    forward_activations(input, output_pol, output_val, m_context[tid], batch_size);
+    forward_activations(input, output_pol, output_val, m_context[tid], tid, batch_size);
 }
 
 template <typename net_t>

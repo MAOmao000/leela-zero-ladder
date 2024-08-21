@@ -130,10 +130,12 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
         for (const auto& cudnn : m_cudnn) {
-            if (cudnn->m_cublas_handles)
-                cublasDestroy(cudnn->m_cublas_handles);
-            if (cudnn->m_handle)
-                cudnnDestroy(cudnn->m_handle);
+            for (auto& cublas_handle : cudnn->m_cublas_handles) {
+                cublasDestroy(cublas_handle);
+            }
+            for (auto& handle : cudnn->m_handle) {
+                cudnnDestroy(handle);
+            }
         }
     }
 #endif
@@ -182,9 +184,9 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
     auto gnum = 0;
     for (auto& cudnn : m_cudnn) {
         if (cfg_backend == backend_t::TENSORRT) {
-            cudnn->initialize(channels, cfg_batch_size, net_type, model_hash);
+            cudnn->initialize(channels, cfg_batch_size, net_type, num_worker_threads, model_hash);
         } else {
-            cudnn->initialize(channels, cfg_batch_size, net_type, "");
+            cudnn->initialize(channels, cfg_batch_size, net_type, num_worker_threads, "");
         }
 
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {

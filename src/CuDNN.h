@@ -248,7 +248,6 @@ struct conv_descriptor {
     cudnnConvolutionFwdAlgo_t convolution_identity_algorithm;
     size_t workspace_size{0};
     size_t workspace_identity_size{0};
-
 #if defined(USE_CUDNN_GRAPH)
     cudnn_frontend::graph::Graph graph;
     std::shared_ptr<cudnn_frontend::graph::Tensor_attributes> X;
@@ -271,10 +270,10 @@ private:
     bool is_residual_block{false};
     bool is_se_block{false};
     bool is_convolve1{false};
-    conv_descriptor conv_desc[2];
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-    conv_descriptor conv_no_relu_desc[2];
-    conv_descriptor conv_add_relu_desc[2];
+    std::vector<std::vector<conv_descriptor>> conv_desc;
+    std::vector<std::vector<conv_descriptor>> conv_no_relu_desc;
+    std::vector<std::vector<conv_descriptor>> conv_add_relu_desc;
 #endif
     float scale_1{1.0f};
     float scale_2{1.0f};
@@ -446,6 +445,7 @@ public:
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
         std::shared_ptr<CuDNNContext> cudnn_context,
+        const int tid,
         const int batch_size = 1
     );
 
@@ -548,12 +548,6 @@ private:
     std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
     std::shared_ptr<nvinfer1::ILogger> m_logger;
 #endif
-
-#if defined(USE_CUDNN_GRAPH)
-    conv_descriptor m_conv_desc[6][2];
-#else
-    conv_descriptor m_conv_desc[4][2];
-#endif
 };
 
 #if defined(USE_CUDNN_GRAPH)
@@ -571,6 +565,7 @@ public:
         const int channels,
         const int batch_size,
         const int net_type,
+        const int num_worker_threads,
         const std::string &model_hash = ""
     );
 
@@ -584,6 +579,7 @@ public:
 private:
 #if defined(USE_CUDNN)
     void convolve(
+        const int tid,
         const void *bufferIn,
         void *bufferOut,
         const void *weights,
@@ -593,6 +589,7 @@ private:
     );
 
     void convolveActivation(
+        const int tid,
         const void *bufferIn,
         void *bufferOut,
         const void *weights,
@@ -605,6 +602,7 @@ private:
     );
 
     void convolveIdentityActivation(
+        const int tid,
         const void *bufferIn,
         void *bufferOut,
         const void *weights,
@@ -618,6 +616,7 @@ private:
 #endif
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void squeeze_excitation_float(
+        cublasHandle_t cublas_handle,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,
@@ -633,6 +632,7 @@ private:
     );
 
     void squeeze_excitation_half(
+        cublasHandle_t cublas_handle,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,
@@ -649,6 +649,7 @@ private:
 #endif
 #if defined(USE_CUDNN_GRAPH)
     void convolve_fe_init(
+        cudnnHandle_t handle,
         const int channels,
         const int outputs,
         const int filter_size,
@@ -657,6 +658,7 @@ private:
     );
 
     void convolve_fe_no_relu_init(
+        cudnnHandle_t handle,
         const int channels,
         const int outputs,
         const int filter_size,
@@ -665,6 +667,7 @@ private:
     );
 
     void convolve_fe_add_relu_init(
+        cudnnHandle_t handle,
         const int channels,
         const int outputs,
         conv_descriptor& conv_desc,
@@ -673,6 +676,7 @@ private:
 #endif
 #if defined(USE_CUDNN)
     void convolve_init(
+        cudnnHandle_t handle,
         const int channels,
         const int outputs,
         const int filter_size,
@@ -682,6 +686,7 @@ private:
 #endif
 #if defined(USE_CUDNN_GRAPH)
     void convolve_fe_head_init(
+        cudnnHandle_t handle,
         const int channels,
         const int outputs,
         const int filter_size,
@@ -691,12 +696,14 @@ private:
 #endif
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-    cudnnHandle_t m_handle{nullptr};
-    cublasHandle_t m_cublas_handles{nullptr};
+    std::vector<cudnnHandle_t> m_handle;
+    std::vector<std::vector<std::vector<conv_descriptor>>> m_conv_desc;
+    std::vector<cublasHandle_t> m_cublas_handles;
 #endif
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};
+    int m_num_worker_threads{1};
     int m_net_type{0};
 
 #if defined(USE_CUDNN_GRAPH)
