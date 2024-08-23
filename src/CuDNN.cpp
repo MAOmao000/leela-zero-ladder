@@ -170,6 +170,7 @@ void CuDNN<net_t>::initialize(const int channels,
 
     // For compatibility with OpenCL implementation
     (void)channels;
+    (void)batch_size;
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     (void)model_hash;
 #endif
@@ -1685,6 +1686,9 @@ void CuDNN_Network<net_t>::forward_activations(
     const int tid,
     const int batch_size) {
 
+#if defined(USE_TENSOR_RT)
+    (void)tid;
+#endif
     const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     const auto pol_elements
         = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;

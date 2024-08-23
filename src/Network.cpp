@@ -582,6 +582,7 @@ void Network::select_precision(const int channels) {
             return;
         }
 #endif
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         if (cfg_backend != backend_t::OPENCL) {
             std::unique_ptr<ForwardPipe> fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
             if (fp16_net->needs_autodetect()) {
@@ -595,6 +596,7 @@ void Network::select_precision(const int channels) {
             }
             return;
         }
+#endif
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();

@@ -198,7 +198,7 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
     }
     if (cfg_backend != backend_t::TENSORRT) {
         for (auto& network : m_networks) {
-            for (auto i = 0; i < num_worker_threads; i++) {
+            for (size_t i = 0; i < num_worker_threads; i++) {
                 std::shared_ptr<CuDNNContext> context = std::make_shared<CuDNNContext>();
                 network->m_context.emplace_back(context);
             }
@@ -355,8 +355,6 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
                                           unsigned int outputs,
                                           const std::vector<float>& weights) {
 
-    auto num_worker_threads =
-        cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
     for (auto i = size_t{0}; i < m_networks.size(); i++) {
         m_networks[i]->push_convolve(filter_size, channels, outputs, weights);
     }
