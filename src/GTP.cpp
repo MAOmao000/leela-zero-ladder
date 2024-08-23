@@ -404,8 +404,18 @@ void GTP::setup_default_parameters() {
     cfg_backend = backend_t::TENSORRT;
     cfg_execute_context = execute_t::SINGLE;
 #else
+#ifdef USE_CUDNN_GRAPH
+    cfg_backend = backend_t::CUDNNGRAPH;
+    cfg_execute_context = execute_t::NONE;
+#else
+#ifdef USE_CUDNN
+    cfg_backend = backend_t::CUDNN;
+    cfg_execute_context = execute_t::NONE;
+#else
     cfg_backend = backend_t::OPENCL;
     cfg_execute_context = execute_t::NONE;
+#endif
+#endif
 #endif
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;

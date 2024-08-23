@@ -199,15 +199,15 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #endif
 #else
 #if defined(USE_CUDNN_GRAPH) && defined(USE_CUDNN)
-        ("backend", po::value<std::string>()->default_value("opencl"),
+        ("backend", po::value<std::string>()->default_value("cudnngraph"),
                       "[opencl|cudnn|cudnngraph] Which backend engine to use.")
 #else
 #ifdef USE_CUDNN_GRAPH
-        ("backend", po::value<std::string>()->default_value("opencl"),
+        ("backend", po::value<std::string>()->default_value("cudnngraph"),
                       "[opencl|cudnngraph] Which backend engine to use.")
 #else
 #ifdef USE_CUDNN
-        ("backend", po::value<std::string>()->default_value("opencl"),
+        ("backend", po::value<std::string>()->default_value("cudnn"),
                       "[opencl|cudnn] Which backend engine to use.")
 #endif
 #endif
@@ -508,8 +508,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             printf("Unexpected option for --backend.\n");
             exit(EXIT_FAILURE);
         }
-    } else {
-        cfg_backend = backend_t::OPENCL;
     }
     if (cfg_backend == backend_t::TENSORRT) {
         if (vm.count("channel-first")) {

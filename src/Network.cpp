@@ -582,6 +582,19 @@ void Network::select_precision(const int channels) {
             return;
         }
 #endif
+        if (cfg_backend != backend_t::OPENCL) {
+            std::unique_ptr<ForwardPipe> fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
+            if (fp16_net->needs_autodetect()) {
+                m_forward =
+                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+                myprintf("Using %s single precision.\n", backend.c_str());
+            } else {
+                m_forward =
+                    init_net(channels, std::make_unique<CuDNNScheduler<half_float::half>>());
+                myprintf("Using %s half precision.\n", backend.c_str());
+            }
+            return;
+        }
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
