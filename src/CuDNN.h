@@ -61,16 +61,6 @@
 #include "sha2.h"
 #endif
 
-auto constexpr CONV_DESC_INPUT    = 0;
-auto constexpr CONV_DESC_RESIDUAL = 1;
-auto constexpr CONV_DESC_VALUE    = 2;
-auto constexpr CONV_DESC_POLICY   = 3;
-#if defined(USE_CUDNN_GRAPH)
-auto constexpr CONV_DESC_NO_RELU  = 4;
-auto constexpr CONV_DESC_ADD_RELU = 5;
-#endif
-
-template <typename net_t> class CuDNN;
 template <typename net_t> class CuDNN_Network;
 
 #if defined(USE_CUDNN_GRAPH)
@@ -347,7 +337,6 @@ using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 #endif
 
 class CuDNNContext {
-    template <typename> friend class CuDNN;
     template <typename> friend class CuDNN_Network;
     template <typename> friend class CuDNNScheduler;
 private:
@@ -365,23 +354,30 @@ private:
 #endif
 };
 
-template <typename net_t>
-class CuDNN_Network {
-
-public:
-#if defined(USE_TENSOR_RT)
-    CuDNN_Network(
-        CuDNN<net_t>& cudnn,
-        std::shared_ptr<nvinfer1::ILogger> logger)
-    : m_cudnn(cudnn),
-    m_logger(logger) {}
-#else
-    CuDNN_Network(CuDNN<net_t>& cudnn) : m_cudnn(cudnn) {}
+#if defined(USE_CUDNN_GRAPH)
+namespace fe = cudnn_frontend;
 #endif
 
-    CuDNN<net_t>& getCuDNN() {
-        return m_cudnn;
-    }
+template <typename net_t>
+class CuDNN_Network {
+    template <typename> friend class CuDNNScheduler;
+
+public:
+    CuDNN_Network(
+        const int gpu,
+#if defined(USE_TENSOR_RT)
+        std::shared_ptr<nvinfer1::ILogger> logger,
+#endif
+        const bool silent = false
+    );
+
+    void initialize(
+        const int channels,
+        const int batch_size,
+        const int net_type,
+        const int num_worker_threads,
+        const std::string &model_hash = ""
+    );
 
     void push_input_convolution(
         const unsigned int filter_size,
@@ -450,26 +446,138 @@ public:
         const int batch_size = 1
     );
 
-    CuDNN<net_t>& m_cudnn;
+    bool has_fp16_compute() {
+        return m_fp16_compute;
+    }
+
+    bool has_tensor_cores() {
+        return m_tensorcore;
+    }
+
     std::vector<CuDNN_Layer> m_layers;
     std::vector<std::shared_ptr<CuDNNContext>> m_context;
 
 #if defined(USE_TENSOR_RT)
-    // Builds the network engine
-    bool build(
-        const int num_worker_threads,
-        const int batch_size //,
-    );
-
     std::vector<std::shared_ptr<nvinfer1::IRuntime>> mRuntime;
     std::vector<std::shared_ptr<nvinfer1::ICudaEngine>> mEngine;
 
 protected:
     std::map<std::string, nvinfer1::Weights> mWeightMap;
-
 #endif
+
 private:
+#if defined(USE_CUDNN)
+    void convolve(
+        const int tid,
+        const void *bufferIn,
+        void *bufferOut,
+        const void *weights,
+        void *workspace,
+        const std::shared_ptr<conv_descriptor>& conv_desc,
+        const float alpha
+    );
+
+    void convolveActivation(
+        const int tid,
+        const void *bufferIn,
+        void *bufferOut,
+        const void *weights,
+        void *residualBuffer,
+        const void *biases,
+        void *workspace,
+        const std::shared_ptr<conv_descriptor>& conv_desc,
+        const float alpha,
+        const float alpha2 = 1.0f
+    );
+
+    void convolveIdentityActivation(
+        const int tid,
+        const void *bufferIn,
+        void *bufferOut,
+        const void *weights,
+        void *residualBuffer,
+        const void *biases,
+        void *workspace,
+        const std::shared_ptr<conv_descriptor>& conv_desc,
+        const float alpha,
+        const float alpha2 = 1.0f
+    );
+
+    std::shared_ptr<conv_descriptor> convolve_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
+        const int batch_size = 1
+    );
+#endif
+
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+    void squeeze_excitation_float(
+        cublasHandle_t cublas_handle,
+        const void *bufferIn1,
+        const void *bufferIn2,
+        void *bufferTemp,
+        const void *fc1_weights,
+        const void *fc1_biases,
+        const void *fc2_weights,
+        const void *fc2_biases,
+        void *bufferOut,
+        void *bufferPool,
+        const int batch_size,
+        const int channels,
+        const int spatial
+    );
+
+    void squeeze_excitation_half(
+        cublasHandle_t cublas_handle,
+        const void *bufferIn1,
+        const void *bufferIn2,
+        void *bufferTemp,
+        const void *fc1_weights,
+        const void *fc1_biases,
+        const void *fc2_weights,
+        const void *fc2_biases,
+        void *bufferOut,
+        void *bufferPool,
+        const int batch_size,
+        const int channels,
+        const int spatial
+    );
+
+#if defined(USE_CUDNN_GRAPH)
+    std::shared_ptr<conv_descriptor> convolve_fe_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
+        const int batch_size = 1
+    );
+
+    std::shared_ptr<conv_descriptor> convolve_fe_no_relu_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
+        const int batch_size = 1
+    );
+
+    std::shared_ptr<conv_descriptor> convolve_fe_add_relu_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int batch_size = 1
+    );
+
+    std::shared_ptr<conv_descriptor> convolve_fe_head_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
+        const int batch_size = 1
+    );
+#endif
+
     void push_weights(
         const size_t layer,
         const std::vector<float>& weights
@@ -481,17 +589,26 @@ private:
         const int column
     );
 #endif
+
 #if defined(USE_TENSOR_RT)
     void push_weights_trt(
         const size_t layer,
         const std::vector<float>& weights
     );
+
     void push_weights_trt_col_major(
         const size_t layer,
         const std::vector<float>& weights,
         const int row,
         const int column
     );
+
+    // Builds the network engine
+    bool build(
+        const int num_worker_threads,
+        const int batch_size //,
+    );
+
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
@@ -549,155 +666,18 @@ private:
     std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
     std::shared_ptr<nvinfer1::ILogger> m_logger;
 #endif
-};
-
-#if defined(USE_CUDNN_GRAPH)
-namespace fe = cudnn_frontend;
-#endif
-template <typename net_t>
-class CuDNN {
-    friend class CuDNN_Network<net_t>;
-    friend class CuDNN_Layer;
-    template <typename> friend class CuDNNScheduler;
-public:
-    CuDNN(const int gpu, const bool silent = false);
-
-    void initialize(
-        const int channels,
-        const int batch_size,
-        const int net_type,
-        const int num_worker_threads,
-        const std::string &model_hash = ""
-    );
-
-    bool has_fp16_compute();
-    bool has_tensor_cores();
-
-    cudaDeviceProp m_device_prop;
-    std::string m_model_hash{""};
-
-private:
-#if defined(USE_CUDNN)
-    void convolve(
-        const int tid,
-        const void *bufferIn,
-        void *bufferOut,
-        const void *weights,
-        void *workspace,
-        const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha
-    );
-
-    void convolveActivation(
-        const int tid,
-        const void *bufferIn,
-        void *bufferOut,
-        const void *weights,
-        void *residualBuffer,
-        const void *biases,
-        void *workspace,
-        const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha,
-        const float alpha2 = 1.0f
-    );
-
-    void convolveIdentityActivation(
-        const int tid,
-        const void *bufferIn,
-        void *bufferOut,
-        const void *weights,
-        void *residualBuffer,
-        const void *biases,
-        void *workspace,
-        const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha,
-        const float alpha2 = 1.0f
-    );
-#endif
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-    void squeeze_excitation_float(
-        cublasHandle_t cublas_handle,
-        const void *bufferIn1,
-        const void *bufferIn2,
-        void *bufferTemp,
-        const void *fc1_weights,
-        const void *fc1_biases,
-        const void *fc2_weights,
-        const void *fc2_biases,
-        void *bufferOut,
-        void *bufferPool,
-        const int batch_size,
-        const int channels,
-        const int spatial
-    );
-
-    void squeeze_excitation_half(
-        cublasHandle_t cublas_handle,
-        const void *bufferIn1,
-        const void *bufferIn2,
-        void *bufferTemp,
-        const void *fc1_weights,
-        const void *fc1_biases,
-        const void *fc2_weights,
-        const void *fc2_biases,
-        void *bufferOut,
-        void *bufferPool,
-        const int batch_size,
-        const int channels,
-        const int spatial
-    );
-#endif
-#if defined(USE_CUDNN_GRAPH)
-    std::shared_ptr<conv_descriptor> convolve_fe_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
-        const int batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> convolve_fe_no_relu_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
-        const int batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> convolve_fe_add_relu_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> convolve_fe_head_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
-        const int batch_size = 1
-    );
-#endif
-
-#if defined(USE_CUDNN)
-    std::shared_ptr<conv_descriptor> convolve_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
-        const int batch_size = 1
-    );
-#endif
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     std::vector<cudnnHandle_t> m_handle;
     std::vector<cublasHandle_t> m_cublas_handles;
 #endif
+
+    int m_net_type{0};
+    int m_num_worker_threads{1};
+    cudaDeviceProp m_device_prop;
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
-    int m_num_worker_threads{1};
-    int m_net_type{0};
+    std::string m_model_hash{""};
 
 #if defined(USE_CUDNN_GRAPH)
     using graph_and_tensors1 =

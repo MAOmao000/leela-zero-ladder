@@ -88,7 +88,9 @@ public:
     virtual ~CuDNNScheduler();
     CuDNNScheduler();
 
-    virtual void initialize(int channels, const int net_type, const std::string &model_hash = nullptr);
+    virtual void initialize(int channels,
+                            const int net_type,
+                            const std::string &model_hash = nullptr);
     virtual void forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val);
@@ -137,7 +139,6 @@ private:
     bool m_running{true};
     std::atomic<bool> m_draining{false};
     std::vector<std::unique_ptr<CuDNN_Network<net_t>>> m_networks;
-    std::vector<std::unique_ptr<CuDNN<net_t>>> m_cudnn;
 
     std::mutex m_mutex;
     std::condition_variable m_cv;

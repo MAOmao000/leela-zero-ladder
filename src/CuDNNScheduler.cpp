@@ -129,7 +129,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
 #endif
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
-        for (const auto& cudnn : m_cudnn) {
+        for (const auto& cudnn : m_networks) {
             for (auto& cublas_handle : cudnn->m_cublas_handles) {
                 cublasDestroy(cublas_handle);
             }
@@ -158,13 +158,11 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
     auto silent{false};
 
     for (auto gpu : gpus) {
-        auto cudnn = std::make_unique<CuDNN<net_t>>(gpu, silent);
 #if defined(USE_TENSOR_RT)
-        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn, m_trt_logger);
+        auto net = std::make_unique<CuDNN_Network<net_t>>(gpu, m_trt_logger, silent);
 #else
-        auto net = std::make_unique<CuDNN_Network<net_t>>(*cudnn);
+        auto net = std::make_unique<CuDNN_Network<net_t>>(gpu, silent);
 #endif
-        m_cudnn.emplace_back(std::move(cudnn));
         m_networks.emplace_back(std::move(net));
 
         // Starting next GPU, let's not dump full list of GPUs.
@@ -179,10 +177,10 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the GPU.
     auto num_worker_threads =
-        cfg_num_threads / cfg_batch_size / (m_cudnn.size() + 1) + 1;
+        cfg_num_threads / cfg_batch_size / (m_networks.size() + 1) + 1;
 
     auto gnum = 0;
-    for (auto& cudnn : m_cudnn) {
+    for (auto& cudnn : m_networks) {
         if (cfg_backend == backend_t::TENSORRT) {
             cudnn->initialize(channels, cfg_batch_size, net_type, num_worker_threads, model_hash);
         } else {
@@ -193,16 +191,12 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
             auto t =
                 std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum, i);
             m_worker_threads.emplace_back(std::move(t));
-        }
-        gnum++;
-    }
-    if (cfg_backend != backend_t::TENSORRT) {
-        for (auto& network : m_networks) {
-            for (size_t i = 0; i < num_worker_threads; i++) {
-                std::shared_ptr<CuDNNContext> context = std::make_shared<CuDNNContext>();
-                network->m_context.emplace_back(context);
+            if (cfg_backend != backend_t::TENSORRT) {
+                auto context = std::make_shared<CuDNNContext>();
+                cudnn->m_context.emplace_back(context);
             }
         }
+        gnum++;
     }
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
@@ -213,7 +207,7 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
 
 template <typename net_t>
 bool CuDNNScheduler<net_t>::needs_autodetect() {
-    for (auto& cudnn : m_cudnn) {
+    for (auto& cudnn : m_networks) {
         // If any card has no native fp16 compute, we'll have to benchmark.
         if (!cudnn->has_fp16_compute() && !cudnn->has_tensor_cores()) {
             return true;
