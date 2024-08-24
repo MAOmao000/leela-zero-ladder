@@ -590,8 +590,8 @@ void Network::select_precision(const int channels) {
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
                 myprintf("Using %s single precision.\n", backend.c_str());
             } else {
-                m_forward =
-                    init_net(channels, std::make_unique<CuDNNScheduler<half_float::half>>());
+                m_forward = init_net(channels, std::move(fp16_net));
+//                    init_net(channels, std::make_unique<CuDNNScheduler<half_float::half>>());
                 myprintf("Using %s half precision.\n", backend.c_str());
             }
             return;
