@@ -76,10 +76,10 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
                         cudaFreeAsync(ptr.second, cudaStreamDefault);
                     }
                 }
-            } else if (context->m_buffers_allocated) {
-#else
-            if (context->m_buffers_allocated) {
+            }
 #endif
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+            if (context->m_buffers_allocated) {
                 if (context->m_workspace)
                     cudaFreeAsync(context->m_workspace, cudaStreamDefault);
                 if (context->m_InBuffer)
@@ -92,7 +92,18 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
                     cudaFreeAsync(context->m_PoolBuffer, cudaStreamDefault);
                 if (context->m_TempBuffer)
                     cudaFreeAsync(context->m_TempBuffer, cudaStreamDefault);
+                if (m_net_type == int(NetworkType::MINIGO_SE)) {
+                    if (context->m_alpha_16)
+                        cudaFreeAsync(context->m_alpha_16, cudaStreamDefault);
+                    if (context->m_alpha_32)
+                        cudaFreeAsync(context->m_alpha_32, cudaStreamDefault);
+                    if (context->m_beta_16)
+                        cudaFreeAsync(context->m_beta_16, cudaStreamDefault);
+                    if (context->m_beta_32)
+                        cudaFreeAsync(context->m_beta_32, cudaStreamDefault);
+                }
             }
+#endif
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
