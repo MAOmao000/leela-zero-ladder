@@ -233,9 +233,7 @@ struct conv_descriptor {
     cudnnActivationDescriptor_t activation_identity_descriptor;
     cudnnConvolutionDescriptor_t convolution_descriptor;
     cudnnConvolutionFwdAlgo_t convolution_algorithm;
-    cudnnConvolutionFwdAlgo_t convolution_identity_algorithm;
     size_t workspace_size{0};
-    size_t workspace_identity_size{0};
 
 #if defined(USE_CUDNN_GRAPH)
     cudnn_frontend::graph::Graph graph;
@@ -340,18 +338,24 @@ class CuDNNContext {
     template <typename> friend class CuDNN_Network;
     template <typename> friend class CuDNNScheduler;
 private:
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void *m_workspace{nullptr};
     void *m_InBuffer{nullptr};
     void *m_OutBuffer{nullptr};
     void *m_IdentityOutBuffer{nullptr};
     void *m_PoolBuffer{nullptr};
     void *m_TempBuffer{nullptr};
-    bool m_buffers_allocated{false};
+    void *m_alpha_16{nullptr};
+    void *m_alpha_32{nullptr};
+    void *m_beta_16{nullptr};
+    void *m_beta_32{nullptr};
+#endif
 #if defined(USE_TENSOR_RT)
     std::shared_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
     std::shared_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
     std::map<std::string, void*> mBuffers;
 #endif
+    bool m_buffers_allocated{false};
 };
 
 #if defined(USE_CUDNN_GRAPH)
@@ -515,6 +519,7 @@ private:
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void squeeze_excitation_float(
         cublasHandle_t cublas_handle,
+        std::shared_ptr<CuDNNContext> cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,
@@ -531,6 +536,7 @@ private:
 
     void squeeze_excitation_half(
         cublasHandle_t cublas_handle,
+        std::shared_ptr<CuDNNContext> cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,

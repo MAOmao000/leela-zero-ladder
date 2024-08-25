@@ -203,6 +203,10 @@ void CuDNN_Network<net_t>::initialize(
             if (net_type == int(NetworkType::MINIGO_SE)) {
                 cublasHandle_t cublas;
                 checkCUBLAS(cublasCreate(&cublas));
+                checkCUBLAS(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_DEVICE));
+                if (m_tensorcore) {
+                    checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
+                }
                 m_cublas_handles.emplace_back(cublas);
             }
         }
@@ -318,7 +322,7 @@ void CuDNN_Network<net_t>::convolveIdentityActivation(
         /* wDesc          */conv_desc->filter_descriptor,
         /* *w             */weights,
         /* convDesc       */conv_desc->convolution_descriptor,
-        /* algo           */conv_desc->convolution_identity_algorithm,
+        /* algo           */conv_desc->convolution_algorithm,
         /* *workSpace     */workspace,
         /* workSpaceSize  */conv_desc->workspace_size,
         /* *alpha2        */&_alpha2,
@@ -414,6 +418,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
                  /* filter width dilation    */1,
                  /* mode                     */CUDNN_CROSS_CORRELATION,
                  /* computeType              */compute_type));
+
     checkCUDNN(cudnnSetConvolutionGroupCount(conv_desc->convolution_descriptor, 8));
     checkCUDNN(cudnnSetConvolutionMathType(
                              /* convDesc */conv_desc->convolution_descriptor,
@@ -453,17 +458,6 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
                             /* reluNanOpt     */CUDNN_NOT_PROPAGATE_NAN,
                             /* coef           */0.));
 
-        // Only the CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM algo is enabled with CUDNN_ACTIVATION_IDENTITY.
-        conv_desc->convolution_identity_algorithm = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
-
-        checkCUDNN(cudnnGetConvolutionForwardWorkspaceSize(
-                                         /* handle       */handle,
-                                         /* xDesc        */conv_desc->input_descriptor,
-                                         /* wDesc        */conv_desc->filter_descriptor,
-                                         /* convDesc     */conv_desc->convolution_descriptor,
-                                         /* yDesc        */conv_desc->output_descriptor,
-                                         /* algo         */conv_desc->convolution_identity_algorithm,
-                                         /* *sizeInBytes */&conv_desc->workspace_identity_size));
     }
     return conv_desc;
 }
@@ -473,6 +467,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_float(
     cublasHandle_t cublas_handle,
+    std::shared_ptr<CuDNNContext> cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
@@ -506,41 +501,83 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
         checkCUDA(cudaGetLastError());
     }
 
-    const float alpha = 1.0f;
-    const float beta_first = 0.0f;
-    const float beta_second = 0.0f;
+    //const float alpha = 1.0f;
+    //const float beta_first = 0.0f;
+    //const float beta_second = 0.0f;
 
     // A[channels / 2, channels], B[channels, 1], C[channels / 2, 1]
-    checkCUBLAS(cublasSgemmStridedBatched(
-        cublas_handle,           // handle: handle to the cuBLAS library context
-        CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
-        CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
-        channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
-        1,                       // n: number of columns of op(B[i]) and C[i]
-        channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-        &alpha,                  // alpha: <type> scalar used for multiplication
-        (float *)fc1_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
-                                 //    with dimensions lda x k with lda>=max(1,m)
-                                 //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
-        channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
-        0,                       // strideA: Value of type long long int
-                                 //          that gives the offset in number of elements between A[i] and A[i+1]
-        (float *)bufferPool,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldb x n with ldb>=max(1,k)
-                                 //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
-        channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
-        channels,                // strideB: Value of type long long int
-                                 //          that gives the offset in number of elements between B[i] and B[i+1]
-        &beta_first,             // beta: <type> scalar used for multiplication
-                                 //       If beta == 0, C does not have to be a valid input
-        (float *)bufferOut,      // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldc x n with ldc>=max(1,m)
-                                 //    Matrices C[i] should not overlap; otherwise,
-                                 //    undefined behavior is expected
-        channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
-        channels / 2,            // strideC: Value of type long long int
-                                 //          that gives the offset in number of elements between C[i] and C[i+1]
-        batch_size));            // batchCount: number of GEMMs to perform in the batch
+    if (m_tensorcore) {
+        checkCUBLAS(cublasGemmStridedBatchedEx(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            cudnn_context->m_alpha_32,
+            (float *)fc1_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix A
+            channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            (long long int)0LL,      // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (float *)bufferPool,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix B
+            channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            (long long int)channels, // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            cudnn_context->m_beta_32,
+            //&beta_first,             // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (float *)bufferOut,      // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix C
+            channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            (long long int)(channels / 2), // strideC: Value of type long long int
+                                     //                that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size,              // batchCount: number of GEMMs to perform in the batch
+            CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
+            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+    } else {
+        checkCUBLAS(cublasSgemmStridedBatched(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context->m_alpha_32,
+            (float *)fc1_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            0,                       // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (float *)bufferPool,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            channels,                // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context->m_beta_32,
+            //&beta_first,             // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (float *)bufferOut,      // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            channels / 2,            // strideC: Value of type long long int
+                                     //          that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size));            // batchCount: number of GEMMs to perform in the batch
+    }
 
     add_bias_float((float *)bufferOut,  // in & out: C[1, channels / 2]
                    (float *)fc1_biases, // input: bias[channels / 2]
@@ -551,36 +588,78 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
     checkCUDA(cudaGetLastError());
 
     // A[channels * 2, channels / 2], B[channels / 2, 1], C[channels * 2, 1]
-    checkCUBLAS(cublasSgemmStridedBatched(
-        cublas_handle,           // handle: handle to the cuBLAS library context
-        CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
-        CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
-        channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
-        1,                       // n: number of columns of op(B[i]) and C[i]
-        channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-        &alpha,                  // alpha: <type> scalar used for multiplication
-        (float *)fc2_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
-                                 //    with dimensions lda x k with lda>=max(1,m)
-                                 //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
-        channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
-        0,                       // strideA: Value of type long long int
-                                 //          that gives the offset in number of elements between A[i] and A[i+1]
-        (float *)bufferOut,      // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldb x n with ldb>=max(1,k)
-                                 //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
-        channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
-        channels / 2,            // strideB: Value of type long long int
-                                 //          that gives the offset in number of elements between B[i] and B[i+1]
-        &beta_second,            // beta: <type> scalar used for multiplication
-                                 //       If beta == 0, C does not have to be a valid input
-        (float *)TempBuffer,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldc x n with ldc>=max(1,m)
-                                 //    Matrices C[i] should not overlap; otherwise,
-                                 //    undefined behavior is expected
-        channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
-        channels * 2,            // strideC: Value of type long long int
-                                 //          that gives the offset in number of elements between C[i] and C[i+1]
-        batch_size));            // batchCount: number of GEMMs to perform in the batch
+    if (m_tensorcore) {
+        checkCUBLAS(cublasGemmStridedBatchedEx(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            cudnn_context->m_alpha_32,
+            (float *)fc2_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix A
+            channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            (long long int)0LL,      // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (float *)bufferOut,      // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix B
+            channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            (long long int)(channels / 2), // strideB: Value of type long long int
+                                     //                that gives the offset in number of elements between B[i] and B[i+1]
+            cudnn_context->m_beta_32,
+            //&beta_second,            // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (float *)TempBuffer,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            CUDA_R_32F,              // Enumerant specifying the datatype of matrix C
+            channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            (long long int)channels * 2, // strideC: Value of type long long int
+                                     //              that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size,              // batchCount: number of GEMMs to perform in the batch
+            CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
+            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+    } else {
+        checkCUBLAS(cublasSgemmStridedBatched(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context->m_alpha_32,
+            (float *)fc2_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            0,                       // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (float *)bufferOut,      // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            channels / 2,            // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context->m_beta_32,
+            //&beta_second,            // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (float *)TempBuffer,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            channels * 2,            // strideC: Value of type long long int
+                                     //          that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size));            // batchCount: number of GEMMs to perform in the batch
+    }
 
     add_bias_float((float *)TempBuffer, // in & out: C[1, channels * 2]
                    (float *)fc2_biases, // input: bias[channels * 2]
@@ -615,6 +694,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_half(
     cublasHandle_t cublas_handle,
+    std::shared_ptr<CuDNNContext> cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
@@ -648,41 +728,87 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
         checkCUDA(cudaGetLastError());
     }
 
-    const __half alpha = __float2half(1.0f);
-    const __half beta_first = __float2half(0.0f);
-    const __half beta_second = __float2half(0.0f);
+    //const __half alpha = __float2half(1.0f);
+    //const __half beta_first = __float2half(0.0f);
+    //const __half beta_second = __float2half(0.0f);
+
+    //const float alpha_32 = 1.0f;
+    //const float beta_first_32 = 0.0f;
+    //const float beta_second_32 = 0.0f;
 
     // A[channels / 2, channels], B[channels, 1], C[channels / 2, 1]
-    checkCUBLAS(cublasHgemmStridedBatched(
-        cublas_handle,           // handle: handle to the cuBLAS library context
-        CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
-        CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
-        channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
-        1,                       // n: number of columns of op(B[i]) and C[i]
-        channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-        &alpha,                  // alpha: <type> scalar used for multiplication
-        (__half *)fc1_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
-                                 //    with dimensions lda x k with lda>=max(1,m)
-                                 //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
-        channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
-        0,                       // strideA: Value of type long long int
-                                 //          that gives the offset in number of elements between A[i] and A[i+1]
-        (__half *)bufferPool,    // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldb x n with ldb>=max(1,k)
-                                 //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
-        channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
-        channels,                // strideB: Value of type long long int
-                                 //          that gives the offset in number of elements between B[i] and B[i+1]
-        &beta_first,             // beta: <type> scalar used for multiplication
-                                 //       If beta == 0, C does not have to be a valid input
-        (__half *)bufferOut,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldc x n with ldc>=max(1,m)
-                                 //    Matrices C[i] should not overlap; otherwise,
-                                 //    undefined behavior is expected
-        channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
-        channels / 2,            // strideC: Value of type long long int
-                                 //          that gives the offset in number of elements between C[i] and C[i+1]
-        batch_size));            // batchCount: number of GEMMs to perform in the batch
+    if (m_tensorcore) {
+        checkCUBLAS(cublasGemmStridedBatchedEx(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha_32,               // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context->m_alpha_32,
+            (__half *)fc1_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix A
+            channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            (long long int)0LL,      // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (__half *)bufferPool,    // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix B
+            channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            (long long int)channels, // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context->m_beta_32,
+            //&beta_first_32,          // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (__half *)bufferOut,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix C
+            channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            (long long int)(channels / 2), // strideC: Value of type long long int
+                                     //                that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size,              // batchCount: number of GEMMs to perform in the batch
+            CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
+            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+    } else {
+        checkCUBLAS(cublasHgemmStridedBatched(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            (const __half *)cudnn_context->m_alpha_16,
+            (__half *)fc1_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            channels / 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            0,                       // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (__half *)bufferPool,    // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            channels,                // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const __half *)cudnn_context->m_beta_16,
+            //&beta_first,             // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (__half *)bufferOut,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            channels / 2,            // strideC: Value of type long long int
+                                     //          that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size));            // batchCount: number of GEMMs to perform in the batch
+    }
 
     add_bias_half((__half *)bufferOut,  // in & out: C[1, channels / 2]
                   (__half *)fc1_biases, // input: bias[channels / 2]
@@ -693,36 +819,78 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
     checkCUDA(cudaGetLastError());
 
     // A[channels * 2, channels / 2], B[channels / 2, 1], C[channels * 2, 1]
-    checkCUBLAS(cublasHgemmStridedBatched(
-        cublas_handle,           // handle: handle to the cuBLAS library context
-        CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
-        CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
-        channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
-        1,                       // n: number of columns of op(B[i]) and C[i]
-        channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-        &alpha,                  // alpha: <type> scalar used for multiplication
-        (__half *)fc2_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
-                                 //    with dimensions lda x k with lda>=max(1,m)
-                                 //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
-        channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
-        0,                       // strideA: Value of type long long int
-                                 //          that gives the offset in number of elements between A[i] and A[i+1]
-        (__half *)bufferOut,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldb x n with ldb>=max(1,k)
-                                 //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
-        channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
-        channels / 2,            // strideB: Value of type long long int
-                                 //          that gives the offset in number of elements between B[i] and B[i+1]
-        &beta_second,            // beta: <type> scalar used for multiplication
-                                 //       If beta == 0, C does not have to be a valid input
-        (__half *)TempBuffer,    // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
-                                 //    with dimensions ldc x n with ldc>=max(1,m)
-                                 //    Matrices C[i] should not overlap; otherwise,
-                                 //    undefined behavior is expected
-        channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
-        channels * 2,            // strideC: Value of type long long int
-                                 //          that gives the offset in number of elements between C[i] and C[i+1]
-        batch_size));            // batchCount: number of GEMMs to perform in the batch
+    if (m_tensorcore) {
+        checkCUBLAS(cublasGemmStridedBatchedEx(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha_32,               // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context->m_alpha_32,
+            (__half *)fc2_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix A
+            channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            (long long int)0LL,      // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (__half *)bufferOut,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix B
+            channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            (long long int)(channels / 2), // strideB: Value of type long long int
+                                     //                that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context->m_beta_32,
+            //&beta_second_32,         // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (__half *)TempBuffer,    // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            CUDA_R_16F,              // Enumerant specifying the datatype of matrix C
+            channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            (long long int)channels * 2, // strideC: Value of type long long int
+                                     //              that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size,              // batchCount: number of GEMMs to perform in the batch
+            CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
+            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+    } else {
+        checkCUBLAS(cublasHgemmStridedBatched(
+            cublas_handle,           // handle: handle to the cuBLAS library context
+            CUBLAS_OP_N,             // transa: operation op(A[i]) that is non- or (conj.) transpose
+            CUBLAS_OP_N,             // transb: operation op(B[i]) that is non- or (conj.) transpose
+            channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
+            1,                       // n: number of columns of op(B[i]) and C[i]
+            channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
+            //&alpha,                  // alpha: <type> scalar used for multiplication
+            (const __half *)cudnn_context->m_alpha_16,
+            (__half *)fc2_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
+                                     //    with dimensions lda x k with lda>=max(1,m)
+                                     //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
+            channels * 2,            // lda: leading dimension of two-dimensional array used to store each matrix A[i]
+            0,                       // strideA: Value of type long long int
+                                     //          that gives the offset in number of elements between A[i] and A[i+1]
+            (__half *)bufferOut,     // B: <type>* pointer to the B matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldb x n with ldb>=max(1,k)
+                                     //    if transb==CUBLAS_OP_N and ldb x k with ldb>=max(1,n) max(1,) otherwise
+            channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
+            channels / 2,            // strideB: Value of type long long int
+                                     //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const __half *)cudnn_context->m_beta_16,
+            //&beta_second,            // beta: <type> scalar used for multiplication
+                                     //       If beta == 0, C does not have to be a valid input
+            (__half *)TempBuffer,    // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
+                                     //    with dimensions ldc x n with ldc>=max(1,m)
+                                     //    Matrices C[i] should not overlap; otherwise,
+                                     //    undefined behavior is expected
+            channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
+            channels * 2,            // strideC: Value of type long long int
+                                     //          that gives the offset in number of elements between C[i] and C[i+1]
+            batch_size));            // batchCount: number of GEMMs to perform in the batch
+    }
 
     add_bias_half((__half *)TempBuffer, // in & out: C[1, channels * 2]
                   (__half *)fc2_biases, // input: bias[channels * 2]
@@ -1813,12 +1981,12 @@ void CuDNN_Network<net_t>::forward_activations(
                                                  layer.conv_add_relu_desc_multi[i]->workspace_size);
                         }
                     }
-                    if (m_net_type == int(NetworkType::MINIGO_SE)) {
-                        max_wsize = std::max(max_wsize,
-                                             layer.conv_desc_single[i]->workspace_identity_size);
-                        max_wsize = std::max(max_wsize,
-                                             layer.conv_desc_multi[i]->workspace_identity_size);
-                    }
+//                    if (m_net_type == int(NetworkType::MINIGO_SE)) {
+//                        max_wsize = std::max(max_wsize,
+//                                             layer.conv_desc_single[i]->workspace_identity_size);
+//                        max_wsize = std::max(max_wsize,
+//                                             layer.conv_desc_multi[i]->workspace_identity_size);
+//                    }
                     max_channels = std::max(max_channels,
                                             std::max(layer.channels, layer.outputs));
                 }
@@ -1855,6 +2023,27 @@ void CuDNN_Network<net_t>::forward_activations(
 
             cudnn_context->m_IdentityOutBuffer = d_IdentityOutBuffer;
             cudnn_context->m_PoolBuffer = d_PoolBuffer;
+
+            const __half alpha_16 = __float2half(1.0f);
+            const float alpha_32 = 1.0f;
+            const __half beta_16 = __float2half(0.0f);
+            const float beta_32 = 0.0f;
+            void *d_m_alpha_16;
+            checkCUDA(cudaMalloc((void**)&d_m_alpha_16, sizeof(alpha_16)));
+            checkCUDA(cudaMemcpy(d_m_alpha_16, (__half*)&alpha_16, sizeof(alpha_16), cudaMemcpyHostToDevice));
+            void *d_m_alpha_32;
+            checkCUDA(cudaMalloc((void**)&d_m_alpha_32, sizeof(alpha_32)));
+            checkCUDA(cudaMemcpy(d_m_alpha_32, (float*)&alpha_32, sizeof(alpha_32), cudaMemcpyHostToDevice));
+            void *d_m_beta_16;
+            checkCUDA(cudaMalloc((void**)&d_m_beta_16, sizeof(beta_16)));
+            checkCUDA(cudaMemcpy(d_m_beta_16, (__half*)&beta_16, sizeof(beta_16), cudaMemcpyHostToDevice));
+            void *d_m_beta_32;
+            checkCUDA(cudaMalloc((void**)&d_m_beta_32, sizeof(beta_32)));
+            checkCUDA(cudaMemcpy(d_m_beta_32, (float*)&beta_32, sizeof(beta_32), cudaMemcpyHostToDevice));
+            cudnn_context->m_alpha_32 = d_m_alpha_32;
+            cudnn_context->m_alpha_16 = d_m_alpha_16;
+            cudnn_context->m_beta_32 = d_m_beta_32;
+            cudnn_context->m_beta_16 = d_m_beta_16;
         }
     }
 
@@ -2155,6 +2344,7 @@ void CuDNN_Network<net_t>::forward_activations(
 #endif
             if (typeid(net_t) == typeid(float)) {
                 squeeze_excitation_float(m_cublas_handles[tid],
+                                         cudnn_context,
                                          OutBuffer,         // *bufferIn1: first input
                                          IdentityOutBuffer, // *bufferIn2: second output
                                          TempBuffer,
@@ -2169,6 +2359,7 @@ void CuDNN_Network<net_t>::forward_activations(
                                          NUM_INTERSECTIONS);
             } else {
                 squeeze_excitation_half(m_cublas_handles[tid],
+                                        cudnn_context,
                                         OutBuffer,         // *bufferIn1: first input
                                         IdentityOutBuffer, // *bufferIn2: second output
                                         TempBuffer,
