@@ -25,11 +25,13 @@ set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.58.0 REQUIRED program_options filesystem)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
-# We need OpenBLAS for now, because we make some specific
-# calls. Ideally we'd use OpenBLAS is possible and fall back to
-# not doing those calls if it's not present.
-if(NOT APPLE)
-  set(BLA_VENDOR OpenBLAS)
+if(USE_BLAS)
+  # We need OpenBLAS for now, because we make some specific calls.
+  # Ideally we'd use OpenBLAS is possible and fall back to
+  # not doing those calls if it's not present.
+  if(NOT APPLE)
+    set(BLA_VENDOR OpenBLAS)
+  endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 17)
@@ -88,34 +90,9 @@ if(USE_BACKEND STREQUAL "TENSORRT")
     ${SrcPath}/CuDNNScheduler.cpp
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
-#    ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
     ${SrcPath}/sha2.cpp
   )
-#  set(FEIncludePath "/home/x/cudnn-frontend/include")
-# https://en.wikipedia.org/wiki/CUDA#GPUs_supported
-#  if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
-#    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
-#    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.5)
-#    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.1)
-#    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
-#    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
-#    set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
-#    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-#  else()
-#    message(WARNING "CUDA 10.2 or greater is recommended, but attempting to build anyways")
-#    set(CMAKE_CUDA_ARCHITECTURES 30 37 53 70)
-#  endif()
 
 elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   message(STATUS "-DUSE_BACKEND=CUDNNGRAPH, using CUDNNGRAPH backend.")
@@ -129,8 +106,8 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
     ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
   )
-  set(FEIncludePath "/home/x/cudnn-frontend/include")
-# https://en.wikipedia.org/wiki/CUDA#GPUs_supported
+  set(FE_INCLUDE_PATH "/home/x/cudnn-frontend/include")
+  # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
     set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
@@ -166,7 +143,7 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
     ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
   )
-# https://en.wikipedia.org/wiki/CUDA#GPUs_supported
+  # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
     set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
     set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
@@ -260,43 +237,31 @@ if(USE_BACKEND STREQUAL "TENSORRT")
   string(REGEX MATCH "#define NV_TENSORRT_PATCH ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
   set(TENSORRT_VERSION_PATCH ${CMAKE_MATCH_1})
   set(TENSORRT_VERSION "${TENSORRT_VERSION_MAJOR}.${TENSORRT_VERSION_MINOR}.${TENSORRT_VERSION_PATCH}")
-  # Version 8 is required for serializing the builder timing cache.
-  # Version 8.2 is required for eliminating the global logger for Builder and Runtime.
-  # Version 8.5 is required for eliminating many deprecated APIs and adopting new features.
-  # Version 8.6 is required for CUDA 12 support and further reduction in initialization time.
   if(TENSORRT_VERSION VERSION_LESS 8.6)
     message(FATAL_ERROR "TensorRT 8.6 or greater is required but ${TENSORRT_VERSION} was found.")
   endif()
-#  find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
-#  if((NOT CUDNN_INCLUDE_DIR))
-#    message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
-#  endif()
-#  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS)
-  if(BLAS_FOUND)
-    find_path(BLAS_INCLUDE_DIRS openblas_config.h
-      /usr/include
-      /usr/local/include
-      /usr/include/openblas
-      /opt/OpenBLAS/include
-      /usr/include/x86_64-linux-gnu
-      $ENV{BLAS_HOME}/include)
-    add_definitions(-DUSE_BLAS)
-    if((UNIX AND NOT APPLE) OR WIN32)
-      include_directories(${BLAS_INCLUDE_DIRS})
+  if(USE_BLAS)
+    find_package(BLAS)
+    if(BLAS_FOUND)
+      find_path(BLAS_INCLUDE_DIRS openblas_config.h
+        /usr/include
+        /usr/local/include
+        /usr/include/openblas
+        /opt/OpenBLAS/include
+        /usr/include/x86_64-linux-gnu
+        $ENV{BLAS_HOME}/include)
+      add_definitions(-DUSE_BLAS)
+      if((UNIX AND NOT APPLE) OR WIN32)
+        include_directories(${BLAS_INCLUDE_DIRS})
+      endif()
+      target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
-    target_link_libraries(leelaz ${BLAS_LIBRARIES})
   endif()
-#  add_definitions(-DUSE_CUDNN)
-#  add_definitions(-DUSE_CUDNN_GRAPH)
   add_definitions(-DUSE_TENSOR_RT)
-#  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR} ${FEIncludePath})
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR})
   include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})
-#  target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
-#  target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   message(STATUS "Looking for system CuDNN library.")
@@ -307,20 +272,22 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   endif()
   find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS)
-  if(BLAS_FOUND)
-    find_path(BLAS_INCLUDE_DIRS openblas_config.h
-      /usr/include
-      /usr/local/include
-      /usr/include/openblas
-      /opt/OpenBLAS/include
-      /usr/include/x86_64-linux-gnu
-      $ENV{BLAS_HOME}/include)
-    add_definitions(-DUSE_BLAS)
-    if((UNIX AND NOT APPLE) OR WIN32)
-      include_directories(${BLAS_INCLUDE_DIRS})
+  if(USE_BLAS)
+    find_package(BLAS)
+    if(BLAS_FOUND)
+      find_path(BLAS_INCLUDE_DIRS openblas_config.h
+        /usr/include
+        /usr/local/include
+        /usr/include/openblas
+        /opt/OpenBLAS/include
+        /usr/include/x86_64-linux-gnu
+        $ENV{BLAS_HOME}/include)
+      add_definitions(-DUSE_BLAS)
+      if((UNIX AND NOT APPLE) OR WIN32)
+        include_directories(${BLAS_INCLUDE_DIRS})
+      endif()
+      target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
-    target_link_libraries(leelaz ${BLAS_LIBRARIES})
   endif()
   add_definitions(-DUSE_CUDNN)
   add_definitions(-DUSE_CUDNN_GRAPH)
@@ -338,20 +305,22 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   endif()
   find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
   find_package(OpenCL REQUIRED)
-  find_package(BLAS)
-  if(BLAS_FOUND)
-    find_path(BLAS_INCLUDE_DIRS openblas_config.h
-      /usr/include
-      /usr/local/include
-      /usr/include/openblas
-      /opt/OpenBLAS/include
-      /usr/include/x86_64-linux-gnu
-      $ENV{BLAS_HOME}/include)
-    add_definitions(-DUSE_BLAS)
-    if((UNIX AND NOT APPLE) OR WIN32)
-      include_directories(${BLAS_INCLUDE_DIRS})
+  if(USE_BLAS)
+    find_package(BLAS)
+    if(BLAS_FOUND)
+      find_path(BLAS_INCLUDE_DIRS openblas_config.h
+        /usr/include
+        /usr/local/include
+        /usr/include/openblas
+        /opt/OpenBLAS/include
+        /usr/include/x86_64-linux-gnu
+        $ENV{BLAS_HOME}/include)
+      add_definitions(-DUSE_BLAS)
+      if((UNIX AND NOT APPLE) OR WIN32)
+        include_directories(${BLAS_INCLUDE_DIRS})
+      endif()
+      target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
-    target_link_libraries(leelaz ${BLAS_LIBRARIES})
   endif()
   add_definitions(-DUSE_CUDNN)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
@@ -361,20 +330,22 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "OPENCL")
   find_package(OpenCL REQUIRED)
-  find_package(BLAS)
-  if(BLAS_FOUND)
-    find_path(BLAS_INCLUDE_DIRS openblas_config.h
-      /usr/include
-      /usr/local/include
-      /usr/include/openblas
-      /opt/OpenBLAS/include
-      /usr/include/x86_64-linux-gnu
-      $ENV{BLAS_HOME}/include)
-    add_definitions(-DUSE_BLAS)
-    if((UNIX AND NOT APPLE) OR WIN32)
-      include_directories(${BLAS_INCLUDE_DIRS})
+  if(USE_BLAS)
+    find_package(BLAS)
+    if(BLAS_FOUND)
+      find_path(BLAS_INCLUDE_DIRS openblas_config.h
+        /usr/include
+        /usr/local/include
+        /usr/include/openblas
+        /opt/OpenBLAS/include
+        /usr/include/x86_64-linux-gnu
+        $ENV{BLAS_HOME}/include)
+      add_definitions(-DUSE_BLAS)
+      if((UNIX AND NOT APPLE) OR WIN32)
+        include_directories(${BLAS_INCLUDE_DIRS})
+      endif()
+      target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
-    target_link_libraries(leelaz ${BLAS_LIBRARIES})
   endif()
   include_directories(${OpenCL_INCLUDE_DIRS})
   target_link_libraries(leelaz ${OpenCL_LIBRARIES})
