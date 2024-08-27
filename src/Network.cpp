@@ -53,6 +53,9 @@
 #endif
 #ifdef USE_OPENBLAS
 #include <cblas.h>
+#ifdef USE_DNNL
+#include <dnnl.hpp>
+#endif
 #endif
 #include "CPUPipe.h"
 #include "Network.h"
@@ -266,12 +269,6 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
         m_net_type = NetworkType::MINIGO_SE;
         residual_blocks /= 12;
         myprintf("%d blocks (MiniGo SE).\n", residual_blocks);
-        //if (cfg_backend == backend_t::TENSORRT) {
-        //    myprintf_error("\nTensorRT backend cannot handle MiniGo SE weights.\n");
-        //    myprintf_error("\nSwitch the engine backend to 'OpenCL'.\n");
-        //    cfg_backend = backend_t::OPENCL;
-        //    myprintf("Using OpenCL batch size of %d\n", cfg_batch_size);
-        //}
     }
     else {
         myprintf_error("\nInconsistent number of weights in the file.\n");
@@ -600,7 +597,7 @@ void Network::select_precision(const int channels) {
         std::unique_ptr<ForwardPipe> fp16_net;
         if (cfg_backend == backend_t::OPENCL) {
             fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         } else {
             fp16_net = std::make_unique<CuDNNScheduler<half_float::half>>();
 #endif
@@ -618,7 +615,7 @@ void Network::select_precision(const int channels) {
                 if (cfg_backend == backend_t::OPENCL) {
                     m_forward = init_net(
                         channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
                 } else {
                     m_forward = init_net(
                         channels, std::make_unique<CuDNNScheduler<float>>());
@@ -634,7 +631,7 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
@@ -663,7 +660,7 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
@@ -677,7 +674,7 @@ void Network::select_precision(const int channels) {
             if (cfg_backend == backend_t::OPENCL) {
                 m_forward =
                     init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
             } else {
                 m_forward =
                     init_net(channels, std::make_unique<CuDNNScheduler<float>>());
@@ -692,7 +689,7 @@ void Network::select_precision(const int channels) {
         if (cfg_backend == backend_t::OPENCL) {
             m_forward =
                 init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         } else {
             m_forward =
                 init_net(channels, std::make_unique<CuDNNScheduler<float>>());
@@ -703,7 +700,7 @@ void Network::select_precision(const int channels) {
         if (cfg_backend == backend_t::OPENCL) {
             m_forward = init_net(
                 channels, std::make_unique<OpenCLScheduler<half_float::half>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         } else {
             m_forward = init_net(
                 channels, std::make_unique<CuDNNScheduler<half_float::half>>());
@@ -848,12 +845,19 @@ std::vector<float> innerproduct(const std::vector<float>& input,
     std::vector<float> output(outputs);
 
 #ifdef USE_BLAS
-    cblas_sgemv(CblasRowMajor, CblasNoTrans,
+#ifdef USE_DNNL
+    dnnl_sgemm('N', 'N',
+        outputs, 1, inputs,
+#else
+    //cblas_sgemv(CblasRowMajor, CblasNoTrans,
                 // M     K
-                outputs, inputs,
-                1.0f, &weights[0], inputs,
-                &input[0], 1,
-                0.0f, &output[0], 1);
+                //outputs, inputs,
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+        outputs, 1, inputs,
+#endif
+        1.0f, &weights[0], inputs,
+        &input[0], 1,
+        0.0f, &output[0], 1);
 #else
     EigenVectorMap<float> y(output.data(), outputs);
     y.noalias() =
