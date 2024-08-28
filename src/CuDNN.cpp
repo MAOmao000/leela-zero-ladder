@@ -1858,7 +1858,7 @@ void CuDNN_Network<net_t>::forward_activations(
                 (net_t*)&input[0],
                 inSize,
                 cudaMemcpyHostToDevice));
-        } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
+        } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
             std::copy(input.begin(), input.end(), input_net_t.begin());
             cudaMemcpyAsync(
@@ -2026,7 +2026,7 @@ void CuDNN_Network<net_t>::forward_activations(
 
     if (typeid(net_t) == typeid(float) && cfg_NCHW) {
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input[0], inSize, cudaMemcpyHostToDevice));
-    } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
+    } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
         auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input_net_t[0], inSize, cudaMemcpyHostToDevice));
@@ -3342,7 +3342,7 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::buildMatMulLayer(
 
 template class CuDNN_Network<float>;
 #ifdef USE_HALF
-template class CuDNN_Network<half_float::half>;
+template class CuDNN_Network<__half>;
 #endif
 
 #endif
