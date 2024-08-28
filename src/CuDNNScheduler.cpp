@@ -505,7 +505,11 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
                     if (m_waittime > 1) {
                         m_waittime--;
                     }
-                    count = 1;
+                    //count = 1;
+                    if (cfg_backend == backend_t::TENSORRT)
+                        count = m_forward_queue.size();
+                    else
+                        count = 1;
                     break;
                 }
             }
@@ -577,7 +581,7 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
             x->cv.notify_all();
             index++;
         }
-        if (count == 1) {
+        if (count < cfg_batch_size) {
             m_single_eval_in_progress = false;
         }
     }
@@ -617,7 +621,7 @@ void CuDNNScheduler<net_t>::resume() {
 
 template class CuDNNScheduler<float>;
 #ifdef USE_HALF
-template class CuDNNScheduler<half_float::half>;
+template class CuDNNScheduler<__half>;
 #endif
 
 #endif
