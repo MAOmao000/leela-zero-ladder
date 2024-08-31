@@ -467,7 +467,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_float(
     cublasHandle_t cublas_handle,
-    std::shared_ptr<CuDNNContext> cudnn_context,
+    const CuDNNContext& cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
@@ -510,7 +510,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (float *)fc1_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -525,8 +525,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             (long long int)channels, // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (float *)bufferOut,      // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -534,10 +534,10 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             CUDA_R_32F,              // Enumerant specifying the datatype of matrix C
             channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
             (long long int)(channels / 2), // strideC: Value of type long long int
-                                     //                that gives the offset in number of elements between C[i] and C[i+1]
+                                           //          that gives the offset in number of elements between C[i] and C[i+1]
             batch_size,              // batchCount: number of GEMMs to perform in the batch
             CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
-            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+            CUBLAS_GEMM_DEFAULT));       // Enumerant specifying the algorithm
     } else {
         checkCUBLAS(cublasSgemmStridedBatched(
             cublas_handle,           // handle: handle to the cuBLAS library context
@@ -546,7 +546,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (float *)fc1_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -559,8 +559,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             channels,                // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (float *)bufferOut,      // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -588,7 +588,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (float *)fc2_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -602,9 +602,9 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             CUDA_R_32F,              // Enumerant specifying the datatype of matrix B
             channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             (long long int)(channels / 2), // strideB: Value of type long long int
-                                     //                that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+                                           //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (float *)TempBuffer,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -612,10 +612,10 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             CUDA_R_32F,              // Enumerant specifying the datatype of matrix C
             channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
             (long long int)channels * 2, // strideC: Value of type long long int
-                                     //              that gives the offset in number of elements between C[i] and C[i+1]
+                                         //          that gives the offset in number of elements between C[i] and C[i+1]
             batch_size,              // batchCount: number of GEMMs to perform in the batch
             CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
-            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+            CUBLAS_GEMM_DEFAULT));       // Enumerant specifying the algorithm
     } else {
         checkCUBLAS(cublasSgemmStridedBatched(
             cublas_handle,           // handle: handle to the cuBLAS library context
@@ -624,7 +624,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (float *)fc2_weights,    // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -637,8 +637,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             channels / 2,            // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (float *)TempBuffer,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -682,7 +682,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_half(
     cublasHandle_t cublas_handle,
-    std::shared_ptr<CuDNNContext> cudnn_context,
+    const CuDNNContext& cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
@@ -725,7 +725,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (__half *)fc1_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -740,8 +740,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             (long long int)channels, // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (__half *)bufferOut,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -749,10 +749,10 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             CUDA_R_16F,              // Enumerant specifying the datatype of matrix C
             channels / 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
             (long long int)(channels / 2), // strideC: Value of type long long int
-                                     //                that gives the offset in number of elements between C[i] and C[i+1]
+                                           //          that gives the offset in number of elements between C[i] and C[i+1]
             batch_size,              // batchCount: number of GEMMs to perform in the batch
             CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
-            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+            CUBLAS_GEMM_DEFAULT));       // Enumerant specifying the algorithm
     } else {
         checkCUBLAS(cublasHgemmStridedBatched(
             cublas_handle,           // handle: handle to the cuBLAS library context
@@ -761,7 +761,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels / 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels,                // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const __half *)cudnn_context->m_alpha_16, // alpha: <type> scalar used for multiplication
+            (const __half *)cudnn_context.m_alpha_16, // alpha: <type> scalar used for multiplication
             (__half *)fc1_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -774,8 +774,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels,                // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             channels,                // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const __half *)cudnn_context->m_beta_16, // beta: <type> scalar used for multiplication
-                                     //                        If beta == 0, C does not have to be a valid input
+            (const __half *)cudnn_context.m_beta_16, // beta: <type> scalar used for multiplication
+                                                     //       If beta == 0, C does not have to be a valid input
             (__half *)bufferOut,     // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -803,7 +803,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const float *)cudnn_context->m_alpha_32, // alpha: <type> scalar used for multiplication
+            (const float *)cudnn_context.m_alpha_32, // alpha: <type> scalar used for multiplication
             (__half *)fc2_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -817,9 +817,9 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             CUDA_R_16F,              // Enumerant specifying the datatype of matrix B
             channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             (long long int)(channels / 2), // strideB: Value of type long long int
-                                     //                that gives the offset in number of elements between B[i] and B[i+1]
-            (const float *)cudnn_context->m_beta_32, // beta: <type> scalar used for multiplication
-                                     //                       If beta == 0, C does not have to be a valid input
+                                           //          that gives the offset in number of elements between B[i] and B[i+1]
+            (const float *)cudnn_context.m_beta_32, // beta: <type> scalar used for multiplication
+                                                    //       If beta == 0, C does not have to be a valid input
             (__half *)TempBuffer,    // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -827,10 +827,10 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             CUDA_R_16F,              // Enumerant specifying the datatype of matrix C
             channels * 2,            // ldc: leading dimension of two-dimensional array used to store each matrix C[i]
             (long long int)channels * 2, // strideC: Value of type long long int
-                                     //              that gives the offset in number of elements between C[i] and C[i+1]
+                                         //          that gives the offset in number of elements between C[i] and C[i+1]
             batch_size,              // batchCount: number of GEMMs to perform in the batch
             CUBLAS_COMPUTE_32F_FAST_16F, // Enumerant specifying the computation type
-            CUBLAS_GEMM_DEFAULT));   // Enumerant specifying the algorithm
+            CUBLAS_GEMM_DEFAULT));       // Enumerant specifying the algorithm
     } else {
         checkCUBLAS(cublasHgemmStridedBatched(
             cublas_handle,           // handle: handle to the cuBLAS library context
@@ -839,7 +839,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels * 2,            // m: number of rows of matrix op(A[i]) and C[i]
             1,                       // n: number of columns of op(B[i]) and C[i]
             channels / 2,            // k: number of columns of op(A[i]) and rows of op(B[i])
-            (const __half *)cudnn_context->m_alpha_16, // alpha: <type> scalar used for multiplication
+            (const __half *)cudnn_context.m_alpha_16, // alpha: <type> scalar used for multiplication
             (__half *)fc2_weights,   // A: <type>* pointer to the A matrix corresponding to the first instance of the batch,
                                      //    with dimensions lda x k with lda>=max(1,m)
                                      //    if transa==CUBLAS_OP_N and lda x m with lda>=max(1,k) otherwise
@@ -852,8 +852,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             channels / 2,            // ldb: leading dimension of two-dimensional array used to store each matrix B[i]
             channels / 2,            // strideB: Value of type long long int
                                      //          that gives the offset in number of elements between B[i] and B[i+1]
-            (const __half *)cudnn_context->m_beta_16, // beta: <type> scalar used for multiplication
-                                     //                        If beta == 0, C does not have to be a valid input
+            (const __half *)cudnn_context.m_beta_16, // beta: <type> scalar used for multiplication
+                                                     //       If beta == 0, C does not have to be a valid input
             (__half *)TempBuffer,    // C: <type>* pointer to the C matrix corresponding to the first instance of the batch,
                                      //    with dimensions ldc x n with ldc>=max(1,m)
                                      //    Matrices C[i] should not overlap; otherwise,
@@ -1833,7 +1833,7 @@ void CuDNN_Network<net_t>::forward_activations(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
-    std::shared_ptr<CuDNNContext> cudnn_context,
+    CuDNNContext& cudnn_context,
     const int tid,
     const int batch_size) {
 
@@ -1850,8 +1850,8 @@ void CuDNN_Network<net_t>::forward_activations(
 
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
-        auto search = cudnn_context->mBuffers.find("InputFeature");
-        assert(search != cudnn_context->mBuffers.end());
+        auto search = cudnn_context.mBuffers.find("InputFeature");
+        assert(search != cudnn_context.mBuffers.end());
         if (typeid(net_t) == typeid(float) && cfg_NCHW) {
             checkCUDA(cudaMemcpyAsync(
                 search->second,
@@ -1877,36 +1877,36 @@ void CuDNN_Network<net_t>::forward_activations(
                 cudaMemcpyHostToDevice);
         }
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            cudnn_context->mContext->setInputShape("InputFeature",
+            cudnn_context.mContext->setInputShape("InputFeature",
                 nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
         } else {
-            cudnn_context->mContext_n->setInputShape("InputFeature",
+            cudnn_context.mContext_n->setInputShape("InputFeature",
                 nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
         }
         if (m_net_type == int(NetworkType::MINIGO_SE)) {
             if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-                cudnn_context->mContext->setInputShape("BatchSize",
+                cudnn_context.mContext->setInputShape("BatchSize",
                     nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             } else {
-                cudnn_context->mContext_n->setInputShape("BatchSize",
+                cudnn_context.mContext_n->setInputShape("BatchSize",
                     nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             }
         }
         // Asynchronously enqueue the inference work
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            ASSERT(cudnn_context->mContext->enqueueV3(cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
         } else {
-            ASSERT(cudnn_context->mContext_n->enqueueV3(cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext_n->enqueueV3(cudaStreamPerThread));
         }
-        search = cudnn_context->mBuffers.find("OutputPolicy");
-        assert(search != cudnn_context->mBuffers.end());
+        search = cudnn_context.mBuffers.find("OutputPolicy");
+        assert(search != cudnn_context.mBuffers.end());
         checkCUDA(cudaMemcpy(
             &pol_net_t[0],
             search->second,
             pol_elements * sizeof(net_t),
             cudaMemcpyDeviceToHost));
-        search = cudnn_context->mBuffers.find("OutputValue");
-        assert(search != cudnn_context->mBuffers.end());
+        search = cudnn_context.mBuffers.find("OutputValue");
+        assert(search != cudnn_context.mBuffers.end());
         checkCUDA(cudaMemcpy(
             &val_net_t[0],
             search->second,
@@ -1932,7 +1932,7 @@ void CuDNN_Network<net_t>::forward_activations(
     // Always allocates enough space for floats
     constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(float);
 
-    if (!cudnn_context->m_buffers_allocated) {
+    if (!cudnn_context.m_buffers_allocated) {
         auto max_wsize = size_t{0};
         auto max_channels = unsigned{0};
         int layer_i = 0;
@@ -1977,11 +1977,11 @@ void CuDNN_Network<net_t>::forward_activations(
         void *d_TempBuffer;
         checkCUDA(cudaMalloc((void**)&d_TempBuffer, alloc_insize));
 
-        cudnn_context->m_workspace = d_workspace;
-        cudnn_context->m_InBuffer = d_InBuffer;
-        cudnn_context->m_OutBuffer = d_OutBuffer;
-        cudnn_context->m_TempBuffer = d_TempBuffer;
-        cudnn_context->m_buffers_allocated = true;
+        cudnn_context.m_workspace = d_workspace;
+        cudnn_context.m_InBuffer = d_InBuffer;
+        cudnn_context.m_OutBuffer = d_OutBuffer;
+        cudnn_context.m_TempBuffer = d_TempBuffer;
+        cudnn_context.m_buffers_allocated = true;
 
         if (m_net_type == int(NetworkType::MINIGO_SE)) {
             void *d_IdentityOutBuffer;
@@ -1991,8 +1991,8 @@ void CuDNN_Network<net_t>::forward_activations(
             checkCUDA(cudaMalloc((void**)&d_PoolBuffer,
                                  cfg_batch_size * max_channels * sizeof(net_t)));
 
-            cudnn_context->m_IdentityOutBuffer = d_IdentityOutBuffer;
-            cudnn_context->m_PoolBuffer = d_PoolBuffer;
+            cudnn_context.m_IdentityOutBuffer = d_IdentityOutBuffer;
+            cudnn_context.m_PoolBuffer = d_PoolBuffer;
 
             const __half alpha_16 = __float2half(1.0f);
             const float alpha_32 = 1.0f;
@@ -2010,19 +2010,19 @@ void CuDNN_Network<net_t>::forward_activations(
             void *d_m_beta_32;
             checkCUDA(cudaMalloc((void**)&d_m_beta_32, sizeof(beta_32)));
             checkCUDA(cudaMemcpy(d_m_beta_32, (float*)&beta_32, sizeof(beta_32), cudaMemcpyHostToDevice));
-            cudnn_context->m_alpha_32 = d_m_alpha_32;
-            cudnn_context->m_alpha_16 = d_m_alpha_16;
-            cudnn_context->m_beta_32 = d_m_beta_32;
-            cudnn_context->m_beta_16 = d_m_beta_16;
+            cudnn_context.m_alpha_32 = d_m_alpha_32;
+            cudnn_context.m_alpha_16 = d_m_alpha_16;
+            cudnn_context.m_beta_32 = d_m_beta_32;
+            cudnn_context.m_beta_16 = d_m_beta_16;
         }
     }
 
-    auto workspace = cudnn_context->m_workspace;
-    auto InBuffer = cudnn_context->m_InBuffer;
-    auto OutBuffer = cudnn_context->m_OutBuffer;
-    auto IdentityOutBuffer = cudnn_context->m_IdentityOutBuffer;
-    auto PoolBuffer = cudnn_context->m_PoolBuffer;
-    auto TempBuffer = cudnn_context->m_TempBuffer;
+    auto workspace = cudnn_context.m_workspace;
+    auto InBuffer = cudnn_context.m_InBuffer;
+    auto OutBuffer = cudnn_context.m_OutBuffer;
+    auto IdentityOutBuffer = cudnn_context.m_IdentityOutBuffer;
+    auto PoolBuffer = cudnn_context.m_PoolBuffer;
+    auto TempBuffer = cudnn_context.m_TempBuffer;
 
     if (typeid(net_t) == typeid(float) && cfg_NCHW) {
         checkCUDA(cudaMemcpy(InBuffer, (net_t*)&input[0], inSize, cudaMemcpyHostToDevice));
@@ -2443,7 +2443,7 @@ void CuDNN_Network<net_t>::forward(
     const int tid,
     const int batch_size) {
 
-    forward_activations(input, output_pol, output_val, m_context[tid], tid, batch_size);
+    forward_activations(input, output_pol, output_val, *m_context[tid], tid, batch_size);
 }
 
 #if defined(USE_TENSOR_RT)
@@ -2461,7 +2461,7 @@ bool CuDNN_Network<net_t>::build(
             "1.0",                    // modelVersion,
             Network::INPUT_CHANNELS,  // numInputChannels,
             cfg_execute_context,
-            cfg_execute_context == execute_t::MULTI ? num_worker_threads : batch_size);
+            batch_size);
     } else {
         mTuneDesc = strprintf(
             R"|("salt"(%s%s)"model half"(%s,%d,%d,%d))|",
@@ -2470,9 +2470,8 @@ bool CuDNN_Network<net_t>::build(
             "1.0",                    // modelVersion,
             Network::INPUT_CHANNELS,  // numInputChannels,
             cfg_execute_context,
-            cfg_execute_context == execute_t::MULTI ? num_worker_threads : batch_size);
+            batch_size);
     }
-    //Logger logger;
     auto builder
         = TrtUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(*m_logger));
     if (!builder) {
@@ -2568,7 +2567,7 @@ bool CuDNN_Network<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 cfg_execute_context,
-                cfg_execute_context == execute_t::MULTI ? num_worker_threads : batch_size,
+                batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
@@ -2581,7 +2580,7 @@ bool CuDNN_Network<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 cfg_execute_context,
-                cfg_execute_context == execute_t::MULTI ? num_worker_threads : batch_size,
+                batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
@@ -2668,7 +2667,7 @@ bool CuDNN_Network<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 cfg_execute_context,
-                cfg_execute_context == execute_t::MULTI ? num_worker_threads : batch_size,
+                batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
@@ -2725,20 +2724,20 @@ bool CuDNN_Network<net_t>::build(
     }
 
     for (auto i = 0; i < num_worker_threads; i++) {
-        std::shared_ptr<nvinfer1::IRuntime> runtime
-            = std::shared_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(*m_logger));
+        std::unique_ptr<nvinfer1::IRuntime> runtime
+            = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(*m_logger));
         if (!runtime) {
             std::cerr << "createInferRuntime error: " << std::endl;
             return false;
         }
-        std::shared_ptr<nvinfer1::ICudaEngine> engine
-            = std::shared_ptr<nvinfer1::ICudaEngine>(
+        std::unique_ptr<nvinfer1::ICudaEngine> engine
+            = std::unique_ptr<nvinfer1::ICudaEngine>(
                 runtime->deserializeCudaEngine(plan.data(), plan.size()));
         if (!engine) {
             std::cerr << "deserializeCudaEngine error: " << std::endl;
             return false;
         }
-        std::shared_ptr<CuDNNContext> context = std::make_shared<CuDNNContext>();
+        std::unique_ptr<CuDNNContext> context = std::make_unique<CuDNNContext>();
         context->mContext.reset(engine->createExecutionContext());
         if (cfg_execute_context == execute_t::DOUBLE) {
             context->mContext_n.reset(engine->createExecutionContext());
@@ -2781,9 +2780,9 @@ bool CuDNN_Network<net_t>::build(
         }
         cudaStreamSynchronize(cudaStreamPerThread);
         context->m_buffers_allocated = true;
-        mRuntime.emplace_back(runtime);
-        mEngine.emplace_back(engine);
-        m_context.emplace_back(context);
+        mRuntime.emplace_back(std::move(runtime));
+        mEngine.emplace_back(std::move(engine));
+        m_context.emplace_back(std::move(context));
     }
     return true;
 }
@@ -2995,22 +2994,22 @@ void CuDNN_Network<net_t>::constructNetwork(
                 layer.channels / 2,
                 layer.outputs * 2);
 
-                gammaLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, 0, 0, 0}},
-                    {4 ,{0, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-                gammaLayer->setInput(2, *shapeLayer->getOutput(0));
+            gammaLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, 0, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            gammaLayer->setInput(2, *shapeLayer->getOutput(0));
             gammaLayer->setName((layer.name + ".gamma").c_str());
 
-                biasLayer = network->addSlice(
-                    *fourthMatMulLayer->getOutput(0),
-                    {4 ,{0, layer.channels, 0, 0}},
-                    {4 ,{0, layer.channels, 1, 1}},
-                    {4 ,{1, 1, 1, 1}}
-                );
-                biasLayer->setInput(2, *shapeLayer->getOutput(0));
+            biasLayer = network->addSlice(
+                *fourthMatMulLayer->getOutput(0),
+                {4 ,{0, layer.channels, 0, 0}},
+                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{1, 1, 1, 1}}
+            );
+            biasLayer->setInput(2, *shapeLayer->getOutput(0));
             biasLayer->setName((layer.name + ".bias").c_str());
 
             auto sigLayer = buildActivationLayer(

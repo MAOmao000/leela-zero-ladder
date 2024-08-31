@@ -445,7 +445,7 @@ public:
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
-        std::shared_ptr<CuDNNContext> cudnn_context,
+        CuDNNContext& cudnn_context,
         const int tid,
         const int batch_size = 1
     );
@@ -459,11 +459,11 @@ public:
     }
 
     std::vector<CuDNN_Layer> m_layers;
-    std::vector<std::shared_ptr<CuDNNContext>> m_context;
+    std::vector<std::unique_ptr<CuDNNContext>> m_context;
 
 #if defined(USE_TENSOR_RT)
-    std::vector<std::shared_ptr<nvinfer1::IRuntime>> mRuntime;
-    std::vector<std::shared_ptr<nvinfer1::ICudaEngine>> mEngine;
+    std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
+    std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
 
 protected:
     std::map<std::string, nvinfer1::Weights> mWeightMap;
@@ -519,7 +519,7 @@ private:
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void squeeze_excitation_float(
         cublasHandle_t cublas_handle,
-        std::shared_ptr<CuDNNContext> cudnn_context,
+        const CuDNNContext& cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,
@@ -536,7 +536,7 @@ private:
 
     void squeeze_excitation_half(
         cublasHandle_t cublas_handle,
-        std::shared_ptr<CuDNNContext> cudnn_context,
+        const CuDNNContext& cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
         void *bufferTemp,

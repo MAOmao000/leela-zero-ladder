@@ -34,7 +34,7 @@ static void bn_stddivs_to_conv(std::vector<float>& w,
     for(auto o = 0; o < outputs; o++) {
         for(auto c = 0; c < channels; c++) {
             for(auto i = 0; i < 9; i++) {
-                w[o*channels * 9 + c * 9 + i] *= bn_stddivs[o];
+                w[o * channels * 9 + c * 9 + i] *= bn_stddivs[o];
             }
         }
         // Multiply by -1 to convert to bias
@@ -118,7 +118,7 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             for (const auto& context : cudnn_net->m_context) {
                 if (context->m_buffers_allocated) {
                     context->mContext.reset();
-                    if (cfg_execute_context == execute_t::MULTI) {
+                    if (cfg_execute_context == execute_t::DOUBLE) {
                         context->mContext_n.reset();
                     }
                 }
@@ -203,8 +203,8 @@ void CuDNNScheduler<net_t>::initialize(int channels, const int net_type, const s
                 std::thread(&CuDNNScheduler<net_t>::batch_worker, this, gnum, i);
             m_worker_threads.emplace_back(std::move(t));
             if (cfg_backend != backend_t::TENSORRT) {
-                auto context = std::make_shared<CuDNNContext>();
-                cudnn->m_context.emplace_back(context);
+                auto context = std::make_unique<CuDNNContext>();
+                cudnn->m_context.emplace_back(std::move(context));
             }
         }
         gnum++;
@@ -506,7 +506,7 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
                         m_waittime--;
                     }
                     //count = 1;
-                    if (cfg_backend == backend_t::TENSORRT)
+                    if (cfg_backend == backend_t::TENSORRT && cfg_execute_context == execute_t::SINGLE)
                         count = m_forward_queue.size();
                     else
                         count = 1;
