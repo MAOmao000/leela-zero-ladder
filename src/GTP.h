@@ -104,7 +104,7 @@ extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
 #ifdef USE_HALF
 enum class precision_t {
-    AUTO, SINGLE, HALF, INT8
+    AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
 #endif
@@ -133,7 +133,7 @@ extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
 extern bool cfg_cache_plan;
 enum class execute_t {
-    NONE, SINGLE, DOUBLE, MULTI
+    NONE, SINGLE, DOUBLE
 };
 extern execute_t cfg_execute_context;
 enum class backend_t {
