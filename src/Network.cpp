@@ -1104,8 +1104,11 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
 
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        if (ladder_map[sym_idx]) result.policy[sym_idx] = 0.0f; // outputs[idx] * 1.175494e-38;
-        else result.policy[sym_idx] = outputs[idx];
+        if (ladder_map[sym_idx]) {
+            result.policy[sym_idx] = -1.0f;
+        } else {
+            result.policy[sym_idx] = outputs[idx];
+        }
     }
 
     result.policy_pass = outputs[NUM_INTERSECTIONS];
