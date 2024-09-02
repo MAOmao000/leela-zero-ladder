@@ -238,6 +238,8 @@ void CuDNNScheduler<net_t>::push_input_convolution(unsigned int filter_size,
         std::vector<float> weights_conv = std::vector<float>(weights);
         std::vector<float> means_conv = std::vector<float>(means);
 
+        // By batch normalizing the weights and biases in advance,
+        // batch normalization is not required during inference.
         bn_stddivs_to_conv(weights_conv,
                            variances,
                            means_conv,
@@ -268,6 +270,8 @@ void CuDNNScheduler<net_t>::push_residual(unsigned int filter_size,
         std::vector<float> weights_2_conv = std::vector<float>(weights_2);
         std::vector<float> means_2_conv = std::vector<float>(means_2);
 
+        // By batch normalizing the weights and biases in advance,
+        // batch normalization is not required during inference.
         bn_stddivs_to_conv(weights_1_conv,
                            variances_1,
                            means_1_conv,
@@ -321,6 +325,8 @@ void CuDNNScheduler<net_t>::push_residual_se(unsigned int filter_size,
         std::vector<float> fc2_w_conv = std::vector<float>(fc2_w);
         std::vector<float> fc2_b_conv = std::vector<float>(fc2_b);
 
+        // By batch normalizing the weights and biases in advance,
+        // batch normalization is not required during inference.
         bn_stddivs_to_conv(weights_1_conv,
                            variances_1,
                            means_1_conv,
