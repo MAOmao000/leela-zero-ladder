@@ -94,7 +94,8 @@ void global_average_pooling_float(
     float* output,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     int shared_size_base = 1;
     while (shared_size_base < spatial) {
@@ -105,7 +106,7 @@ void global_average_pooling_float(
     const int blocks = DivUp(total_elements, block_size);
     const int shared_size = sizeof(float) * shared_size_base * 2;
 
-    global_average_pooling_kernel_float<<<blocks, block_size, shared_size>>>(
+    global_average_pooling_kernel_float<<<blocks, block_size, shared_size, stream>>>(
         input, output, N, C, spatial);
 }
 
@@ -137,10 +138,11 @@ void global_average_pooling_float_NHWC(
     float* output,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     // For NHWC fp32, simply launch N blocks, each with C threads.
-    global_average_pooling_kernel_float_NHWC<<<N, C>>>(
+    global_average_pooling_kernel_float_NHWC<<<N, C, 0, stream>>>(
         input, output, N * C * spatial, N * C);
 }
 
@@ -195,7 +197,9 @@ void global_average_pooling_half(
     __half* output,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
+
     int shared_size_base = 1;
     while (shared_size_base < spatial) {
         shared_size_base *= 2;
@@ -205,7 +209,7 @@ void global_average_pooling_half(
     const int blocks = DivUp(total_elements, block_size);
     const int shared_size = sizeof(float) * shared_size_base * 2;
 
-    global_average_pooling_kernel_half << <blocks, block_size, shared_size >> > (
+    global_average_pooling_kernel_half<<<blocks, block_size, shared_size, stream>>>(
         input, output, N, C, spatial);
 }
 
@@ -237,10 +241,11 @@ void global_average_pooling_half_NHWC(
     __half* output,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     // For NHWC fp16, simply launch N blocks, each with C threads.
-    global_average_pooling_kernel_half_NHWC<<<N, C>>>(
+    global_average_pooling_kernel_half_NHWC<<<N, C, 0, stream>>>(
         (__half*)input, (__half*)output, N * C * spatial, N * C);
 }
 
@@ -267,7 +272,8 @@ void add_bias_float(
     const float* biases,
     const int N,
     const int C,
-    const bool is_relu) {
+    const bool is_relu,
+    cudaStream_t stream) {
 
     int cThreads;
     int cBlocks;
@@ -278,7 +284,7 @@ void add_bias_float(
         throw std::runtime_error("add_bias_float: batch size too large given channel size");
     dim3 grid(cBlocks, nBlocks, 1);
     dim3 threads(cThreads, nThreads, 1);
-    add_bias_kernel_float<<<grid, threads>>>(buf, biases, N, C, is_relu);
+    add_bias_kernel_float<<<grid, threads, 0, stream>>>(buf, biases, N, C, is_relu);
 }
 
 __global__ void add_bias_kernel_half(
@@ -308,7 +314,8 @@ void add_bias_half(
     const __half* biases,
     const int N,
     const int C,
-    const bool is_relu) {
+    const bool is_relu,
+    cudaStream_t stream) {
 
     int cThreads;
     int cBlocks;
@@ -319,7 +326,7 @@ void add_bias_half(
         throw std::runtime_error("add_bias_half: batch size too large given channel size");
     dim3 grid(cBlocks, nBlocks, 1);
     dim3 threads(cThreads, nThreads, 1);
-    add_bias_kernel_half<<<grid, threads>>>(buf, biases, N, C, is_relu);
+    add_bias_kernel_half<<<grid, threads, 0, stream>>>(buf, biases, N, C, is_relu);
 }
 
 __global__ void se_scale_kernel_float(
@@ -362,12 +369,13 @@ void se_scale_float(
     const float* bufferIn,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_float<<<blocks, block_size>>>(
+    se_scale_kernel_float<<<blocks, block_size, 0, stream>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
@@ -411,13 +419,14 @@ void se_scale_float_NHWC(
     const float* bufferIn,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
 
-    se_scale_kernel_float_NHWC<<<blocks, block_size>>>(
+    se_scale_kernel_float_NHWC<<<blocks, block_size, 0, stream>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
@@ -461,12 +470,13 @@ void se_scale_half(
     const __half* bufferIn,
     const int N,
     const int C,
-    const int spatial) {
+    const int spatial,
+    cudaStream_t stream) {
 
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_half<<<blocks, block_size>>>(
+    se_scale_kernel_half<<<blocks, block_size, 0, stream>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 
@@ -510,46 +520,13 @@ void se_scale_half_NHWC(
     const __half* bufferIn,
     const int N,
     const int C,
-    const int spatial) {
-
-    const int total_elements = C * spatial * N;
-    const int block_size = 256;
-    const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_half_NHWC<<<blocks, block_size>>>(
-        out_buf, buf, biases, bufferIn, N, C, spatial);
-}
-
-void se_scale_float_stream(
-    float* out_buf,
-    const float* buf,
-    const float* biases,
-    const float* bufferIn,
-    const int N,
-    const int C,
     const int spatial,
     cudaStream_t stream) {
 
     const int total_elements = C * spatial * N;
     const int block_size = 256;
     const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_float<<<blocks, block_size , 0, stream>>> (
-        out_buf, buf, biases, bufferIn, N, C, spatial);
-}
-
-void se_scale_half_stream(
-    __half* out_buf,
-    const __half* buf,
-    const __half* biases,
-    const __half* bufferIn,
-    const int N,
-    const int C,
-    const int spatial,
-    cudaStream_t stream) {
-
-    const int total_elements = C * spatial * N;
-    const int block_size = 256;
-    const int blocks = DivUp(total_elements, block_size);
-    se_scale_kernel_half<<<blocks, block_size, 0, stream>>>(
+    se_scale_kernel_half_NHWC<<<blocks, block_size, 0, stream>>>(
         out_buf, buf, biases, bufferIn, N, C, spatial);
 }
 #endif

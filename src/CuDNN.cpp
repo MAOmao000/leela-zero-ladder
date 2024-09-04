@@ -199,6 +199,9 @@ void CuDNN_Network<net_t>::initialize(
         for (auto i = 0; i < m_num_worker_threads; i++) {
             cudnnHandle_t cudnn;
             checkCUDNN(cudnnCreate(&cudnn));
+            cudaStream_t stream;
+            checkCUDA(cudaStreamCreate(&stream));
+            checkCUDNN(cudnnSetStream(cudnn, stream));
             m_handle.emplace_back(cudnn);
             if (net_type == int(NetworkType::MINIGO_SE)) {
                 cublasHandle_t cublas;
@@ -207,17 +210,29 @@ void CuDNN_Network<net_t>::initialize(
                 if (m_tensorcore) {
                     checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
                 }
+                checkCUBLAS(cublasSetStream(cublas, stream));
+                m_streams.emplace_back(stream);
                 m_cublas_handles.emplace_back(cublas);
             }
         }
 #if defined(USE_TENSOR_RT)
     } else {
         m_model_hash = model_hash;
+        for (auto i = 0; i < m_num_worker_threads; i++) {
+            cudaStream_t stream;
+            checkCUDA(cudaStreamCreate(&stream));
+            m_streams.emplace_back(stream);
+        }
 #endif
     }
 #else
 #if defined(USE_TENSOR_RT)
     m_model_hash = model_hash;
+    for (auto i = 0; i < m_num_worker_threads; i++) {
+        cudaStream_t stream;
+        checkCUDA(cudaStreamCreate(&stream));
+        m_streams.emplace_back(stream);
+    }
 #endif
 #endif
 }
@@ -467,6 +482,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_float(
     cublasHandle_t cublas_handle,
+    cudaStream_t stream,
     const CuDNNContext& cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
@@ -489,7 +505,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             (float *)bufferPool,      // output: GAP output
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
         checkCUDA(cudaGetLastError());
     } else {
         global_average_pooling_float_NHWC(
@@ -497,7 +514,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             (float *)bufferPool,      // output: GAP output
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
         checkCUDA(cudaGetLastError());
     }
 
@@ -575,7 +593,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
                    (float *)fc1_biases, // input: bias[channels / 2]
                    batch_size,
                    channels / 2,
-                   true);
+                   true,
+                   stream);
 
     checkCUDA(cudaGetLastError());
 
@@ -653,7 +672,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
                    (float *)fc2_biases, // input: bias[channels * 2]
                    batch_size,
                    channels * 2,
-                   false);
+                   false,
+                   stream);
 
     checkCUDA(cudaGetLastError());
 
@@ -665,7 +685,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             (float *)bufferIn1,  // input: residual input(before convolve)
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
     } else {
         se_scale_float_NHWC(
             (float *)bufferOut,  // output: squeeze_excitation output
@@ -674,7 +695,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
             (float *)bufferIn1,  // input: residual input(before convolve)
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
     }
     checkCUDA(cudaGetLastError());
 }
@@ -682,6 +704,7 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
 template <typename net_t>
 void CuDNN_Network<net_t>::squeeze_excitation_half(
     cublasHandle_t cublas_handle,
+    cudaStream_t stream,
     const CuDNNContext& cudnn_context,
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
@@ -704,7 +727,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             (__half *)bufferPool,      // output: GAP output
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
         checkCUDA(cudaGetLastError());
     } else {
         global_average_pooling_half_NHWC(
@@ -712,7 +736,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             (__half *)bufferPool,      // output: GAP output
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
         checkCUDA(cudaGetLastError());
     }
 
@@ -790,7 +815,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
                   (__half *)fc1_biases, // input: bias[channels / 2]
                   batch_size,
                   channels / 2,
-                  true);
+                  true,
+                  stream);
 
     checkCUDA(cudaGetLastError());
 
@@ -868,7 +894,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
                   (__half *)fc2_biases, // input: bias[channels * 2]
                   batch_size,
                   channels * 2,
-                  false);
+                  false,
+                  stream);
 
     checkCUDA(cudaGetLastError());
 
@@ -880,7 +907,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             (__half *)bufferIn1,  // input: residual input(before convolve)
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
     } else {
         se_scale_half_NHWC(
             (__half *)bufferOut,  // output: squeeze_excitation output
@@ -889,7 +917,8 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
             (__half *)bufferIn1,  // input: residual input(before convolve)
             batch_size,
             channels,
-            spatial);
+            spatial,
+            stream);
     }
     checkCUDA(cudaGetLastError());
 }
@@ -1857,7 +1886,8 @@ void CuDNN_Network<net_t>::forward_activations(
                 search->second,
                 (net_t*)&input[0],
                 inSize,
-                cudaMemcpyHostToDevice));
+                cudaMemcpyHostToDevice,
+                m_streams[tid]));
         } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
             std::copy(input.begin(), input.end(), input_net_t.begin());
@@ -1865,7 +1895,8 @@ void CuDNN_Network<net_t>::forward_activations(
                 search->second,
                 (net_t*)&input_net_t[0],
                 inSize,
-                cudaMemcpyHostToDevice);
+                cudaMemcpyHostToDevice,
+                m_streams[tid]);
         } else {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
             input_net_t = NCHW_to_NHWC<net_t>(
@@ -1874,7 +1905,8 @@ void CuDNN_Network<net_t>::forward_activations(
                 search->second,
                 (net_t*)&input_net_t[0],
                 inSize,
-                cudaMemcpyHostToDevice);
+                cudaMemcpyHostToDevice,
+                m_streams[tid]);
         }
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
             cudnn_context.mContext->setInputShape("InputFeature",
@@ -1892,26 +1924,31 @@ void CuDNN_Network<net_t>::forward_activations(
                     nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             }
         }
+        search = cudnn_context.mBuffers.find("OutputPolicy");
+        cudaStreamSynchronize(m_streams[tid]);
         // Asynchronously enqueue the inference work
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext->enqueueV3(m_streams[tid])); // cudaStreamPerThread));
         } else {
-            ASSERT(cudnn_context.mContext_n->enqueueV3(cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext_n->enqueueV3(m_streams[tid])); // cudaStreamPerThread));
         }
         search = cudnn_context.mBuffers.find("OutputPolicy");
         assert(search != cudnn_context.mBuffers.end());
-        checkCUDA(cudaMemcpy(
+        checkCUDA(cudaMemcpyAsync(
             &pol_net_t[0],
             search->second,
             pol_elements * sizeof(net_t),
-            cudaMemcpyDeviceToHost));
+            cudaMemcpyDeviceToHost,
+            m_streams[tid]));
         search = cudnn_context.mBuffers.find("OutputValue");
         assert(search != cudnn_context.mBuffers.end());
-        checkCUDA(cudaMemcpy(
+        checkCUDA(cudaMemcpyAsync(
             &val_net_t[0],
             search->second,
             val_elements * sizeof(net_t),
-            cudaMemcpyDeviceToHost));
+            cudaMemcpyDeviceToHost,
+            m_streams[tid]));
+        cudaStreamSynchronize(m_streams[tid]);
 
         if (cfg_NCHW) {
             std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
@@ -2000,16 +2037,21 @@ void CuDNN_Network<net_t>::forward_activations(
             const float beta_32 = 0.0f;
             void *d_m_alpha_16;
             checkCUDA(cudaMalloc((void**)&d_m_alpha_16, sizeof(alpha_16)));
-            checkCUDA(cudaMemcpy(d_m_alpha_16, (__half*)&alpha_16, sizeof(alpha_16), cudaMemcpyHostToDevice));
+            checkCUDA(cudaMemcpyAsync(d_m_alpha_16, (__half*)&alpha_16, sizeof(alpha_16),
+                      cudaMemcpyHostToDevice, m_streams[tid]));
             void *d_m_alpha_32;
             checkCUDA(cudaMalloc((void**)&d_m_alpha_32, sizeof(alpha_32)));
-            checkCUDA(cudaMemcpy(d_m_alpha_32, (float*)&alpha_32, sizeof(alpha_32), cudaMemcpyHostToDevice));
+            checkCUDA(cudaMemcpyAsync(d_m_alpha_32, (float*)&alpha_32, sizeof(alpha_32),
+                      cudaMemcpyHostToDevice, m_streams[tid]));
             void *d_m_beta_16;
             checkCUDA(cudaMalloc((void**)&d_m_beta_16, sizeof(beta_16)));
-            checkCUDA(cudaMemcpy(d_m_beta_16, (__half*)&beta_16, sizeof(beta_16), cudaMemcpyHostToDevice));
+            checkCUDA(cudaMemcpyAsync(d_m_beta_16, (__half*)&beta_16, sizeof(beta_16),
+                      cudaMemcpyHostToDevice, m_streams[tid]));
             void *d_m_beta_32;
             checkCUDA(cudaMalloc((void**)&d_m_beta_32, sizeof(beta_32)));
-            checkCUDA(cudaMemcpy(d_m_beta_32, (float*)&beta_32, sizeof(beta_32), cudaMemcpyHostToDevice));
+            checkCUDA(cudaMemcpyAsync(d_m_beta_32, (float*)&beta_32, sizeof(beta_32),
+                      cudaMemcpyHostToDevice, m_streams[tid]));
+            cudaStreamSynchronize(m_streams[tid]);
             cudnn_context.m_alpha_32 = d_m_alpha_32;
             cudnn_context.m_alpha_16 = d_m_alpha_16;
             cudnn_context.m_beta_32 = d_m_beta_32;
@@ -2326,6 +2368,7 @@ void CuDNN_Network<net_t>::forward_activations(
 #endif
             if (typeid(net_t) == typeid(float)) {
                 squeeze_excitation_float(m_cublas_handles[tid],
+                                         m_streams[tid],
                                          cudnn_context,
                                          OutBuffer,         // *bufferIn1: first input
                                          IdentityOutBuffer, // *bufferIn2: second output
@@ -2341,6 +2384,7 @@ void CuDNN_Network<net_t>::forward_activations(
                                          NUM_INTERSECTIONS);
             } else {
                 squeeze_excitation_half(m_cublas_handles[tid],
+                                        m_streams[tid],
                                         cudnn_context,
                                         OutBuffer,         // *bufferIn1: first input
                                         IdentityOutBuffer, // *bufferIn2: second output
@@ -2409,12 +2453,14 @@ void CuDNN_Network<net_t>::forward_activations(
             if (niter == std::end(m_layers)) {
                 // Value input: InBuffer
                 checkCUDA(cudaMemcpy(&val_net_t[0], InBuffer,
-                                     val_elements * sizeof(net_t), cudaMemcpyDeviceToHost));
+                                     val_elements * sizeof(net_t),
+                                     cudaMemcpyDeviceToHost));
                 // output: val_net_t
             } else {
                 // Policy input: InBuffer
                 checkCUDA(cudaMemcpy(&pol_net_t[0], InBuffer,
-                                     pol_elements * sizeof(net_t), cudaMemcpyDeviceToHost));
+                                     pol_elements * sizeof(net_t),
+                                     cudaMemcpyDeviceToHost));
                 // output: pol_net_t
             }
         }

@@ -147,8 +147,27 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
             for (auto& handle : cudnn->m_handle) {
                 cudnnDestroy(handle);
             }
+            for (auto& stream : cudnn->m_streams) {
+                cudaStreamDestroy(stream);
+            }
+        }
+#if defined(USE_TENSOR_RT)
+    } else {
+        for (const auto& cudnn : m_networks) {
+            for (auto& stream : cudnn->m_streams) {
+                cudaStreamDestroy(stream);
+            }
+        }
+#endif
+    }
+#else
+#if defined(USE_TENSOR_RT)
+    for (const auto& cudnn : m_networks) {
+        for (auto& stream : cudnn->m_streams) {
+            cudaStreamDestroy(stream);
         }
     }
+#endif
 #endif
 }
 

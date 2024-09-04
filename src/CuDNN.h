@@ -119,7 +119,8 @@ void global_average_pooling_float(
     float *output,
     const int batch_size,
     const int channels,
-    const int spatial
+    const int spatial,
+    cudaStream_t stream
     );
 
 void global_average_pooling_float_NHWC(
@@ -127,7 +128,8 @@ void global_average_pooling_float_NHWC(
     float *output,
     const int batch_size,
     const int channels,
-    const int spatial
+    const int spatial,
+    cudaStream_t stream
     );
 
 void global_average_pooling_half(
@@ -135,7 +137,8 @@ void global_average_pooling_half(
     __half *output,
     const int batch_size,
     const int channels,
-    const int spatial
+    const int spatial,
+    cudaStream_t stream
     );
 
 void global_average_pooling_half_NHWC(
@@ -143,7 +146,8 @@ void global_average_pooling_half_NHWC(
     __half *output,
     const int batch_size,
     const int channels,
-    const int spatial
+    const int spatial,
+    cudaStream_t stream
     );
 
 void add_bias_float(
@@ -151,7 +155,8 @@ void add_bias_float(
     const float *biases,
     const int batch_size,
     const int channels,
-    const bool relu
+    const bool relu,
+    cudaStream_t stream
     );
 
 void add_bias_half(
@@ -159,50 +164,11 @@ void add_bias_half(
     const __half *biases,
     const int batch_size,
     const int channels,
-    const bool relu
+    const bool relu,
+    cudaStream_t stream
     );
 
 void se_scale_float(
-    float *outbuf,
-    const float *buf,
-    const float *biases,
-    const float *bufferIn,
-    const int batch_size,
-    const int channels,
-    const int spatial
-    );
-
-void se_scale_float_NHWC(
-    float *outbuf,
-    const float *buf,
-    const float *biases,
-    const float *bufferIn,
-    const int batch_size,
-    const int channels,
-    const int spatial
-    );
-
-void se_scale_half(
-    __half *outbuf,
-    const __half *buf,
-    const __half *biases,
-    const __half *bufferIn,
-    const int batch_size,
-    const int channels,
-    const int spatial
-    );
-
-void se_scale_half_NHWC(
-    __half *outbuf,
-    const __half *buf,
-    const __half *biases,
-    const __half *bufferIn,
-    const int batch_size,
-    const int channels,
-    const int spatial
-    );
-
-void se_scale_float_stream(
     float *outbuf,
     const float *buf,
     const float *biases,
@@ -213,7 +179,29 @@ void se_scale_float_stream(
     cudaStream_t stream
     );
 
-void se_scale_half_stream(
+void se_scale_float_NHWC(
+    float *outbuf,
+    const float *buf,
+    const float *biases,
+    const float *bufferIn,
+    const int batch_size,
+    const int channels,
+    const int spatial,
+    cudaStream_t stream
+    );
+
+void se_scale_half(
+    __half *outbuf,
+    const __half *buf,
+    const __half *biases,
+    const __half *bufferIn,
+    const int batch_size,
+    const int channels,
+    const int spatial,
+    cudaStream_t stream
+    );
+
+void se_scale_half_NHWC(
     __half *outbuf,
     const __half *buf,
     const __half *biases,
@@ -519,6 +507,7 @@ private:
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     void squeeze_excitation_float(
         cublasHandle_t cublas_handle,
+        cudaStream_t stream,
         const CuDNNContext& cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
@@ -536,6 +525,7 @@ private:
 
     void squeeze_excitation_half(
         cublasHandle_t cublas_handle,
+        cudaStream_t stream,
         const CuDNNContext& cudnn_context,
         const void *bufferIn1,
         const void *bufferIn2,
@@ -677,6 +667,7 @@ private:
     std::vector<cudnnHandle_t> m_handle;
     std::vector<cublasHandle_t> m_cublas_handles;
 #endif
+    std::vector<cudaStream_t> m_streams;
 
     int m_net_type{0};
     int m_num_worker_threads{1};

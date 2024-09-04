@@ -111,14 +111,8 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            if (cfg_backend == backend_t::CUDNN) {
-                cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 1);
-            } else {
-                cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
-            }
-
+            cfg_batch_size =
+                (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -130,20 +124,11 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            if (cfg_backend == backend_t::CUDNN) {
-                cfg_batch_size = cfg_num_threads * 5 / 3;
-            } else {
-                cfg_batch_size = cfg_num_threads * 5 / 6;
-            }
+            cfg_batch_size = cfg_num_threads * 5 / 6;
         }
 
-        if (cfg_backend == backend_t::CUDNN) {
-            cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 1);
-        } else {
-            cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
-        }
+        cfg_num_threads =
+            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -297,6 +282,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
+        ("cut_policy", po::value<float>())
         ("uct_search", po::value<std::string>()->default_value("alpha_zero"),
                        "[alpha_zero|leela_zero] Select whether to use AlphaZero or LeelaZero for cpuct expression.")
         ("no_stdev_uct", "Disable sample variance in UCT formula.");
@@ -413,6 +399,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("lcb_visits_ratio")) {
         cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
+    }
+    if (vm.count("cut_policy")) {
+        cfg_cut_policy = vm["cut_policy"].as<float>();
     }
     if (vm.count("uct_search")) {
         auto uct_search = vm["uct_search"].as<std::string>();

@@ -105,7 +105,8 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > 0.0f) {
+        if (state.is_move_legal(to_move, vertex)
+            && raw_netlist.policy[i] > cfg_cut_policy) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
