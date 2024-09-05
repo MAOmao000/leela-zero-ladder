@@ -2532,9 +2532,7 @@ bool CuDNN_Network<net_t>::build(
     }
     config->setFlag(nvinfer1::BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
 
-    auto network = TrtUniquePtr<nvinfer1::INetworkDefinition>(
-        builder->createNetworkV2(1U << static_cast<int>(
-            nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));
+    auto network = TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U));
     if (!network) {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;

@@ -34,6 +34,10 @@
 #if defined(USE_TENSOR_RT)
 #define CUDA_API_PER_THREAD_DEFAULT_STREAM
 #include "NvInfer.h"
+#ifndef NDEBUG
+#define BOOST_STACKTRACE_USE_BACKTRACE
+#include <boost/stacktrace.hpp>
+#endif
 
 namespace trtLog {
 // Logger for TensorRT
@@ -50,6 +54,10 @@ public:
                     break;
                 case Severity::kERROR:
                     std::cerr << "[E] " << msg << std::endl;
+#ifndef NDEBUG
+                    std::cout << boost::stacktrace::stacktrace();
+                    exit(0);
+#endif
                     break;
                 case Severity::kWARNING:
                     std::cerr << "[W] " << msg << std::endl;
@@ -75,14 +83,6 @@ private:
     Severity mReportableSeverity;
 };
 }
-#endif
-
-#ifndef NDEBUG
-struct batch_stats_t {
-    std::atomic<size_t> single_evals{0};
-    std::atomic<size_t> batch_evals{0};
-};
-extern batch_stats_t batch_stats;
 #endif
 
 template <typename net_t>

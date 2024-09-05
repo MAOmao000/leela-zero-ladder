@@ -380,4 +380,11 @@ endif()
 target_link_libraries(leelaz ${Boost_LIBRARIES})
 target_link_libraries(leelaz ${ZLIB_LIBRARIES})
 target_link_libraries(leelaz ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(leelaz
+    ${Boost_STACKTRACE_BASIC_LIBRARY}
+    ${Boost_STACKTRACE_BACKTRACE_LIBRARY}
+    ${Boost_STACKTRACE_ADDR2LINE_LIBRARY}
+    ${Boost_STACKTRACE_NOOP_LIBRARY}
+    pthread dl backtrace
+)
 install(TARGETS leelaz DESTINATION ${CMAKE_INSTALL_BINDIR})

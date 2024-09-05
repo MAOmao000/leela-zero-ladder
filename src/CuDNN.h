@@ -339,8 +339,8 @@ private:
     void *m_beta_32{nullptr};
 #endif
 #if defined(USE_TENSOR_RT)
-    std::shared_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
-    std::shared_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
+    std::unique_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
+    std::unique_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
     std::map<std::string, void*> mBuffers;
 #endif
     bool m_buffers_allocated{false};

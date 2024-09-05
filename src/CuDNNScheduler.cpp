@@ -107,68 +107,9 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
         }
     }
     cudaStreamSynchronize(cudaStreamDefault);
-#if defined(USE_TENSOR_RT)
-#ifndef _WIN32
-    if (cfg_backend == backend_t::TENSORRT) {
-        exit(0);
+    for (auto& cudnn_net : m_networks) {
+        cudnn_net.release();
     }
-#endif
-    if (cfg_backend == backend_t::TENSORRT) {
-        for (const auto& cudnn_net : m_networks) {
-            for (const auto& context : cudnn_net->m_context) {
-                if (context->m_buffers_allocated) {
-                    context->mContext.reset();
-                    if (cfg_execute_context == execute_t::DOUBLE) {
-                        context->mContext_n.reset();
-                    }
-                }
-            }
-        }
-        for (auto& cudnn_net : m_networks) {
-            for (auto& engine : cudnn_net->mEngine) {
-                if (engine) {
-                    engine.reset();
-                }
-            }
-            for (auto& runtime : cudnn_net->mRuntime) {
-                if (runtime) {
-                    runtime.reset();
-                }
-            }
-        }
-    }
-#endif
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-    if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
-        for (const auto& cudnn : m_networks) {
-            for (auto& cublas_handle : cudnn->m_cublas_handles) {
-                cublasDestroy(cublas_handle);
-            }
-            for (auto& handle : cudnn->m_handle) {
-                cudnnDestroy(handle);
-            }
-            for (auto& stream : cudnn->m_streams) {
-                cudaStreamDestroy(stream);
-            }
-        }
-#if defined(USE_TENSOR_RT)
-    } else {
-        for (const auto& cudnn : m_networks) {
-            for (auto& stream : cudnn->m_streams) {
-                cudaStreamDestroy(stream);
-            }
-        }
-#endif
-    }
-#else
-#if defined(USE_TENSOR_RT)
-    for (const auto& cudnn : m_networks) {
-        for (auto& stream : cudnn->m_streams) {
-            cudaStreamDestroy(stream);
-        }
-    }
-#endif
-#endif
 }
 
 template <typename net_t>
@@ -462,10 +403,6 @@ void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
     }
 }
 
-#ifndef NDEBUG
-struct batch_stats_t batch_stats;
-#endif
-
 template <typename net_t>
 void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
     constexpr auto in_size = Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE;
@@ -551,14 +488,6 @@ void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
         if (!m_running) {
             return;
         }
-
-#ifndef NDEBUG
-        if (count == 1) {
-            batch_stats.single_evals++;
-        } else {
-            batch_stats.batch_evals++;
-        }
-#endif
 
         // prepare input for forward() call
         batch_input.resize(in_size * count);
