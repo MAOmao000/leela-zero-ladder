@@ -40,7 +40,7 @@
 #include "Network.h"
 #include "UCTSearch.h"
 #if defined(USE_TENSOR_RT)
-#include "CuDnnScheduler.h"
+#include "CuDNNScheduler.h"
 #endif
 
 struct MoveToAvoid {
