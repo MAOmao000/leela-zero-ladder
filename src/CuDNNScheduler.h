@@ -39,24 +39,40 @@ namespace trtLog {
 // Logger for TensorRT
 class Logger : public nvinfer1::ILogger {
 public:
-    Logger() {}
+    Logger(Severity severity = Severity::kERROR)
+        : mReportableSeverity(severity) {}
     void log(ILogger::Severity severity, const char* msg) noexcept override {
         // suppress information level log
-        switch (severity) {
-            case Severity::kINTERNAL_ERROR:
-                std::cerr << msg << std::endl;
-                break;
-            case Severity::kERROR:
-                std::cerr << msg << std::endl;
-                break;
-            case Severity::kWARNING:
-                break;
-            case Severity::kINFO:
-                break;
-            case Severity::kVERBOSE:
-                break;
+        if (severity <= mReportableSeverity) {
+            switch (severity) {
+                case Severity::kINTERNAL_ERROR:
+                    std::cerr << "[F] " << msg << std::endl;
+                    break;
+                case Severity::kERROR:
+                    std::cerr << "[E] " << msg << std::endl;
+                    break;
+                case Severity::kWARNING:
+                    std::cerr << "[W] " << msg << std::endl;
+                    break;
+                case Severity::kINFO:
+                    std::cerr << "[I] " << msg << std::endl;
+                    break;
+                case Severity::kVERBOSE:
+                    std::cerr << "[V] " << msg << std::endl;
+                    break;
+                default:
+                    std::cerr << "[?] " << msg << std::endl;
+            }
         }
     }
+    nvinfer1::ILogger& getTRTLogger() noexcept {
+        return *this;
+    }
+    void setReportableSeverity(Severity severity) noexcept {
+        mReportableSeverity = severity;
+    }
+private:
+    Severity mReportableSeverity;
 };
 }
 #endif
@@ -159,9 +175,6 @@ private:
 
     int m_net_type{0};
     std::exception_ptr m_ep;
-#if defined(USE_TENSOR_RT)
-    std::shared_ptr<trtLog::Logger> m_trt_logger;
-#endif
 };
 
 #endif

@@ -39,6 +39,9 @@
 #include "GameState.h"
 #include "Network.h"
 #include "UCTSearch.h"
+#if defined(USE_TENSOR_RT)
+#include "CuDnnScheduler.h"
+#endif
 
 struct MoveToAvoid {
     int color;
@@ -154,6 +157,9 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 
 extern AnalyzeTags cfg_analyze_tags;
+#ifdef USE_TENSOR_RT
+extern trtLog::Logger cfg_logger;
+#endif
 
 static constexpr size_t MiB = 1024LL * 1024LL;
 

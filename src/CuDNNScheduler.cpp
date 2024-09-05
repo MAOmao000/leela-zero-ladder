@@ -173,9 +173,6 @@ CuDNNScheduler<net_t>::~CuDNNScheduler() {
 
 template <typename net_t>
 CuDNNScheduler<net_t>::CuDNNScheduler() {
-#if defined(USE_TENSOR_RT)
-    m_trt_logger = std::make_shared<trtLog::Logger>();
-#endif
     // multi-gpu?
     auto gpus = cfg_gpus;
 
@@ -188,13 +185,8 @@ CuDNNScheduler<net_t>::CuDNNScheduler() {
     auto silent{false};
 
     for (auto gpu : gpus) {
-#if defined(USE_TENSOR_RT)
-        auto net = std::make_unique<CuDNN_Network<net_t>>(gpu, m_trt_logger, silent);
-#else
         auto net = std::make_unique<CuDNN_Network<net_t>>(gpu, silent);
-#endif
         m_networks.emplace_back(std::move(net));
-
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
     }

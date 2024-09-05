@@ -125,6 +125,9 @@ int cfg_offense_stones;
 int cfg_ladder_depth;
 
 AnalyzeTags cfg_analyze_tags;
+#if defined(USE_TENSOR_RT)
+trtLog::Logger cfg_logger{};
+#endif
 
 /* Parses tags for the lz-analyze GTP command and friends */
 AnalyzeTags::AnalyzeTags(std::istringstream& cmdstream, const GameState& game) {

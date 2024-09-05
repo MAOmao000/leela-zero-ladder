@@ -357,9 +357,6 @@ class CuDNN_Network {
 public:
     CuDNN_Network(
         const int gpu,
-#if defined(USE_TENSOR_RT)
-        std::shared_ptr<nvinfer1::ILogger> logger,
-#endif
         const bool silent = false
     );
 
@@ -660,7 +657,6 @@ private:
     );
 
     std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
-    std::shared_ptr<nvinfer1::ILogger> m_logger;
 #endif
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)

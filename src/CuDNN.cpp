@@ -105,14 +105,8 @@ static std::vector<net_t> NCHW_to_NHWC(const std::vector<float> &x,
 template <typename net_t>
 CuDNN_Network<net_t>::CuDNN_Network(
     const int gpu,
-#if defined(USE_TENSOR_RT)
-    std::shared_ptr<nvinfer1::ILogger> logger,
-#endif
     const bool silent) {
 
-#if defined(USE_TENSOR_RT)
-    m_logger = logger;
-#endif
     auto best_bandwidth = 0.0;
     auto found_device = false;
     auto nDevices = 0;
@@ -185,6 +179,8 @@ void CuDNN_Network<net_t>::initialize(
 #endif
     const char* log_level = "CUDNN_LOGLEVEL_DBG=0";
     putenv((char *)log_level);
+    const char* log_dest = "CUDNN_LOGDEST_DBG=stderr";
+    putenv((char *)log_dest);
 #if defined(USE_CUDNN_GRAPH)
     if (cfg_backend == backend_t::CUDNNGRAPH) {
         const char* log_info = "CUDNN_FRONTEND_LOG_INFO=0";
@@ -2519,7 +2515,7 @@ bool CuDNN_Network<net_t>::build(
             batch_size);
     }
     auto builder
-        = TrtUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(*m_logger));
+        = TrtUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(cfg_logger.getTRTLogger()));
     if (!builder) {
         std::cerr << "TensorRT backend: failed to create builder" << std::endl;
         return false;
@@ -2769,9 +2765,10 @@ bool CuDNN_Network<net_t>::build(
         }
     }
 
+    cfg_logger.setReportableSeverity(ILogger::Severity::kVERBOSE);
     for (auto i = 0; i < num_worker_threads; i++) {
         std::unique_ptr<nvinfer1::IRuntime> runtime
-            = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(*m_logger));
+            = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(cfg_logger.getTRTLogger()));
         if (!runtime) {
             std::cerr << "createInferRuntime error: " << std::endl;
             return false;
