@@ -151,6 +151,22 @@ public:
                        unsigned int outputs,
                        const std::vector<float>& weights);
 
+#if defined(USE_TENSOR_RT)
+    void push_convolve_pol(unsigned int filter_size,
+                           unsigned int channels,
+                           unsigned int outputs,
+                           const std::vector<float>& weights,
+                           const std::vector<float>& bn_pol_w1,
+                           const std::vector<float>& bn_pol_w2);
+
+    void push_convolve_val(unsigned int filter_size,
+                           unsigned int channels,
+                           unsigned int outputs,
+                           const std::vector<float>& weights,
+                           const std::vector<float>& bn_val_w1,
+                           const std::vector<float>& bn_val_w2);
+#endif
+
 private:
     bool m_running{true};
     std::atomic<bool> m_draining{false};

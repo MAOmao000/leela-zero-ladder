@@ -1285,7 +1285,7 @@ std::pair<std::string, std::string> GTP::parse_option(std::istringstream& is) {
 size_t GTP::get_base_memory() {
     // At the moment of writing the memory consumption is
     // roughly network size + 85 for one GPU and + 160 for two GPUs.
-#ifdef /*USE_GPU // */USE_OPENCL
+#ifdef USE_OPENCL
     auto gpus = std::max(cfg_gpus.size(), size_t{1});
     return s_network->get_estimated_size() + 85 * MiB * gpus;
 #else

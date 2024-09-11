@@ -414,6 +414,24 @@ public:
         const std::vector<float>& weights
     );
 
+#if defined(USE_TENSOR_RT)
+    void push_convolve_pol(
+        const unsigned int filter_size,
+        const unsigned int channels,
+        const unsigned int outputs,
+        const std::vector<float>& weights,
+        const std::vector<float>& bn_pol_w1
+    );
+
+    void push_convolve_val(
+        const unsigned int filter_size,
+        const unsigned int channels,
+        const unsigned int outputs,
+        const std::vector<float>& weights,
+        const std::vector<float>& bn_val_w1
+    );
+#endif
+
     size_t get_layer_count() const {
         return m_layers.size();
     }
@@ -642,18 +660,6 @@ private:
         nvinfer1::ITensor* input,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name
-    );
-
-    nvinfer1::ILayer* buildMatMulLayer(
-        nvinfer1::ITensor* input,
-        int64_t weights_size,
-        void* weights,
-        int64_t biases_size,
-        void* biases,
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string op_name,
-        unsigned int channels,
-        unsigned int outputs
     );
 
     std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning

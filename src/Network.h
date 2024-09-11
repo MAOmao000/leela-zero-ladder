@@ -172,17 +172,11 @@ private:
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
     // Policy head
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w1;
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
-
     std::array<float, OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES>
         m_ip_pol_w;
     std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
 
     // Value head
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w1;
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
-
     std::array<float, OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER>
         m_ip1_val_w;
     std::array<float, VALUE_LAYER> m_ip1_val_b;

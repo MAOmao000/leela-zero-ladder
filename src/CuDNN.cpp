@@ -1853,6 +1853,67 @@ void CuDNN_Network<net_t>::push_convolve(
 #endif
 }
 
+#if defined(USE_TENSOR_RT)
+template <typename net_t>
+void CuDNN_Network<net_t>::push_convolve_pol(
+    const unsigned int filter_size,
+    const unsigned int channels,
+    const unsigned int outputs,
+    const std::vector<float>& weights,
+    const std::vector<float>& bn_pol_w1) {
+
+    size_t layer = get_layer_count();
+    if (cfg_NCHW) {
+        push_weights_trt(layer, weights);   // Here it is still float(Convert precision with push_weights)
+        push_weights_trt(layer, bn_pol_w1); // Here it is still float(Convert precision with push_weights)
+    } else {
+        auto weights_convert = NCHW_to_NHWC<float>(
+            weights, outputs, filter_size, filter_size, channels);
+        push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+        weights_convert = NCHW_to_NHWC<float>(
+            bn_pol_w1, outputs, filter_size, filter_size, channels);
+        push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+    }
+    m_layers[layer].outputs = outputs;
+    m_layers[layer].channels = channels;
+    m_layers[layer].filter_size = filter_size;
+    m_layers[layer].is_policy = true;
+    m_layers[layer].name = "pol." + std::to_string(layer);
+}
+
+template <typename net_t>
+void CuDNN_Network<net_t>::push_convolve_val(
+    const unsigned int filter_size,
+    const unsigned int channels,
+    const unsigned int outputs,
+    const std::vector<float>& weights,
+    const std::vector<float>& bn_val_w1) {
+
+    size_t layer = get_layer_count();
+    if (cfg_NCHW) {
+        push_weights_trt(layer, weights);   // Here it is still float(Convert precision with push_weights)
+        push_weights_trt(layer, bn_val_w1); // Here it is still float(Convert precision with push_weights)
+    } else {
+        auto weights_convert = NCHW_to_NHWC<float>(
+            weights, outputs, filter_size, filter_size, channels);
+        push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+        weights_convert = NCHW_to_NHWC<float>(
+            bn_val_w1, outputs, filter_size, filter_size, channels);
+        push_weights_trt(layer, weights_convert); // Convert precision with push_weights
+    }
+    m_layers[layer].outputs = outputs;
+    m_layers[layer].channels = channels;
+    m_layers[layer].filter_size = filter_size;
+    m_layers[layer].is_value = true;
+    m_layers[layer].name = "val." + std::to_string(layer);
+
+    if (build(m_num_worker_threads, cfg_batch_size)) {
+        return;
+    }
+    exit(EXIT_FAILURE);
+}
+#endif
+
 template <typename net_t>
 void CuDNN_Network<net_t>::forward_activations(
     const std::vector<float>& input,
@@ -1920,13 +1981,12 @@ void CuDNN_Network<net_t>::forward_activations(
                     nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             }
         }
-        search = cudnn_context.mBuffers.find("OutputPolicy");
         cudaStreamSynchronize(m_streams[tid]);
         // Asynchronously enqueue the inference work
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            ASSERT(cudnn_context.mContext->enqueueV3(m_streams[tid])); // cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext->enqueueV3(m_streams[tid]));
         } else {
-            ASSERT(cudnn_context.mContext_n->enqueueV3(m_streams[tid])); // cudaStreamPerThread));
+            ASSERT(cudnn_context.mContext_n->enqueueV3(m_streams[tid]));
         }
         search = cudnn_context.mBuffers.find("OutputPolicy");
         assert(search != cudnn_context.mBuffers.end());
@@ -2763,7 +2823,7 @@ bool CuDNN_Network<net_t>::build(
         }
     }
 
-    cfg_logger.setReportableSeverity(ILogger::Severity::kVERBOSE);
+    //cfg_logger.setReportableSeverity(ILogger::Severity::kVERBOSE);
     for (auto i = 0; i < num_worker_threads; i++) {
         std::unique_ptr<nvinfer1::IRuntime> runtime
             = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(cfg_logger.getTRTLogger()));
@@ -2838,8 +2898,8 @@ void CuDNN_Network<net_t>::constructNetwork(
     nvinfer1::ITensor* inputFeature = nullptr;
     nvinfer1::ILayer* initialConvLayer = nullptr;
     nvinfer1::ITensor* outputConv = nullptr;
-    nvinfer1::ILayer* policyConvLayer = nullptr;
-    nvinfer1::ILayer* valueConvLayer = nullptr;
+    nvinfer1::ILayer* actPolicyLayer = nullptr;
+    nvinfer1::ILayer* actValueLayer = nullptr;
     nvinfer1::ILayer* shapeLayer = nullptr;
     nvinfer1::IShapeLayer* inShapeLayer = nullptr;
     nvinfer1::ICastLayer* castLayer = nullptr;
@@ -3009,8 +3069,9 @@ void CuDNN_Network<net_t>::constructNetwork(
                 secondConvLayer->getOutput(0),
                 network,
                 layer.name + ".gpool");
-            auto thirdMatMulLayer = buildMatMulLayer(
+            auto thirdMatMulLayer = buildConvLayer(
                 gpoolLayer->getOutput(0),
+                1,
                 layer.weights_size[4],
                 fc1_weights[0],
                 layer.weights_size[5],
@@ -3024,8 +3085,9 @@ void CuDNN_Network<net_t>::constructNetwork(
                 network,
                 layer.name + ".activation.third",
                 nvinfer1::ActivationType::kRELU);
-            auto fourthMatMulLayer = buildMatMulLayer(
+            auto fourthMatMulLayer = buildConvLayer(
                 thirdActivationMatLayer->getOutput(0),
+                1,
                 layer.weights_size[6],
                 fc2_weights[0],
                 layer.weights_size[7],
@@ -3085,35 +3147,48 @@ void CuDNN_Network<net_t>::constructNetwork(
             outputConv = outputConvLayer->getOutput(0);
         } else {
             const auto niter = std::next(iter);
+            auto weights = begin(layer.weights);
             if (niter == std::end(m_layers)) {
-                valueConvLayer = buildConvLayer(
+                auto bn_val_w1 = begin(layer.weights) + 1;
+                auto valueConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
-                    layer.weights[0],
-                    0,
-                    nullptr,
+                    weights[0],
+                    layer.weights_size[1],
+                    bn_val_w1[0],
                     network,
-                    layer.name + ".value",
+                    layer.name + ".value.conv",
                     layer.channels,
                     layer.outputs);
+                actValueLayer = buildActivationLayer(
+                    valueConvLayer->getOutput(0),
+                    network,
+                    layer.name + ".val.activation",
+                    nvinfer1::ActivationType::kRELU);
             } else {
-                policyConvLayer = buildConvLayer(
+                auto bn_pol_w1 = begin(layer.weights) + 1;
+                auto policyConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
-                    layer.weights[0],
-                    0,
-                    nullptr,
+                    weights[0],
+                    layer.weights_size[1],
+                    bn_pol_w1[0],
                     network,
-                    layer.name + ".policy",
+                    layer.name + ".pol.conv",
                     layer.channels,
                     layer.outputs);
+                actPolicyLayer = buildActivationLayer(
+                    policyConvLayer->getOutput(0),
+                    network,
+                    layer.name + ".pol.activation",
+                    nvinfer1::ActivationType::kRELU);
             }
         }
     }
     // Mark the outputs for the network
-    auto outputPolicy = policyConvLayer->getOutput(0);
+    auto outputPolicy = actPolicyLayer->getOutput(0);
     network->markOutput(*outputPolicy);
     outputPolicy->setName("OutputPolicy");
     if (typeid(net_t) == typeid(float)) {
@@ -3122,7 +3197,8 @@ void CuDNN_Network<net_t>::constructNetwork(
         outputPolicy->setType(nvinfer1::DataType::kHALF);
     }
     outputPolicy->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
-    auto outputValue = valueConvLayer->getOutput(0);
+
+    auto outputValue = actValueLayer->getOutput(0);
     network->markOutput(*outputValue);
     outputValue->setName("OutputValue");
     if (typeid(net_t) == typeid(float)) {
@@ -3207,19 +3283,16 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::buildConvLayer(
     unsigned int channels,
     unsigned int outputs) {
 
-    auto dilationX = 1;
-    auto dilationY = 1;
-
     mTuneDesc += strprintf(
-        R"|("%s"(%d,%d,%d,%d,%d,%d))|",
+        R"|("%s"(%d,%d,%d,%d))|",
         op_name.c_str(),
         filter_size,
         filter_size,
         channels,
-        outputs,
-        dilationX,
-        dilationY);
+        outputs);
 
+    // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
+    // matmul is mathmatically equivalent to a 2D convolution of 1x1 features and 1x1 kernels.
     nvinfer1::IConvolutionLayer *convLayer;
     if (biases_size > 0) {
         if (typeid(net_t) == typeid(float)) {
@@ -3282,9 +3355,12 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::buildConvLayer(
             );
         }
     }
-    convLayer->setDilationNd({2, {dilationY, dilationX}});
-    convLayer->setPaddingMode(nvinfer1::PaddingMode::kSAME_UPPER);
     convLayer->setName(op_name.c_str());
+    if (filter_size == 1) {
+        return convLayer;
+    }
+    convLayer->setDilationNd({2, {1, 1}});
+    convLayer->setPaddingMode(nvinfer1::PaddingMode::kSAME_UPPER);
     return convLayer;
 }
 
@@ -3321,63 +3397,6 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::applyGPoolLayer(
     return gpoolMeanLayer;
 }
 
-template <typename net_t>
-nvinfer1::ILayer* CuDNN_Network<net_t>::buildMatMulLayer(
-    nvinfer1::ITensor* input,
-    int64_t weights_size,
-    void* weights,
-    int64_t biases_size,
-    void* biases,
-    TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-    std::string op_name,
-    unsigned int channels,
-    unsigned int outputs) {
-
-    mTuneDesc += strprintf(
-        R"|("%s"(%d,%d))|",
-        op_name.c_str(),
-        channels,
-        outputs);
-
-    // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
-    // matmul is mathmatically equivalent to a 2D convolution of 1x1 features and 1x1 kernels.
-    nvinfer1::IConvolutionLayer *matMulLayer;
-    if (typeid(net_t) == typeid(float)) {
-        matMulLayer = network->addConvolutionNd(
-            *input,
-            outputs,
-            {2, {1, 1}},
-            {
-                nvinfer1::DataType::kFLOAT,
-                weights,
-                weights_size
-            },
-            {
-                nvinfer1::DataType::kFLOAT,
-                biases,
-                biases_size
-            }
-        );
-    } else {
-        matMulLayer = network->addConvolutionNd(
-            *input,
-            outputs,
-            {2, {1, 1}},
-            {
-                nvinfer1::DataType::kHALF,
-                weights,
-                weights_size
-            },
-            {
-                nvinfer1::DataType::kHALF,
-                biases,
-                biases_size
-            }
-        );
-    }
-    matMulLayer->setName(op_name.c_str());
-    return matMulLayer;
-}
 #endif
 
 template class CuDNN_Network<float>;
