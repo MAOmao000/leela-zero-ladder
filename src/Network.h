@@ -59,8 +59,9 @@ enum class NetworkType {
 };
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
+constexpr auto FILTER_SIZE = 3;
 constexpr auto WINOGRAD_M = 4;
-constexpr auto WINOGRAD_ALPHA = WINOGRAD_M + 3 - 1;
+constexpr auto WINOGRAD_ALPHA = WINOGRAD_M + FILTER_SIZE - 1;
 constexpr auto WINOGRAD_WTILES =
     BOARD_SIZE / WINOGRAD_M + (BOARD_SIZE % WINOGRAD_M != 0);
 constexpr auto WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
@@ -172,11 +173,15 @@ private:
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
     // Policy head
+    std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
+
     std::array<float, OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES>
         m_ip_pol_w;
     std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
 
     // Value head
+    std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
+
     std::array<float, OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER>
         m_ip1_val_w;
     std::array<float, VALUE_LAYER> m_ip1_val_b;
@@ -185,9 +190,7 @@ private:
     std::array<float, 1> m_ip2_val_b;
     bool m_value_head_not_stm;
 
-#if defined(USE_TENSOR_RT)
-    std::string m_model_hash;
-#endif
+    std::string m_model_hash{""};
 
     NetworkType m_net_type{ NetworkType::LEELA_ZERO };
 };

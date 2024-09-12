@@ -119,28 +119,23 @@ public:
                                 unsigned int channels,
                                 unsigned int outputs,
                                 const std::vector<float>& weights,
-                                const std::vector<float>& means,
-                                const std::vector<float>& variances);
+                                const std::vector<float>& means);
 
     void push_residual(unsigned int filter_size,
                        unsigned int channels,
                        unsigned int outputs,
                        const std::vector<float>& weights_1,
                        const std::vector<float>& means_1,
-                       const std::vector<float>& variances_1,
                        const std::vector<float>& weights_2,
-                       const std::vector<float>& means_2,
-                       const std::vector<float>& variances_2);
+                       const std::vector<float>& means_2);
 
     void push_residual_se(unsigned int filter_size,
                        unsigned int channels,
                        unsigned int outputs,
                        const std::vector<float>& weights_1,
                        const std::vector<float>& means_1,
-                       const std::vector<float>& variances_1,
                        const std::vector<float>& weights_2,
                        const std::vector<float>& means_2,
-                       const std::vector<float>& variances_2,
                        const std::vector<float>& fc1_w,
                        const std::vector<float>& fc1_b,
                        const std::vector<float>& fc2_w,
@@ -149,23 +144,8 @@ public:
     void push_convolve(unsigned int filter_size,
                        unsigned int channels,
                        unsigned int outputs,
-                       const std::vector<float>& weights);
-
-#if defined(USE_TENSOR_RT)
-    void push_convolve_pol(unsigned int filter_size,
-                           unsigned int channels,
-                           unsigned int outputs,
-                           const std::vector<float>& weights,
-                           const std::vector<float>& bn_pol_w1,
-                           const std::vector<float>& bn_pol_w2);
-
-    void push_convolve_val(unsigned int filter_size,
-                           unsigned int channels,
-                           unsigned int outputs,
-                           const std::vector<float>& weights,
-                           const std::vector<float>& bn_val_w1,
-                           const std::vector<float>& bn_val_w2);
-#endif
+                       const std::vector<float>& weights,
+                       const std::vector<float>& means);
 
 private:
     bool m_running{true};

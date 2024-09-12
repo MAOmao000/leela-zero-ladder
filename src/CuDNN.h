@@ -411,26 +411,9 @@ public:
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
-        const std::vector<float>& weights
-    );
-
-#if defined(USE_TENSOR_RT)
-    void push_convolve_pol(
-        const unsigned int filter_size,
-        const unsigned int channels,
-        const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& bn_pol_w1
+        const std::vector<float>& biases
     );
-
-    void push_convolve_val(
-        const unsigned int filter_size,
-        const unsigned int channels,
-        const unsigned int outputs,
-        const std::vector<float>& weights,
-        const std::vector<float>& bn_val_w1
-    );
-#endif
 
     size_t get_layer_count() const {
         return m_layers.size();
@@ -474,16 +457,6 @@ protected:
 
 private:
 #if defined(USE_CUDNN)
-    void convolve(
-        const int tid,
-        const void *bufferIn,
-        void *bufferOut,
-        const void *weights,
-        void *workspace,
-        const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha
-    );
-
     void convolveActivation(
         const int tid,
         const void *bufferIn,
@@ -577,14 +550,6 @@ private:
         cudnnHandle_t handle,
         const int channels,
         const int outputs,
-        const int batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> convolve_fe_head_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
         const int batch_size = 1
     );
 #endif
