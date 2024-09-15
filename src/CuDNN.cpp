@@ -2600,13 +2600,24 @@ bool CuDNN_Network<net_t>::build(
 
         std::string precision = typeid(net_t) == typeid(float) ? "single" : "half";
         std::string sep_char{std::filesystem::path::preferred_separator};
+
+        uint8_t tuneHash[32];
+        SHA2::get256(mTuneDesc.c_str(), tuneHash);
+        // Truncated to 6 bytes
+        char tuneIdent[6 * 2 + 1];
+        for(int i = 0; i < 6; i++) {
+            sprintf(tuneIdent + i * 2, "%02x", static_cast<unsigned char>(tuneHash[i]));
+        }
+        tuneIdent[sizeof(tuneIdent) - 1] = 0;
+
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_net-%s_%s%s_%dx%d_%d_batch%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_%d_batch%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
+                tuneIdent,
                 network->getName(),
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
@@ -2694,15 +2705,6 @@ bool CuDNN_Network<net_t>::build(
                 std::cout << "Using existing plan cache at " + planCacheFile << std::endl;
             }
         } else {
-            uint8_t tuneHash[32];
-            SHA2::get256(mTuneDesc.c_str(), tuneHash);
-            // Truncated to 6 bytes
-            char tuneIdent[6 * 2 + 1];
-            for(int i = 0; i < 6; i++) {
-                sprintf(tuneIdent + i * 2, "%02x", static_cast<unsigned char>(tuneHash[i]));
-            }
-            tuneIdent[sizeof(tuneIdent) - 1] = 0;
-
             auto timingCacheFile = strprintf(
                 "%s%strt-%d_gpu-%s_tune-%s_%dx%d_%d_batch%d_fp%d_%s",
                 cacheDir.c_str(),
