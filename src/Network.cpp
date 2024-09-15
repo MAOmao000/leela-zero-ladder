@@ -793,7 +793,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
                         m_fwd_weights->m_batchnorm_stddevs[i][j];
                 }
                 m_fwd_weights->m_batchnorm_means[i][j] *=
-                    -1 * m_fwd_weights->m_batchnorm_stddevs[i][j];
+                    -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
             }
         }
     }
