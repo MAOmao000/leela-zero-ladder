@@ -327,7 +327,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                 switch (linecount - plain_conv_wts) {
                     case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
                     case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
-                    case 2: 
+                    case 2:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_pol_w1));
                         m_fwd_weights->m_bn_pol_w1 = std::move(weights);
@@ -354,9 +354,9 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
                     case 8:
-                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_val_w1));
+                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         break;
                     case 9:
                         std::copy(cbegin(weights), cend(weights),
@@ -460,9 +460,9 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
                     case 8:
-                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_val_w1));
+                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         break;
                     case 9:
                         std::copy(cbegin(weights), cend(weights),
@@ -801,29 +801,11 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     for (auto i = size_t{0}; i < m_bn_val_w1.size(); i++) {
         m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
         m_fwd_weights->m_conv_val_b[i] = 0.0f;
-        if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
-            for (auto j = size_t{0};
-                j < m_fwd_weights->m_conv_val_w.size() / m_bn_val_w1.size(); j++) {
-
-                m_fwd_weights->m_conv_val_w[i * m_fwd_weights->m_conv_val_w.size()
-                                              / m_bn_val_w1.size() + j] *= m_bn_val_w2[i];
-            }
-            m_fwd_weights->m_bn_val_w1[i] = -1 * m_bn_val_w1[i] * m_bn_val_w2[i];
-        }
     }
 
     for (auto i = size_t{0}; i < m_bn_pol_w1.size(); i++) {
         m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
         m_fwd_weights->m_conv_pol_b[i] = 0.0f;
-        if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
-            for (auto j = size_t{0};
-                j < m_fwd_weights->m_conv_pol_w.size() / m_bn_pol_w1.size(); j++) {
-
-                m_fwd_weights->m_conv_pol_w[i * m_fwd_weights->m_conv_pol_w.size()
-                                              / m_bn_pol_w1.size() + j] *= m_bn_pol_w2[i];
-            }
-            m_fwd_weights->m_bn_pol_w1[i] = -1 * m_bn_pol_w1[i] * m_bn_pol_w2[i];
-        }
     }
 
 #ifdef USE_OPENCL
@@ -1103,17 +1085,15 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     }
 
     // Policy and value header Batch Normalization
-    if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
-                                     policy_data,
-                                     /*m_fwd_weights->*/m_bn_pol_w1.data(),
-                                     m_bn_pol_w2.data());
+    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
+                                 policy_data,
+                                 m_bn_pol_w1.data(),
+                                 m_bn_pol_w2.data());
 
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
-                                     value_data,
-                                     /*m_fwd_weights->*/m_bn_val_w1.data(),
-                                     m_bn_val_w2.data());
-    }
+    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
+                                 value_data,
+                                 m_bn_val_w1.data(),
+                                 m_bn_val_w2.data());
     // Get the moves
     const auto policy_out =
         innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(

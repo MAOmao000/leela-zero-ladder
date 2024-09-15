@@ -235,6 +235,34 @@ void CuDNN_Network<net_t>::initialize(
 
 #if defined(USE_CUDNN)
 template <typename net_t>
+void CuDNN_Network<net_t>::convolve(
+    const int tid,
+    const void *bufferIn,
+    void *bufferOut,
+    const void *weights,
+    void *workspace,
+    const std::shared_ptr<conv_descriptor>& conv_desc,
+    const float alpha) {
+
+    const float beta = 0.0f;
+    // dstValue = alpha[0] * result + beta[0] * priorDstValue
+    checkCUDNN(cudnnConvolutionForward(
+        /* handle               */m_handle[tid],
+        /* *alpha               */&alpha,
+        /* xDesc                */conv_desc->input_descriptor,
+        /* *x                   */bufferIn,
+        /* wDesc                */conv_desc->filter_descriptor,
+        /* *w                   */weights,
+        /* convDesc             */conv_desc->convolution_descriptor,
+        /* algo                 */conv_desc->convolution_algorithm,
+        /* *workSpace           */workspace,
+        /* workSpaceSizeInBytes */conv_desc->workspace_size,
+        /* *beta                */&beta,
+        /* yDesc                */conv_desc->output_descriptor,
+        /* *y                   */bufferOut));
+}
+
+template <typename net_t>
 void CuDNN_Network<net_t>::convolveActivation(
     const int tid,
     const void *bufferIn,
@@ -1152,6 +1180,89 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_add_relu_init
     conv_desc->workspace_size = graph.get_workspace_size();
     return conv_desc;
 }
+
+// Y = Convolve(X, W)
+template <typename net_t>
+std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
+    cudnnHandle_t handle,
+    const int channels,
+    const int outputs,
+    const int filter_size,
+    const int batch_size) {
+
+    int64_t n = batch_size;
+    int64_t c = channels;
+    int64_t h = BOARD_SIZE;
+    int64_t w = BOARD_SIZE;
+    int64_t k = outputs;
+    int64_t r = filter_size;
+    int64_t s = filter_size;
+    fe::DataType_t data_type;
+    fe::DataType_t compute_type;
+    fe::DataType_t conv_compute_type;
+    fe::DataType_t intermediate_type;
+    std::shared_ptr<conv_descriptor> conv_desc = std::make_shared<conv_descriptor>();
+
+    if (typeid(net_t) == typeid(float)) {
+        data_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::FLOAT;
+        intermediate_type = fe::DataType_t::FLOAT;
+    } else { // typeid: __half
+        data_type = fe::DataType_t::HALF;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::HALF;
+        intermediate_type = fe::DataType_t::HALF;
+    }
+    auto pad_size = filter_size / 2;
+    auto build_new_graph = [=](cudnnHandle_t handle) {
+        auto graph = fe::graph::Graph();
+        graph.set_io_data_type(data_type)
+              .set_intermediate_data_type(intermediate_type)
+              .set_compute_data_type(compute_type);
+        std::shared_ptr<fe::graph::Tensor_attributes> X;
+        std::shared_ptr<fe::graph::Tensor_attributes> W;
+        std::shared_ptr<fe::graph::Tensor_attributes> Y;
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        W = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("filter")
+            .set_dim({ k, c, r, s })
+            .set_stride({ c * r * s, 1, c * s, c }));
+        auto conv_options = fe::graph::Conv_fprop_attributes()
+                            .set_compute_data_type(conv_compute_type)
+                            .set_padding({ pad_size, pad_size })
+                            .set_stride({ 1, 1 })
+                            .set_dilation({ 1, 1 });
+        Y = graph.conv_fprop(X, W, conv_options);
+        Y->set_output(true); // is_virtual = false
+
+        checkCUDNNFE(graph.validate());
+        auto key = graph.key();
+        auto it = m_maintained_cache4.find(key);
+        if (it != m_maintained_cache4.end()) {
+            return it->second;
+        }
+        checkCUDNNFE(graph.build_operation_graph(handle));
+        checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
+        checkCUDNNFE(graph.check_support(handle));
+        checkCUDNNFE(graph.build_plans(handle));
+        m_maintained_cache4.insert({key, std::make_tuple(graph, X, W, Y)});
+        return std::make_tuple(graph, X, W, Y);
+    };
+
+    auto [graph, X, W, Y] = build_new_graph(handle);
+    //std::cout << graph << std::endl;
+    conv_desc->graph = graph;
+    conv_desc->X = X;
+    conv_desc->W = W;
+    conv_desc->Y = Y;
+    conv_desc->workspace_size = graph.get_workspace_size();
+    return conv_desc;
+}
 #endif
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
@@ -1645,17 +1756,16 @@ void CuDNN_Network<net_t>::push_convolve(
     const std::vector<float>& weights,
     const std::vector<float>& biases) {
 
+    (void) biases;
     size_t layer = get_layer_count();
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
         if (cfg_NCHW) {
             push_weights_trt(layer, weights); // Here it is still float(Convert precision with push_weights)
-            push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
         } else {
             auto weights_convert = NCHW_to_NHWC<float>(
                 weights, outputs, filter_size, filter_size, channels);
             push_weights_trt(layer, weights_convert); // Convert precision with push_weights
-            push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
         }
         m_layers[layer].outputs = outputs;
         m_layers[layer].channels = channels;
@@ -1676,13 +1786,11 @@ void CuDNN_Network<net_t>::push_convolve(
 #else
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_NCHW) {
-        push_weights(layer, weights);  // Here it is still float(Convert precision with push_weights)
-        push_weights(layer, biases);   // Here it is still float(Convert precision with push_weights)
+        push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
     } else {
         auto weights_convert = NCHW_to_NHWC<float>(
             weights, outputs, filter_size, filter_size, channels);
         push_weights(layer, weights_convert); // Convert precision with push_weights
-        push_weights(layer, biases);   // Here it is still float(Convert precision with push_weights)
     }
     m_layers[layer].outputs = outputs;
     m_layers[layer].channels = channels;
@@ -1694,10 +1802,10 @@ void CuDNN_Network<net_t>::push_convolve(
         if (cfg_backend == backend_t::CUDNNGRAPH) {
             for (auto i = 0; i < m_num_worker_threads; i++) {
                 auto conv_desc_single
-                    = convolve_fe_init(m_handle[i], channels, outputs, filter_size);
+                    = convolve_fe_head_init(m_handle[i], channels, outputs, filter_size);
                 m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
                 auto conv_desc_multi
-                    = convolve_fe_init(m_handle[i], channels, outputs, filter_size, cfg_batch_size);
+                    = convolve_fe_head_init(m_handle[i], channels, outputs, filter_size, cfg_batch_size);
                 m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
             }
 #if defined(USE_CUDNN)
@@ -1723,10 +1831,10 @@ void CuDNN_Network<net_t>::push_convolve(
         if (cfg_backend == backend_t::CUDNNGRAPH) {
             for (auto i = 0; i < m_num_worker_threads; i++) {
                 auto conv_desc_single
-                    = convolve_fe_init(m_handle[i], channels, outputs, filter_size);
+                    = convolve_fe_head_init(m_handle[i], channels, outputs, filter_size);
                 m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
                 auto conv_desc_multi
-                    = convolve_fe_init(m_handle[i], channels, outputs, filter_size, cfg_batch_size);
+                    = convolve_fe_head_init(m_handle[i], channels, outputs, filter_size, cfg_batch_size);
                 m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
             }
 #if defined(USE_CUDNN)
@@ -2297,26 +2405,23 @@ void CuDNN_Network<net_t>::forward_activations(
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
         } else {
             auto conv_weights = begin(layer.weights);
-            auto conv_biases  = begin(layer.weights) + 1;
 #endif
             // input: OutBuffer(net_t is float or __half)
 #if defined(USE_CUDNN_GRAPH)
             if (cfg_backend == backend_t::CUDNNGRAPH) {
                 if (batch_size == 1) {
-                    // Y = Convolve(X, W) + B
+                    // Y = Convolve(X, W)
                     std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
                         {layer.conv_desc_single[tid]->X, OutBuffer},
                         {layer.conv_desc_single[tid]->W, conv_weights[0]},
-                        {layer.conv_desc_single[tid]->B, conv_biases[0]},
                         {layer.conv_desc_single[tid]->Y, InBuffer} };
                     checkCUDNNFE(layer.conv_desc_single[tid]->graph.execute(m_handle[tid],
                                                                             variant_pack, workspace));
                 } else {
-                    // Y = Convolve(X, W) + B
+                    // Y = Convolve(X, W)
                     std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*> variant_pack = {
                         {layer.conv_desc_multi[tid]->X, OutBuffer},
                         {layer.conv_desc_multi[tid]->W, conv_weights[0]},
-                        {layer.conv_desc_multi[tid]->B, conv_biases[0]},
                         {layer.conv_desc_multi[tid]->Y, InBuffer} };
                     checkCUDNNFE(layer.conv_desc_multi[tid]->graph.execute(m_handle[tid],
                                                                            variant_pack, workspace));
@@ -2327,27 +2432,21 @@ void CuDNN_Network<net_t>::forward_activations(
 #endif
 #if defined(USE_CUDNN)
                 if (batch_size == 1) {
-                    convolveActivation(tid,
-                                       OutBuffer, // *bufferIn
-                                       InBuffer,  // *bufferOut
-                                       conv_weights[0],
-                                       nullptr,
-                                       conv_biases[0],
-                                       workspace,
-                                       layer.conv_desc_single[tid],
-                                       layer.scale_1,
-                                       1.0f);
+                    convolve(tid,
+                             OutBuffer,
+                             InBuffer,
+                             conv_weights[0],
+                             workspace,
+                             layer.conv_desc_single[tid],
+                             layer.scale_1);
                 } else {
-                    convolveActivation(tid,
-                                       OutBuffer, // *bufferIn
-                                       InBuffer,  // *bufferOut
-                                       conv_weights[0],
-                                       nullptr,
-                                       conv_biases[0],
-                                       workspace,
-                                       layer.conv_desc_multi[tid],
-                                       layer.scale_1,
-                                       1.0f);
+                    convolve(tid,
+                             OutBuffer,
+                             InBuffer,
+                             conv_weights[0],
+                             workspace,
+                             layer.conv_desc_multi[tid],
+                             layer.scale_1);
                 }
 #endif
 #if defined(USE_CUDNN_GRAPH)
@@ -2745,8 +2844,8 @@ void CuDNN_Network<net_t>::constructNetwork(
     nvinfer1::ITensor* inputFeature = nullptr;
     nvinfer1::ILayer* initialConvLayer = nullptr;
     nvinfer1::ITensor* outputConv = nullptr;
-    nvinfer1::ILayer* actPolicyLayer = nullptr;
-    nvinfer1::ILayer* actValueLayer = nullptr;
+    nvinfer1::ILayer* outPolicyLayer = nullptr;
+    nvinfer1::ILayer* outValueLayer = nullptr;
     nvinfer1::ILayer* shapeLayer = nullptr;
     nvinfer1::IShapeLayer* inShapeLayer = nullptr;
     nvinfer1::ICastLayer* castLayer = nullptr;
@@ -2996,46 +3095,34 @@ void CuDNN_Network<net_t>::constructNetwork(
             const auto niter = std::next(iter);
             auto weights = begin(layer.weights);
             if (niter == std::end(m_layers)) {
-                auto bn_val_w1 = begin(layer.weights) + 1;
-                auto valueConvLayer = buildConvLayer(
+                outValueLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
                     weights[0],
-                    layer.weights_size[1],
-                    bn_val_w1[0],
+                    0,
+                    nullptr,
                     network,
-                    layer.name + ".value.conv",
+                    layer.name + ".val.conv",
                     layer.channels,
                     layer.outputs);
-                actValueLayer = buildActivationLayer(
-                    valueConvLayer->getOutput(0),
-                    network,
-                    layer.name + ".val.activation",
-                    nvinfer1::ActivationType::kRELU);
             } else {
-                auto bn_pol_w1 = begin(layer.weights) + 1;
-                auto policyConvLayer = buildConvLayer(
+                outPolicyLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
                     weights[0],
-                    layer.weights_size[1],
-                    bn_pol_w1[0],
+                    0,
+                    nullptr,
                     network,
                     layer.name + ".pol.conv",
                     layer.channels,
                     layer.outputs);
-                actPolicyLayer = buildActivationLayer(
-                    policyConvLayer->getOutput(0),
-                    network,
-                    layer.name + ".pol.activation",
-                    nvinfer1::ActivationType::kRELU);
             }
         }
     }
     // Mark the outputs for the network
-    auto outputPolicy = actPolicyLayer->getOutput(0);
+    auto outputPolicy = outPolicyLayer->getOutput(0);
     network->markOutput(*outputPolicy);
     outputPolicy->setName("OutputPolicy");
     if (typeid(net_t) == typeid(float)) {
@@ -3045,7 +3132,7 @@ void CuDNN_Network<net_t>::constructNetwork(
     }
     outputPolicy->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
 
-    auto outputValue = actValueLayer->getOutput(0);
+    auto outputValue = outValueLayer->getOutput(0);
     network->markOutput(*outputValue);
     outputValue->setName("OutputValue");
     if (typeid(net_t) == typeid(float)) {

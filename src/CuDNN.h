@@ -457,6 +457,16 @@ protected:
 
 private:
 #if defined(USE_CUDNN)
+    void convolve(
+        const int tid,
+        const void *bufferIn,
+        void *bufferOut,
+        const void *weights,
+        void *workspace,
+        const std::shared_ptr<conv_descriptor>& conv_desc,
+        const float alpha
+    );
+
     void convolveActivation(
         const int tid,
         const void *bufferIn,
@@ -550,6 +560,14 @@ private:
         cudnnHandle_t handle,
         const int channels,
         const int outputs,
+        const int batch_size = 1
+    );
+
+    std::shared_ptr<conv_descriptor> convolve_fe_head_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
         const int batch_size = 1
     );
 #endif
