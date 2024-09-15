@@ -58,7 +58,7 @@ if(GccSpecificFlags)
   set(GCC_COMPILE_FLAGS "-Wall -Wextra -ffast-math -flto -march=native")
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-uninitialized \
-        -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy")
+        -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy -Wno-inconsistent-missing-override")
   else()
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-maybe-uninitialized \
         -Wno-mismatched-tags")
