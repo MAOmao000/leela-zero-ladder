@@ -412,7 +412,8 @@ public:
         const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& biases
+        const std::vector<float>& biases,
+        const std::vector<float>& stddevs
     );
 
     size_t get_layer_count() const {
@@ -628,7 +629,6 @@ private:
         void* biases,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name,
-        unsigned int channels,
         unsigned int outputs
     );
 

@@ -144,6 +144,10 @@ enum class backend_t {
     OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
 };
 extern backend_t cfg_backend;
+enum class head_bn_t {
+    CPU, GPU_A, GPU_B
+};
+extern head_bn_t cfg_head_bn;
 extern bool cfg_NCHW;
 extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;

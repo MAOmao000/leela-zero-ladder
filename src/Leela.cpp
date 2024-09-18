@@ -217,6 +217,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cache-plan", "Use TensorRT cache plan.")
         ("execute-context", po::value<std::string>()->default_value("single"),
                             "[single|double] Number of engine units to start.")
+        ("head-bn", po::value<std::string>()->default_value("cpu"),
+                    "[cpu|gpu-a|gpu-b] Processor that performs batch norm on the head layer.")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -529,6 +531,19 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 cfg_execute_context = execute_t::DOUBLE;
             } else {
                 printf("Unexpected option for --execute-context, expecting single/pair\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (vm.count("head-bn")) {
+            auto head_bn = vm["head-bn"].as<std::string>();
+            if ("cpu" == head_bn) {
+                cfg_head_bn = head_bn_t::CPU;
+            } else if ("gpu-a" == head_bn) {
+                cfg_head_bn = head_bn_t::GPU_A;
+            } else if ("gpu-b" == head_bn) {
+                cfg_head_bn = head_bn_t::GPU_B;
+            } else {
+                printf("Unexpected option for --head-bn, expecting cpu/gpu-a/gpu-b\n");
                 exit(EXIT_FAILURE);
             }
         }

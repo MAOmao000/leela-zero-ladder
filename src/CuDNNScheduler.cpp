@@ -244,10 +244,11 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
                                           unsigned int channels,
                                           unsigned int outputs,
                                           const std::vector<float>& weights,
-                                          const std::vector<float>& means) {
+                                          const std::vector<float>& biases,
+                                          const std::vector<float>& stddevs) {
 
     for (auto i = size_t{0}; i < m_networks.size(); i++) {
-        m_networks[i]->push_convolve(filter_size, channels, outputs, weights, means);
+        m_networks[i]->push_convolve(filter_size, channels, outputs, weights, biases, stddevs);
     }
 }
 
@@ -293,8 +294,10 @@ void CuDNNScheduler<net_t>::push_weights(
         }
     }
     // Output head convolutions
-    push_convolve(1, outputs, Network::OUTPUTS_POLICY, weights->m_conv_pol_w, weights->m_bn_pol_w1);
-    push_convolve(1, outputs, Network::OUTPUTS_VALUE, weights->m_conv_val_w, weights->m_bn_val_w1);
+    push_convolve(1, outputs, Network::OUTPUTS_POLICY,
+                  weights->m_conv_pol_w, weights->m_conv_pol_b, weights->m_bn_pol_w2);
+    push_convolve(1, outputs, Network::OUTPUTS_VALUE,
+                  weights->m_conv_val_w, weights->m_conv_val_b, weights->m_bn_val_w2);
 }
 
 template <typename net_t>

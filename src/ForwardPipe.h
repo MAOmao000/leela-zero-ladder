@@ -59,12 +59,12 @@ public:
         // Policy head
         std::vector<float> m_conv_pol_w;
         std::vector<float> m_conv_pol_b;
-        std::vector<float> m_bn_pol_w1;
+        std::vector<float> m_bn_pol_w2;
 
         // Value head
         std::vector<float> m_conv_val_w;
         std::vector<float> m_conv_val_b;
-        std::vector<float> m_bn_val_w1;
+        std::vector<float> m_bn_val_w2;
     };
 
     virtual ~ForwardPipe() = default;

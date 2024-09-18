@@ -145,6 +145,7 @@ public:
                        unsigned int channels,
                        unsigned int outputs,
                        const std::vector<float>& weights,
+                       const std::vector<float>& biases,
                        const std::vector<float>& means);
 
 private:

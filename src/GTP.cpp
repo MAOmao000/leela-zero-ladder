@@ -112,6 +112,7 @@ bool cfg_cpu_only;
 bool cfg_cache_plan;
 execute_t cfg_execute_context;
 backend_t cfg_backend;
+head_bn_t cfg_head_bn;
 bool cfg_NCHW;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
@@ -422,6 +423,7 @@ void GTP::setup_default_parameters() {
 #endif
 #endif
 #endif
+    cfg_head_bn = head_bn_t::CPU;
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;
