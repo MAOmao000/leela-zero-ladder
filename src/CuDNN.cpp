@@ -1263,83 +1263,6 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
     conv_desc->workspace_size = graph.get_workspace_size();
     return conv_desc;
 }
-
-#ifndef _WIN32
-// Y = ReLU(X + B)
-template <typename net_t>
-std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::bias_and_relu_fe_init(
-    cudnnHandle_t handle,
-    const int channels,
-    const int outputs,
-    const int batch_size) {
-
-    int64_t n = batch_size;
-    int64_t c = channels;
-    int64_t h = BOARD_SIZE;
-    int64_t w = BOARD_SIZE;
-    int64_t k = outputs;
-    fe::DataType_t data_type;
-    fe::DataType_t compute_type;
-    fe::DataType_t intermediate_type;
-    std::shared_ptr<conv_descriptor> conv_desc = std::make_shared<conv_descriptor>();
-
-    if (typeid(net_t) == typeid(float)) {
-        data_type = fe::DataType_t::FLOAT;
-        compute_type = fe::DataType_t::FLOAT;
-        intermediate_type = fe::DataType_t::FLOAT;
-    } else { // typeid: __half
-        data_type = fe::DataType_t::HALF;
-        compute_type = fe::DataType_t::FLOAT;
-        intermediate_type = fe::DataType_t::HALF;
-    }
-    auto build_new_graph = [=](cudnnHandle_t handle) {
-        auto graph = fe::graph::Graph();
-        graph.set_io_data_type(data_type)
-              .set_intermediate_data_type(intermediate_type)
-              .set_compute_data_type(compute_type);
-        std::shared_ptr<fe::graph::Tensor_attributes> X;
-        std::shared_ptr<fe::graph::Tensor_attributes> B;
-        std::shared_ptr<fe::graph::Tensor_attributes> Y;
-
-        X = graph.tensor(fe::graph::Tensor_attributes()
-            .set_name("image")
-            .set_dim({ n, c, h, w })
-            .set_stride({ c * h * w, 1, c * w, c }));
-        B = graph.tensor(fe::graph::Tensor_attributes()
-            .set_name("bias")
-            .set_dim({ 1, k, 1, 1 })
-            .set_stride({ k, 1, 1, 1 }));
-        auto bias_options = fe::graph::Pointwise_attributes()
-                            .set_mode(fe::PointwiseMode_t::ADD);
-        auto bias_output = graph.pointwise(X, B, bias_options);
-        auto relu_options = fe::graph::Pointwise_attributes()
-                            .set_mode(fe::PointwiseMode_t::RELU_FWD);
-        Y = graph.pointwise(bias_output, relu_options);
-        Y->set_output(true); // is_virtual = false
-
-        checkCUDNNFE(graph.validate());
-        auto key = graph.key();
-        auto it = m_maintained_cache5.find(key);
-        if (it != m_maintained_cache5.end()) {
-            return it->second;
-        }
-        checkCUDNNFE(graph.build_operation_graph(handle));
-        checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
-        checkCUDNNFE(graph.check_support(handle));
-        checkCUDNNFE(graph.build_plans(handle));
-        m_maintained_cache5.insert({key, std::make_tuple(graph, X, B, Y)});
-        return std::make_tuple(graph, X, B, Y);
-    };
-
-    auto [graph, X, B, Y] = build_new_graph(handle);
-    conv_desc->graph = graph;
-    conv_desc->X = X;
-    conv_desc->B = B;
-    conv_desc->Y = Y;
-    conv_desc->workspace_size = graph.get_workspace_size();
-    return conv_desc;
-}
-#endif
 #endif
 
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
@@ -1873,6 +1796,8 @@ void CuDNN_Network<net_t>::push_convolve(
         exit(EXIT_FAILURE);
     }
 #else
+    (void) biases;
+    (void) stddevs;
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
