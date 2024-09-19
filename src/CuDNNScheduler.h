@@ -146,7 +146,7 @@ public:
                        unsigned int outputs,
                        const std::vector<float>& weights,
                        const std::vector<float>& biases,
-                       const std::vector<float>& means);
+                       const std::vector<float>& stddevs);
 
 private:
     bool m_running{true};
