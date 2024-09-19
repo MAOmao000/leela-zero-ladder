@@ -3319,66 +3319,38 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::buildConvLayer(
     // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
     // matmul is mathmatically equivalent to a 2D convolution of 1x1 features and 1x1 kernels.
     nvinfer1::IConvolutionLayer *convLayer;
-    if (biases_size > 0) {
-        if (typeid(net_t) == typeid(float)) {
-            convLayer = network->addConvolutionNd(
-                *input,
-                outputs,
-                {2, {filter_size, filter_size}},
-                {
-                    nvinfer1::DataType::kFLOAT,
-                    weights,
-                    weights_size
-                },
-                {
-                    nvinfer1::DataType::kFLOAT,
-                    biases,
-                    biases_size
-                }
-            );
-        } else {
-            convLayer = network->addConvolutionNd(
-                *input,
-                outputs,
-                {2, {filter_size, filter_size}},
-                {
-                    nvinfer1::DataType::kHALF,
-                    weights,
-                    weights_size
-                },
-                {
-                    nvinfer1::DataType::kHALF,
-                    biases,
-                    biases_size
-                }
-            );
-        }
+    if (typeid(net_t) == typeid(float)) {
+        convLayer = network->addConvolutionNd(
+            *input,
+            outputs,
+            {2, {filter_size, filter_size}},
+            {
+                nvinfer1::DataType::kFLOAT,
+                weights,
+                weights_size
+            },
+            {
+                nvinfer1::DataType::kFLOAT,
+                biases,
+                biases_size
+            }
+        );
     } else {
-        if (typeid(net_t) == typeid(float)) {
-            convLayer = network->addConvolutionNd(
-                *input,
-                outputs,
-                {2, {filter_size, filter_size}},
-                {
-                    nvinfer1::DataType::kFLOAT,
-                    weights,
-                    weights_size
-                },
-                {nvinfer1::DataType::kFLOAT, nullptr, 0}
-            );
-        } else {
-            convLayer = network->addConvolutionNd(
-                *input,
-                outputs,
-                {2, {filter_size, filter_size}},
-                {
-                    nvinfer1::DataType::kHALF,
-                    weights,
-                    weights_size
-                },
-                {nvinfer1::DataType::kHALF, nullptr, 0}
-            );
-        }
+        convLayer = network->addConvolutionNd(
+            *input,
+            outputs,
+            {2, {filter_size, filter_size}},
+            {
+                nvinfer1::DataType::kHALF,
+                weights,
+                weights_size
+            },
+            {
+                nvinfer1::DataType::kHALF,
+                biases,
+                biases_size
+            }
+        );
     }
     convLayer->setName(op_name.c_str());
     if (filter_size == 1) {
