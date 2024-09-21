@@ -1882,9 +1882,6 @@ void CuDNN_Network<net_t>::forward_activations(
     const int tid,
     const int batch_size) {
 
-#if defined(USE_TENSOR_RT)
-    (void)tid;
-#endif
     const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     const auto pol_elements
         = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
@@ -2819,7 +2816,7 @@ bool CuDNN_Network<net_t>::build(
             checkCUDA(cudaMalloc(&buffer, bytes));
             if (name_str == "BatchSize") {
                 auto input_batch = std::vector<int32_t>(batch_size * m_layers[1].channels, 0);
-                checkCUDA(cudaMemcpyAsync(
+                checkCUDA(cudaMemcpy(
                     buffer,
                     (int32_t*)&input_batch[0],
                     bytes,
