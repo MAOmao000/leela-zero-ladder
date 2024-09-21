@@ -530,7 +530,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             } else if ("double" == execute_context) {
                 cfg_execute_context = execute_t::DOUBLE;
             } else {
-                printf("Unexpected option for --execute-context, expecting single/pair\n");
+                printf("Unexpected option for --execute-context, expecting single/double\n");
                 exit(EXIT_FAILURE);
             }
         }
