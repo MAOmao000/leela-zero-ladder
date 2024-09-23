@@ -146,7 +146,11 @@ public:
                        unsigned int outputs,
                        const std::vector<float>& weights,
                        const std::vector<float>& biases,
-                       const std::vector<float>& stddevs);
+                       const std::vector<float>& stddevs,
+                       const std::vector<float>& ip1_w,
+                       const std::vector<float>& ip1_b,
+                       const std::vector<float>& ip2_w,
+                       const std::vector<float>& ip2_b);
 
 private:
     bool m_running{true};

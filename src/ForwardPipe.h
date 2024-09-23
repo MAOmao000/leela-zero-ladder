@@ -60,11 +60,17 @@ public:
         std::vector<float> m_conv_pol_w;
         std::vector<float> m_conv_pol_b;
         std::vector<float> m_bn_pol_w2;
+        std::vector<float> m_ip_pol_w;
+        std::vector<float> m_ip_pol_b;
 
         // Value head
         std::vector<float> m_conv_val_w;
         std::vector<float> m_conv_val_b;
         std::vector<float> m_bn_val_w2;
+        std::vector<float> m_ip1_val_w;
+        std::vector<float> m_ip1_val_b;
+        std::vector<float> m_ip2_val_w;
+        std::vector<float> m_ip2_val_b;
     };
 
     virtual ~ForwardPipe() = default;

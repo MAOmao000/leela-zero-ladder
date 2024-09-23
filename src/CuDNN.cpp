@@ -363,7 +363,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_init(
         data_type = CUDNN_DATA_FLOAT;
         compute_type = CUDNN_DATA_FLOAT;
         tensor_format = cfg_NCHW ? CUDNN_TENSOR_NCHW : CUDNN_TENSOR_NHWC;
-    } else { // typeid: __half
+    } else {
         data_type = CUDNN_DATA_HALF;
         compute_type = CUDNN_DATA_HALF;
         tensor_format = cfg_NCHW ? CUDNN_TENSOR_NCHW : CUDNN_TENSOR_NHWC;
@@ -483,12 +483,12 @@ void CuDNN_Network<net_t>::squeeze_excitation_float(
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
-    const void *fc1_weights, // [256, 128]
-    const void *fc1_biases,  // [128]
-    const void *fc2_weights, // [128, 512]
-    const void *fc2_biases,  // [512]
+    const void *fc1_weights,
+    const void *fc1_biases,
+    const void *fc2_weights,
+    const void *fc2_biases,
     void *bufferOut,
-    void *bufferPool,        // [N, 256, 1, 1]
+    void *bufferPool,
     const int batch_size,
     const int channels,
     const int spatial) {
@@ -705,12 +705,12 @@ void CuDNN_Network<net_t>::squeeze_excitation_half(
     const void *bufferIn1,   // residual input(before convolve)
     const void *bufferIn2,   // residual output
     void *TempBuffer,
-    const void *fc1_weights, // [256, 128]
-    const void *fc1_biases,  // [128]
-    const void *fc2_weights, // [128, 512]
-    const void *fc2_biases,  // [512]
+    const void *fc1_weights,
+    const void *fc1_biases,
+    const void *fc2_weights,
+    const void *fc2_biases,
     void *bufferOut,
-    void *bufferPool,        // [N, 256, 1, 1]
+    void *bufferPool,
     const int batch_size,
     const int channels,
     const int spatial) {
@@ -948,7 +948,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_init(
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
-    } else { // typeid: __half
+    } else {
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::HALF;
@@ -989,7 +989,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_init(
         auto relu_options = fe::graph::Pointwise_attributes()
                             .set_mode(fe::PointwiseMode_t::RELU_FWD);
         Y = graph.pointwise(bias_output, relu_options);
-        Y->set_output(true); // is_virtual = false
+        Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
         auto key = graph.key();
@@ -1042,7 +1042,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_no_relu_init(
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
-    } else { // typeid: __half
+    } else {
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::HALF;
@@ -1128,7 +1128,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_add_relu_init
         data_type = fe::DataType_t::FLOAT;
         compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
-    } else { // typeid: __half
+    } else {
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::HALF;
@@ -1208,7 +1208,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
-    } else { // typeid: __half
+    } else {
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
         conv_compute_type = fe::DataType_t::HALF;
@@ -1238,7 +1238,7 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
                             .set_stride({ 1, 1 })
                             .set_dilation({ 1, 1 });
         Y = graph.conv_fprop(X, W, conv_options);
-        Y->set_output(true); // is_virtual = false
+        Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
         auto key = graph.key();
@@ -1366,7 +1366,8 @@ void CuDNN_Network<net_t>::push_weights_trt_col_major(
     const size_t layer,
     const std::vector<float>& weights,
     const int row,
-    const int column) {
+    const int column,
+    const int channels) {
 
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(CuDNN_Layer());
@@ -1374,9 +1375,12 @@ void CuDNN_Network<net_t>::push_weights_trt_col_major(
     // Transpose from model's CK to TensorRT's KC
     auto weightSize = weights.size() * sizeof(net_t);
     auto transposed_weights = std::vector<net_t>(weights.size());
-    for (int i = 0; i < column; i++) {
-        for (int j = 0; j < row; j++) {
-            transposed_weights[j * column + i] = (net_t)weights[i * row + j];
+    for (int ch = 0; ch < channels; ch++) {
+        for (int i = 0; i < column; i++) {
+            for (int j = 0; j < row; j++) {
+                transposed_weights[ch * column * row + j * column + i] =
+                    (net_t)weights[ch * column * row + i * row + j];
+            }
         }
     }
     void *host_mem;
@@ -1755,28 +1759,53 @@ void CuDNN_Network<net_t>::push_convolve(
     const unsigned int outputs,
     const std::vector<float>& weights,
     const std::vector<float>& biases,
-    const std::vector<float>& stddevs) {
+    const std::vector<float>& stddevs,
+    const std::vector<float>& ip1_w,
+    const std::vector<float>& ip1_b,
+    const std::vector<float>& ip2_w,
+    const std::vector<float>& ip2_b) {
 
     size_t layer = get_layer_count();
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
         if (cfg_NCHW) {
-            push_weights_trt(layer, weights); // Here it is still float(Convert precision with push_weights)
+            push_weights_trt(layer, weights);       // Here it is still float(Convert precision with push_weights)
             if (cfg_head_bn == head_bn_t::GPU_A) {
-                push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, biases);    // Here it is still float(Convert precision with push_weights)
+                if (outputs == Network::OUTPUTS_VALUE) {
+                    push_weights_trt_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels);
+                } else {
+                    push_weights_trt(layer, ip1_w); // Here it is still float(Convert precision with push_weights)
+                }
+                push_weights_trt(layer, ip1_b);     // Here it is still float(Convert precision with push_weights)
+                if (outputs == Network::OUTPUTS_VALUE) {
+                    push_weights_trt(layer, ip2_w); // Here it is still float(Convert precision with push_weights)
+                    push_weights_trt(layer, ip2_b); // Here it is still float(Convert precision with push_weights)
+                }
             } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
-                push_weights_trt(layer, stddevs);  // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, biases);    // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, stddevs);   // Here it is still float(Convert precision with push_weights)
             }
         } else {
             auto weights_convert = NCHW_to_NHWC<float>(
                 weights, outputs, filter_size, filter_size, channels);
             push_weights_trt(layer, weights_convert); // Convert precision with push_weights
             if (cfg_head_bn == head_bn_t::GPU_A) {
-                push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, biases);      // Here it is still float(Convert precision with push_weights)
+                if (outputs == Network::OUTPUTS_POLICY) {
+                    auto ip_weights_convert = NCHW_to_NHWC<float>(
+                        ip1_w, ip1_w.size() / outputs, filter_size, filter_size, outputs);
+                    push_weights_trt(layer, ip_weights_convert); // Convert precision with push_weights
+                    push_weights_trt(layer, ip1_b); // Here it is still float(Convert precision with push_weights)
+                } else {
+                    push_weights_trt(layer, ip1_w); // Here it is still float(Convert precision with push_weights)
+                    push_weights_trt(layer, ip1_b); // Here it is still float(Convert precision with push_weights)
+                    push_weights_trt(layer, ip2_w); // Here it is still float(Convert precision with push_weights)
+                    push_weights_trt(layer, ip2_b); // Here it is still float(Convert precision with push_weights)
+                }
             } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                push_weights_trt(layer, biases);  // Here it is still float(Convert precision with push_weights)
-                push_weights_trt(layer, stddevs);  // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, biases);    // Here it is still float(Convert precision with push_weights)
+                push_weights_trt(layer, stddevs);   // Here it is still float(Convert precision with push_weights)
             }
         }
         m_layers[layer].outputs = outputs;
@@ -1798,6 +1827,8 @@ void CuDNN_Network<net_t>::push_convolve(
 #else
     (void) biases;
     (void) stddevs;
+    (void) ip1_w;
+    (void) ip2_w;
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
@@ -1892,6 +1923,17 @@ void CuDNN_Network<net_t>::forward_activations(
 
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
+        size_t pol_elements_trt;
+        size_t val_elements_trt;
+        if (cfg_head_bn == head_bn_t::GPU_A) {
+            pol_elements_trt = batch_size * POTENTIAL_MOVES;
+            val_elements_trt = batch_size;
+        } else {
+            pol_elements_trt = pol_elements;
+            val_elements_trt = val_elements;
+        }
+        std::vector<net_t> pol_net_trt_t = std::vector<net_t>(pol_elements_trt);
+        std::vector<net_t> val_net_trt_t = std::vector<net_t>(val_elements_trt);
         auto search = cudnn_context.mBuffers.find("InputFeature");
         assert(search != cudnn_context.mBuffers.end());
         if (typeid(net_t) == typeid(float) && cfg_NCHW) {
@@ -1924,17 +1966,53 @@ void CuDNN_Network<net_t>::forward_activations(
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
             cudnn_context.mContext->setInputShape("InputFeature",
                 nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            if (cfg_head_bn == head_bn_t::GPU_A) {
+                cudnn_context.mContext->setInputShape("InputPolWeight",
+                    nvinfer1::Dims4(batch_size,
+                        1,
+                        POTENTIAL_MOVES,
+                        Network::OUTPUTS_POLICY * NUM_INTERSECTIONS)
+//                        POTENTIAL_MOVES)
+                );
+                cudnn_context.mContext->setInputShape("InputVal1Weight",
+                    nvinfer1::Dims4(batch_size,
+                        1,
+                        NUM_INTERSECTIONS,
+                        Network::VALUE_LAYER)
+                );
+                cudnn_context.mContext->setInputShape("InputVal2Weight",
+                    nvinfer1::Dims4(batch_size, 1, Network::VALUE_LAYER, 1));
+            }
         } else {
             cudnn_context.mContext_n->setInputShape("InputFeature",
                 nvinfer1::Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            if (cfg_head_bn == head_bn_t::GPU_A) {
+                cudnn_context.mContext_n->setInputShape("InputPolWeight",
+                    nvinfer1::Dims4(batch_size,
+                        1,
+                        POTENTIAL_MOVES,
+                        Network::OUTPUTS_POLICY * NUM_INTERSECTIONS)
+                );
+//                    POTENTIAL_MOVES)
+                cudnn_context.mContext_n->setInputShape("InputVal1Weight",
+                    nvinfer1::Dims4(batch_size,
+                        1,
+                        NUM_INTERSECTIONS,
+                        Network::VALUE_LAYER)
+                );
+                cudnn_context.mContext_n->setInputShape("InputVal2Weight",
+                    nvinfer1::Dims4(batch_size, 1, Network::VALUE_LAYER, 1));
+            }
         }
         if (m_net_type == int(NetworkType::MINIGO_SE)) {
             if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
                 cudnn_context.mContext->setInputShape("BatchSize",
-                    nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
+                    nvinfer1::Dims(
+                        {4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             } else {
                 cudnn_context.mContext_n->setInputShape("BatchSize",
-                    nvinfer1::Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
+                    nvinfer1::Dims(
+                        {4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
             }
         }
         cudaStreamSynchronize(m_streams[tid]);
@@ -1947,29 +2025,32 @@ void CuDNN_Network<net_t>::forward_activations(
         search = cudnn_context.mBuffers.find("OutputPolicy");
         assert(search != cudnn_context.mBuffers.end());
         checkCUDA(cudaMemcpyAsync(
-            &pol_net_t[0],
+            &pol_net_trt_t[0],
             search->second,
-            pol_elements * sizeof(net_t),
+            pol_elements_trt * sizeof(net_t),
             cudaMemcpyDeviceToHost,
             m_streams[tid]));
         search = cudnn_context.mBuffers.find("OutputValue");
         assert(search != cudnn_context.mBuffers.end());
         checkCUDA(cudaMemcpyAsync(
-            &val_net_t[0],
+            &val_net_trt_t[0],
             search->second,
-            val_elements * sizeof(net_t),
+            val_elements_trt * sizeof(net_t),
             cudaMemcpyDeviceToHost,
             m_streams[tid]));
         cudaStreamSynchronize(m_streams[tid]);
 
-        if (cfg_NCHW) {
-            std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
-            std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
+        if (cfg_head_bn == head_bn_t::GPU_A) {
+            std::copy(val_net_trt_t.begin(), val_net_trt_t.end(), output_val.begin()); 
+            std::copy(pol_net_trt_t.begin(), pol_net_trt_t.end(), output_pol.begin());
+        } else if (cfg_NCHW) {
+            std::copy(val_net_trt_t.begin(), val_net_trt_t.end(), output_val.begin()); 
+            std::copy(pol_net_trt_t.begin(), pol_net_trt_t.end(), output_pol.begin());
         } else {
             output_val = NHWC_to_NCHW<net_t>(
-                val_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_VALUE);
+                val_net_trt_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_VALUE);
             output_pol = NHWC_to_NCHW<net_t>(
-                pol_net_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_POLICY);
+                pol_net_trt_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_POLICY);
         }
         return;
     }
@@ -2549,7 +2630,9 @@ bool CuDNN_Network<net_t>::build(
     }
     config->setFlag(nvinfer1::BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
 
-    auto network = TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U));
+    const auto explicitBatchFlag =
+        1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+    auto network = TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatchFlag));
     if (!network) {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;
@@ -2821,6 +2904,39 @@ bool CuDNN_Network<net_t>::build(
                     (int32_t*)&input_batch[0],
                     bytes,
                     cudaMemcpyHostToDevice));
+            } else if (name_str == "InputPolWeight") {
+                const auto iter = std::end(m_layers) - 2;
+                const auto& layer = *iter;
+                const auto ip_pol_weight = begin(layer.weights) + 2;
+                for (auto i = 0; i < batch_size; i++) {
+                    checkCUDA(cudaMemcpy(
+                        (net_t*)(buffer) + i * layer.weights_size[2],
+                        ip_pol_weight[0],
+                        bytes / batch_size,
+                        cudaMemcpyHostToDevice));
+                }
+            } else if (name_str == "InputVal1Weight") {
+                const auto iter = std::end(m_layers) - 1;
+                const auto& layer = *iter;
+                const auto ip_val_weight = begin(layer.weights) + 2;
+                for (auto i = 0; i < batch_size; i++) {
+                    checkCUDA(cudaMemcpy(
+                        (net_t*)(buffer) + i * layer.weights_size[2],
+                        ip_val_weight[0],
+                        bytes / batch_size,
+                        cudaMemcpyHostToDevice));
+                }
+            } else if (name_str == "InputVal2Weight") {
+                const auto iter = std::end(m_layers) - 1;
+                const auto& layer = *iter;
+                const auto ip_val_weight = begin(layer.weights) + 4;
+                for (auto i = 0; i < batch_size; i++) {
+                    checkCUDA(cudaMemcpy(
+                        (net_t*)(buffer) + i * layer.weights_size[4],
+                        ip_val_weight[0],
+                        bytes / batch_size,
+                        cudaMemcpyHostToDevice));
+                }
             }
             context->mBuffers.emplace(std::make_pair(name, buffer));
             if (engine->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT) {
@@ -2862,57 +2978,19 @@ void CuDNN_Network<net_t>::constructNetwork(
     nvinfer1::ILayer* shapeLayer = nullptr;
     nvinfer1::IShapeLayer* inShapeLayer = nullptr;
     nvinfer1::ICastLayer* castLayer = nullptr;
-    nvinfer1::ITensor* batchSizeLayer = nullptr;
 
     if (m_net_type == int(NetworkType::MINIGO_SE)) {
-        batchSizeLayer
-            = network->addInput(
-                "BatchSize",
-                nvinfer1::DataType::kINT32,
-                {nvinfer1::Dims{4, {-1, m_layers[1].channels, 1, 1}}});
-        batchSizeLayer->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
-        if (cfg_execute_context == execute_t::SINGLE) {
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kMIN,
-                                   nvinfer1::Dims({4,
-                                       {1, m_layers[1].channels, 1, 1}}));
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kOPT,
-                                   nvinfer1::Dims({4,
-                                       {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kMAX,
-                                   nvinfer1::Dims({4,
-                                       {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
-        } else {
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kMIN,
-                                   nvinfer1::Dims({4,
-                                       {1, m_layers[1].channels, 1, 1}}));
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kOPT,
-                                   nvinfer1::Dims({4,
-                                       {1, m_layers[1].channels, 1, 1}}));
-            profile->setDimensions("BatchSize",
-                                   nvinfer1::OptProfileSelector::kMAX,
-                                   nvinfer1::Dims({4,
-                                       {1, m_layers[1].channels, 1, 1}}));
-            profile_n->setDimensions("BatchSize",
-                                     nvinfer1::OptProfileSelector::kMIN,
-                                     nvinfer1::Dims({4,
-                                         {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
-            profile_n->setDimensions("BatchSize",
-                                     nvinfer1::OptProfileSelector::kOPT,
-                                     nvinfer1::Dims({4,
-                                         {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
-            profile_n->setDimensions("BatchSize",
-                                     nvinfer1::OptProfileSelector::kMAX,
-                                     nvinfer1::Dims({4,
-                                         {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
-        }
+        auto batchSizeTensor = initInputs("BatchSize",
+                                          network,
+                                          profile,
+                                          profile_n,
+                                          m_layers[1].channels,
+                                          1,
+                                          1,
+                                          batch_size);
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
-        inShapeLayer = network->addShape(*batchSizeLayer);
+        inShapeLayer = network->addShape(*batchSizeTensor);
         castLayer = network->addCast(*inShapeLayer->getOutput(0), nvinfer1::DataType::kINT32);
 
         shapeLayer = network->addUnary(
@@ -2925,7 +3003,14 @@ void CuDNN_Network<net_t>::constructNetwork(
 
         const auto& layer = *iter;
         if (layer.is_input_convolution) {
-            inputFeature = initInputs(network, layer, profile, profile_n, batch_size);
+            inputFeature = initInputs("InputFeature",
+                                      network,
+                                      profile,
+                                      profile_n,
+                                      layer.channels,
+                                      BOARD_SIZE,
+                                      BOARD_SIZE,
+                                      batch_size);
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             auto initialConvLayer = buildConvLayer(
@@ -3100,7 +3185,11 @@ void CuDNN_Network<net_t>::constructNetwork(
             auto weights = begin(layer.weights);
             if (niter == std::end(m_layers)) {
                 if (cfg_head_bn == head_bn_t::GPU_A) {
-                    auto conv_val_bias = begin(layer.weights) + 1;
+                    auto conv_val_bias = begin(layer.weights)  + 1;
+                    auto ip1_val_weight = begin(layer.weights) + 2;
+                    auto ip1_val_bias = begin(layer.weights)   + 3;
+                    auto ip2_val_weight = begin(layer.weights) + 4;
+                    auto ip2_val_bias = begin(layer.weights)   + 5;
                     auto valueConvLayer = buildConvLayer(
                         outputConv,
                         layer.filter_size,
@@ -3111,14 +3200,65 @@ void CuDNN_Network<net_t>::constructNetwork(
                         network,
                         layer.name + ".conv",
                         layer.outputs);
-                    outValueLayer = buildActivationLayer(
+                    auto actValueLayer = buildActivationLayer(
                         valueConvLayer->getOutput(0),
                         network,
                         layer.name + ".act",
                         nvinfer1::ActivationType::kRELU);
+                    auto shuffleValLayer = network->addShuffle(*actValueLayer->getOutput(0));
+                    shuffleValLayer->setReshapeDimensions(
+                        {4, {-1, 1, 1, NUM_INTERSECTIONS}});
+                    shuffleValLayer->setName((layer.name + ".shuffle").c_str());
+                    auto ip1_val_w_tensor = initInputs("InputVal1Weight",
+                                                       network,
+                                                       profile,
+                                                       profile_n,
+                                                       1,
+                                                       NUM_INTERSECTIONS,
+                                                       layer.channels,
+                                                       batch_size);
+                    auto val1MatMulLayer = network->addMatrixMultiply(
+                        *shuffleValLayer->getOutput(0),
+                        MatrixOperation::kNONE,
+                        *ip1_val_w_tensor,
+                        MatrixOperation::kNONE);
+                    val1MatMulLayer->setName((layer.name + ".matmul1").c_str());
+                    auto val1BiasLayer = network->addScale(
+                        *val1MatMulLayer->getOutput(0),
+                        ScaleMode::kELEMENTWISE,
+                        {DataType::kFLOAT, ip1_val_bias[0], static_cast<int64_t>(layer.weights_size[3])},
+                        {DataType::kFLOAT, nullptr, 0},
+                        {DataType::kFLOAT, nullptr, 0});
+                    val1BiasLayer->setName((layer.name + ".bias1").c_str());
+                    auto ip1ActValueLayer = buildActivationLayer(
+                        val1BiasLayer->getOutput(0),
+                        network,
+                        layer.name + ".ip1act",
+                        nvinfer1::ActivationType::kRELU);
+                    auto ip2_val_w_tensor = initInputs("InputVal2Weight",
+                                                       network,
+                                                       profile,
+                                                       profile_n,
+                                                       1,
+                                                       layer.channels,
+                                                       1,
+                                                       batch_size);
+                    auto val2MatMulLayer = network->addMatrixMultiply(
+                        *ip1ActValueLayer->getOutput(0),
+                        MatrixOperation::kNONE,
+                        *ip2_val_w_tensor,
+                        MatrixOperation::kNONE);
+                    val2MatMulLayer->setName((layer.name + ".matmul2").c_str());
+                    outValueLayer = network->addScale(
+                        *val2MatMulLayer->getOutput(0),
+                        ScaleMode::kELEMENTWISE,
+                        {DataType::kFLOAT, ip2_val_bias[0], static_cast<int64_t>(layer.weights_size[5])},
+                        {DataType::kFLOAT, nullptr, 0},
+                        {DataType::kFLOAT, nullptr, 0});
+                    outValueLayer->setName((layer.name + ".bias2").c_str());
                 } else if (cfg_head_bn == head_bn_t::GPU_B) {
                     auto conv_val_bias = begin(layer.weights) + 1;
-                    auto bn_val_variance = begin(layer.weights) + 2;
+                    auto bn_val_stddevs = begin(layer.weights) + 2;
                     auto valueConvLayer = buildConvLayer(
                         outputConv,
                         layer.filter_size,
@@ -3133,7 +3273,7 @@ void CuDNN_Network<net_t>::constructNetwork(
                         *valueConvLayer->getOutput(0),
                         ScaleMode::kCHANNEL,
                         {DataType::kFLOAT, conv_val_bias[0], static_cast<int64_t>(layer.weights_size[1])},
-                        {DataType::kFLOAT, bn_val_variance[0], static_cast<int64_t>(layer.weights_size[2])},
+                        {DataType::kFLOAT, bn_val_stddevs[0], static_cast<int64_t>(layer.weights_size[2])},
                         {DataType::kFLOAT, nullptr, 0});
                     valueBatchNormLayer->setName((layer.name + ".bn").c_str());
                     outValueLayer = buildActivationLayer(
@@ -3156,6 +3296,7 @@ void CuDNN_Network<net_t>::constructNetwork(
             } else {
                 if (cfg_head_bn == head_bn_t::GPU_A) {
                     auto conv_pol_bias = begin(layer.weights) + 1;
+                    auto ip_pol_bias = begin(layer.weights)   + 3;
                     auto policyConvLayer = buildConvLayer(
                         outputConv,
                         layer.filter_size,
@@ -3166,14 +3307,39 @@ void CuDNN_Network<net_t>::constructNetwork(
                         network,
                         layer.name + ".conv",
                         layer.outputs);
-                    outPolicyLayer = buildActivationLayer(
+                    auto actPolicyLayer = buildActivationLayer(
                         policyConvLayer->getOutput(0),
                         network,
                         layer.name + ".act",
                         nvinfer1::ActivationType::kRELU);
+                    auto shuffleLayer1 = network->addShuffle(*actPolicyLayer->getOutput(0));
+                    shuffleLayer1->setReshapeDimensions(
+                        {4, {-1, 1, layer.outputs * NUM_INTERSECTIONS, 1}});
+                    shuffleLayer1->setName((layer.name + ".shuffle1").c_str());
+                    auto ip_pol_w_tensor = initInputs("InputPolWeight",
+                                                      network,
+                                                      profile,
+                                                      profile_n,
+                                                      1,
+                                                      POTENTIAL_MOVES,
+                                                      layer.outputs * NUM_INTERSECTIONS,
+                                                      batch_size);
+                    auto polMatMulLayer = network->addMatrixMultiply(
+                        *shuffleLayer1->getOutput(0),
+                        MatrixOperation::kTRANSPOSE,
+                        *ip_pol_w_tensor,
+                        MatrixOperation::kTRANSPOSE);
+                    polMatMulLayer->setName((layer.name + ".matmul").c_str());
+                    outPolicyLayer = network->addScale(
+                        *polMatMulLayer->getOutput(0),
+                        ScaleMode::kELEMENTWISE,
+                        {DataType::kFLOAT, ip_pol_bias[0], static_cast<int64_t>(layer.weights_size[3])},
+                        {DataType::kFLOAT, nullptr, 0},
+                        {DataType::kFLOAT, nullptr, 0});
+                    outPolicyLayer->setName((layer.name + ".bias").c_str());
                 } else if (cfg_head_bn == head_bn_t::GPU_B) {
                     auto conv_pol_bias = begin(layer.weights) + 1;
-                    auto bn_pol_variance = begin(layer.weights) + 2;
+                    auto bn_pol_stddevs = begin(layer.weights) + 2;
                     auto policyConvLayer = buildConvLayer(
                         outputConv,
                         layer.filter_size,
@@ -3188,7 +3354,7 @@ void CuDNN_Network<net_t>::constructNetwork(
                         *policyConvLayer->getOutput(0),
                         ScaleMode::kCHANNEL,
                         {DataType::kFLOAT, conv_pol_bias[0], static_cast<int64_t>(layer.weights_size[1])},
-                        {DataType::kFLOAT, bn_pol_variance[0], static_cast<int64_t>(layer.weights_size[2])},
+                        {DataType::kFLOAT, bn_pol_stddevs[0], static_cast<int64_t>(layer.weights_size[2])},
                         {DataType::kFLOAT, nullptr, 0});
                     policyBatchNormLayer->setName((layer.name + ".bn").c_str());
                     outPolicyLayer = buildActivationLayer(
@@ -3236,60 +3402,66 @@ void CuDNN_Network<net_t>::constructNetwork(
 
 template <typename net_t>
 nvinfer1::ITensor* CuDNN_Network<net_t>::initInputs(
+    char const *inputName,
     TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-    const CuDNN_Layer layer,
     nvinfer1::IOptimizationProfile* profile,
     nvinfer1::IOptimizationProfile* profile_n,
+    const int channels,
+    const int rows,
+    const int cols,
     const int batch_size) {
 
-    auto numInChannels = layer.channels;
-    auto nnYLen = BOARD_SIZE;
-    auto nnXLen = BOARD_SIZE;
     nvinfer1::ITensor* inputFeature;
 
-    if (typeid(net_t) == typeid(float)) {
+    std::string_view name_str{inputName};
+    if (name_str == "BatchSize") {
         inputFeature
-            = network->addInput("InputFeature",
+            = network->addInput(inputName,
+                                nvinfer1::DataType::kINT32,
+                                {4, {-1, channels, rows, cols}});
+    } else if (typeid(net_t) == typeid(float)) {
+        inputFeature
+            = network->addInput(inputName,
                                 nvinfer1::DataType::kFLOAT,
-                                {4, {-1, numInChannels, nnYLen, nnXLen}});
+                                {4, {-1, channels, rows, cols}});
     } else {
         inputFeature
-            = network->addInput("InputFeature",
+            = network->addInput(inputName,
                                 nvinfer1::DataType::kHALF,
-                                {4, {-1, numInChannels, nnYLen, nnXLen}});
+                                {4, {-1, channels, rows, cols}});
     }
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(nvinfer1::TensorFormat::kLINEAR));
 
     if (cfg_execute_context == execute_t::SINGLE) {
-        profile->setDimensions("InputFeature",
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kMIN,
-                               nvinfer1::Dims4(1, numInChannels, nnYLen, nnXLen));
-        profile->setDimensions("InputFeature",
+                               nvinfer1::Dims4(1, channels, rows, cols));
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kOPT,
-                               nvinfer1::Dims4(batch_size, numInChannels, nnYLen, nnXLen));
-        profile->setDimensions("InputFeature",
+                               nvinfer1::Dims4(batch_size, channels, rows, cols));
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kMAX,
-                               nvinfer1::Dims4(batch_size, numInChannels, nnYLen, nnXLen));
+                               nvinfer1::Dims4(batch_size, channels, rows, cols));
     } else {
-        profile->setDimensions("InputFeature",
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kMIN,
-                               nvinfer1::Dims4(1, numInChannels, nnYLen, nnXLen));
-        profile->setDimensions("InputFeature",
+                               nvinfer1::Dims4(1, channels, rows, cols));
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kOPT,
-                               nvinfer1::Dims4(1, numInChannels, nnYLen, nnXLen));
-        profile->setDimensions("InputFeature",
+                               nvinfer1::Dims4(1, channels, rows, cols));
+        profile->setDimensions(inputName,
                                nvinfer1::OptProfileSelector::kMAX,
-                               nvinfer1::Dims4(1, numInChannels, nnYLen, nnXLen));
-        profile_n->setDimensions("InputFeature",
+                               nvinfer1::Dims4(1, channels, rows, cols));
+        profile_n->setDimensions(inputName,
                                  nvinfer1::OptProfileSelector::kMIN,
-                                 nvinfer1::Dims4(batch_size, numInChannels, nnYLen, nnXLen));
-        profile_n->setDimensions("InputFeature",
+                                 nvinfer1::Dims4(batch_size, channels, rows, cols));
+        profile_n->setDimensions(inputName,
                                  nvinfer1::OptProfileSelector::kOPT,
-                                 nvinfer1::Dims4(batch_size, numInChannels, nnYLen, nnXLen));
-        profile_n->setDimensions("InputFeature",
+                                 nvinfer1::Dims4(batch_size, channels, rows, cols));
+        profile_n->setDimensions(inputName,
                                  nvinfer1::OptProfileSelector::kMAX,
-                                 nvinfer1::Dims4(batch_size, numInChannels, nnYLen, nnXLen));
+                                 nvinfer1::Dims4(batch_size, channels, rows, cols));
     }
     return inputFeature;
 }
@@ -3390,7 +3562,6 @@ nvinfer1::ILayer* CuDNN_Network<net_t>::applyGPoolLayer(
     gpoolMeanLayer->setName(gpoolMeanLayerName.c_str());
     return gpoolMeanLayer;
 }
-
 #endif
 
 template class CuDNN_Network<float>;

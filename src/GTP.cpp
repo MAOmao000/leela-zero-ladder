@@ -423,7 +423,11 @@ void GTP::setup_default_parameters() {
 #endif
 #endif
 #endif
+#ifdef USE_TENSOR_RT
+    cfg_head_bn = head_bn_t::GPU_A;
+#else
     cfg_head_bn = head_bn_t::CPU;
+#endif
     cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;

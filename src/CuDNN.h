@@ -413,7 +413,11 @@ public:
         const unsigned int outputs,
         const std::vector<float>& weights,
         const std::vector<float>& biases,
-        const std::vector<float>& stddevs
+        const std::vector<float>& stddevs,
+        const std::vector<float>& ip1_w,
+        const std::vector<float>& ip1_b,
+        const std::vector<float>& ip2_w,
+        const std::vector<float>& ip2_b
     );
 
     size_t get_layer_count() const {
@@ -595,7 +599,8 @@ private:
         const size_t layer,
         const std::vector<float>& weights,
         const int row,
-        const int column
+        const int column,
+        const int channels = 1
     );
 
     // Builds the network engine
@@ -613,10 +618,13 @@ private:
     );
 
     nvinfer1::ITensor* initInputs(
+        char const *inputName,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        const CuDNN_Layer layer,
         nvinfer1::IOptimizationProfile* profile,
         nvinfer1::IOptimizationProfile* profile_n,
+        const int channels,
+        const int rows,
+        const int cols,
         const int batch_size
     );
 

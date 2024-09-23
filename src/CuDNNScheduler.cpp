@@ -245,10 +245,15 @@ void CuDNNScheduler<net_t>::push_convolve(unsigned int filter_size,
                                           unsigned int outputs,
                                           const std::vector<float>& weights,
                                           const std::vector<float>& biases,
-                                          const std::vector<float>& stddevs) {
+                                          const std::vector<float>& stddevs,
+                                          const std::vector<float>& ip1_w,
+                                          const std::vector<float>& ip1_b,
+                                          const std::vector<float>& ip2_w,
+                                          const std::vector<float>& ip2_b) {
 
     for (auto i = size_t{0}; i < m_networks.size(); i++) {
-        m_networks[i]->push_convolve(filter_size, channels, outputs, weights, biases, stddevs);
+        m_networks[i]->push_convolve(filter_size, channels, outputs,
+            weights, biases, stddevs, ip1_w, ip1_b, ip2_w, ip2_b);
     }
 }
 
@@ -295,9 +300,13 @@ void CuDNNScheduler<net_t>::push_weights(
     }
     // Output head convolutions
     push_convolve(1, outputs, Network::OUTPUTS_POLICY,
-                  weights->m_conv_pol_w, weights->m_conv_pol_b, weights->m_bn_pol_w2);
+                  weights->m_conv_pol_w, weights->m_conv_pol_b, weights->m_bn_pol_w2,
+                  weights->m_ip_pol_w, weights->m_ip_pol_b,
+                  weights->m_ip_pol_w, weights->m_ip_pol_b);
     push_convolve(1, outputs, Network::OUTPUTS_VALUE,
-                  weights->m_conv_val_w, weights->m_conv_val_b, weights->m_bn_val_w2);
+                  weights->m_conv_val_w, weights->m_conv_val_b, weights->m_bn_val_w2,
+                  weights->m_ip1_val_w, weights->m_ip1_val_b,
+                  weights->m_ip2_val_w, weights->m_ip2_val_b);
 }
 
 template <typename net_t>
@@ -328,10 +337,18 @@ void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
 template <typename net_t>
 void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
-    constexpr auto out_pol_size =
-        Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
-    constexpr auto out_val_size =
-        Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+//    constexpr auto out_pol_size =
+//        Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+//    constexpr auto out_val_size =
+//        Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    size_t out_pol_size, out_val_size;
+    if (cfg_head_bn == head_bn_t::GPU_A) {
+        out_pol_size = POTENTIAL_MOVES;
+        out_val_size = Network::OUTPUTS_VALUE;
+    } else {
+        out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+        out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    }
 
     // batch scheduling heuristic.
     // Returns the batch picked up from the queue (m_forward_queue)
