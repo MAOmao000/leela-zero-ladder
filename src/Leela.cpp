@@ -217,7 +217,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cache-plan", "Use TensorRT cache plan.")
         ("execute-context", po::value<std::string>()->default_value("single"),
                             "[single|double] Number of engine units to start.")
-        ("head-bn", po::value<std::string>()->default_value("cpu"),
+        ("head-bn", po::value<std::string>()->default_value("gpu-a"),
                     "[cpu|gpu-a|gpu-b] Processor that performs batch norm on the head layer.")
 #endif
 #ifdef USE_CUDNN

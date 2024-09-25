@@ -337,10 +337,6 @@ void CuDNNScheduler<net_t>::forward(const std::vector<float>& input,
 template <typename net_t>
 void CuDNNScheduler<net_t>::batch_worker(size_t gnum, size_t tid) {
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
-//    constexpr auto out_pol_size =
-//        Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
-//    constexpr auto out_val_size =
-//        Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
     size_t out_pol_size, out_val_size;
     if (cfg_head_bn == head_bn_t::GPU_A) {
         out_pol_size = POTENTIAL_MOVES;

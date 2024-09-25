@@ -1163,33 +1163,30 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
                                      m_bn_val_w2.data());
     }
     // Get the moves
-    std::vector<float> policy_out;
+    std::vector<float> outputs;
     if (cfg_backend == backend_t::TENSORRT && cfg_head_bn == head_bn_t::GPU_A) {
-        for (auto i = 0; i < POTENTIAL_MOVES; i++) {
-            policy_out.emplace_back(policy_data[i]);
-        }
+        std::copy(begin(policy_data), begin(policy_data) + POTENTIAL_MOVES, back_inserter(outputs));
     } else {
-        policy_out =
+        const auto policy_out =
             innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
                 policy_data, m_ip_pol_w, m_ip_pol_b);
+        outputs = softmax(policy_out, cfg_softmax_temp);
     }
-    const auto outputs = softmax(policy_out, cfg_softmax_temp);
 
     // Now get the value
-    std::vector<float> winrate_out;
+    float winrate;
     if (cfg_backend == backend_t::TENSORRT && cfg_head_bn == head_bn_t::GPU_A) {
-        winrate_out.emplace_back(value_data[0]);
+        winrate = (1.0f + value_data[0]) / 2.0f;
     } else {
         const auto winrate_data =
             innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
                 value_data, m_ip1_val_w, m_ip1_val_b);
-        winrate_out =
+        const auto winrate_out =
             innerproduct<VALUE_LAYER, 1, false>(
                 winrate_data, m_ip2_val_w, m_ip2_val_b);
+        // Map TanH output range [-1..1] to [0..1] range
+        winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
     }
-
-    // Map TanH output range [-1..1] to [0..1] range
-    const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
 
     Netresult result;
 
