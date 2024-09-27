@@ -134,8 +134,10 @@ static constexpr auto MAX_CPUS = 256;
 #ifdef USE_OPENCL
 // If OpenCL are fully usable, then check the OpenCL against CPU
 // implementation with some probability.
+#ifndef TRT_ONLY
 #define USE_OPENCL_SELFCHECK
 static constexpr auto SELFCHECK_PROBABILITY = 2000;
+#endif
 #endif
 
 #if (_MSC_VER >= 1400) /* VC8+ Disable all deprecation warnings */

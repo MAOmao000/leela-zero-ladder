@@ -50,10 +50,10 @@
 #include "Utils.h"
 #include "Zobrist.h"
 
-//#ifdef USE_RAY_LADDER
+#ifndef TRT_ONLY
 #include "GoBoard.h"
 #include "ZobristHash.h"
-//#endif
+#endif
 
 using namespace Utils;
 
@@ -176,6 +176,11 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("noponder", "Disable thinking on opponent's time.")
         ("benchmark", "Test network and exit. Default args:\n-v3200 --noponder "
                       "-m0 -t1 -s1.")
+#ifdef TRT_ONLY
+        ("cache-plan", "Use TensorRT cache plan.")
+        ("execute-context", po::value<std::string>()->default_value("single"),
+                            "[single|double] Number of engine units to start.")
+#else
 #ifdef USE_OPENCL
         ("cpu-only", "Use CPU-only implementation and do not use OpenCL device(s).")
 #ifdef USE_TENSOR_RT
@@ -213,18 +218,21 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #endif
 #endif
 
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT)
         ("cache-plan", "Use TensorRT cache plan.")
         ("execute-context", po::value<std::string>()->default_value("single"),
                             "[single|double] Number of engine units to start.")
         ("head-bn", po::value<std::string>()->default_value("gpu-a"),
                     "[cpu|gpu-a|gpu-b] Processor that performs batch norm on the head layer.")
 #endif
+#endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
 #endif
 #endif
+#ifndef TRT_ONLY
         ("use_ray_ladder", "Enable RAY's ladder check.")
+#endif
         ("no_ladder_check", "Disable ladder check.")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
@@ -238,6 +246,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder check maximum depth.")
 
         ;
+#ifdef TRT_ONLY
+    po::options_description gpu_desc("TensorRT device options");
+    gpu_desc.add_options()
+        ("gpu", po::value<std::vector<int>>(),
+                "ID of the TensorRT device(s) to use (disables autodetection).")
+        ("batchsize", po::value<unsigned int>()->default_value(0),
+                      "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+        ("precision", po::value<std::string>(),
+                      "Floating-point precision (single/half/auto).\n"
+                      "Default is to auto which automatically determines which one to use.")
+        ;
+#else
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
     gpu_desc.add_options()
@@ -253,6 +273,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Default is to auto which automatically determines which one to use.")
 #endif
         ;
+#endif
 #endif
     po::options_description selfplay_desc("Self-play options");
     selfplay_desc.add_options()
@@ -293,9 +314,11 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // command line.
     po::options_description ignore("Ignored options");
 #ifndef USE_OPENCL
+#ifndef TRT_ONLY
     ignore.add_options()
         ("batchsize", po::value<unsigned int>()->default_value(1),
                       "Max batch size.");
+#endif
 #endif
     po::options_description h_desc("Hidden options");
     h_desc.add_options()
@@ -303,7 +326,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     po::options_description visible;
     visible
         .add(gen_desc)
-#ifdef USE_OPENCL
+#if defined(USE_OPENCL) || defined(TRT_ONLY)
         .add(gpu_desc)
 #endif
         .add(selfplay_desc)
@@ -440,6 +463,13 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gtp_mode = true;
     }
 
+#ifdef TRT_ONLY
+    if (vm.count("gpu")) {
+        cfg_gpus = vm["gpu"].as<std::vector<int>>();
+    }
+    cfg_cpu_only = false;
+    cfg_backend = backend_t::TENSORRT;
+#else
 #ifdef USE_OPENCL
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
@@ -462,6 +492,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
 #else
     cfg_cpu_only = true;
+#endif
 #endif
 
     if (cfg_cpu_only) {
@@ -534,6 +565,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 exit(EXIT_FAILURE);
             }
         }
+#ifndef TRT_ONLY
         if (vm.count("head-bn")) {
             auto head_bn = vm["head-bn"].as<std::string>();
             if ("cpu" == head_bn) {
@@ -547,6 +579,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                 exit(EXIT_FAILURE);
             }
         }
+#endif
         calculate_thread_count_gpu(vm);
         myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
     } else if (cfg_backend == backend_t::CUDNNGRAPH) {
@@ -573,8 +606,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     myprintf("Using %d thread(s).\n", cfg_num_threads);
 
-#ifdef USE_OPENCL
-#ifdef USE_HALF
+#if (defined(USE_OPENCL) && defined(USE_HALF)) || defined(TRT_ONLY)
     if (vm.count("precision")) {
         auto precision = vm["precision"].as<std::string>();
         if ("single" == precision) {
@@ -597,7 +629,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-#endif
 #endif
 
     if (vm.count("seed")) {
@@ -810,13 +841,13 @@ int main(int argc, char* argv[]) {
 
     init_global_objects();
 
-//#ifdef USE_RAY_LADDER
+#ifndef TRT_ONLY
     if (cfg_ladder_check && cfg_ladder_defense + cfg_ladder_offense) {
         InitializeConst();
         InitializeHash();
         InitializeUctHash();
     }
-//#endif
+#endif
 
     auto maingame = std::make_unique<GameState>();
 

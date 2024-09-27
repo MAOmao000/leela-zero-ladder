@@ -39,7 +39,9 @@
 #include "GameState.h"
 #include "Network.h"
 #include "UCTSearch.h"
-#if defined(USE_TENSOR_RT)
+#if defined(TRT_ONLY)
+#include "TRTScheduler.h"
+#elif defined(USE_TENSOR_RT)
 #include "CuDNNScheduler.h"
 #endif
 
@@ -161,7 +163,7 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 
 extern AnalyzeTags cfg_analyze_tags;
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
 extern trtLog::Logger cfg_logger;
 #endif
 

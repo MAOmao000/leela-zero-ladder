@@ -86,11 +86,17 @@ if(USE_BACKEND STREQUAL "TENSORRT")
   enable_language(CUDA)
   set(CUDA_STANDARD 17)
   set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
     ${SrcPath}/CuDNN.cpp
     ${SrcPath}/CuDNNScheduler.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/Tuner.cpp
+    ${SrcPath}/ZobristHash.cpp
     ${SrcPath}/sha2.cpp
   )
 
@@ -99,12 +105,18 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
   enable_language(CUDA)
   set(CUDA_STANDARD 17)
   set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
     ${SrcPath}/CuDNN.cpp
     ${SrcPath}/CuDNNScheduler.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
+    ${SrcPath}/ZobristHash.cpp
   )
   set(FE_INCLUDE_PATH "/home/x/cudnn-frontend/include")
   # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
@@ -136,12 +148,18 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
   enable_language(CUDA)
   set(CUDA_STANDARD 17)
   set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
     ${SrcPath}/CuDNN.cpp
     ${SrcPath}/CuDNNScheduler.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
     ${SrcPath}/OpenCL.cpp
     ${SrcPath}/OpenCLScheduler.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/SEnet.cu
     ${SrcPath}/Tuner.cpp
+    ${SrcPath}/ZobristHash.cpp
   )
   # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
@@ -170,16 +188,42 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
 elseif(USE_BACKEND STREQUAL "OPENCL")
   message(STATUS "-DUSE_BACKEND=OPENCL, using OPENCL backend.")
   set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
     ${SrcPath}/OpenCL.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/OpenCLScheduler.cpp
     ${SrcPath}/Tuner.cpp
+    ${SrcPath}/ZobristHash.cpp
   )
 
 elseif(USE_BACKEND STREQUAL "BLAS")
   message(STATUS "-DUSE_BACKEND=BLAS, using BLAS backend.")
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
+    ${SrcPath}/ZobristHash.cpp
 
 elseif(USE_BACKEND STREQUAL "EIGEN")
   message(STATUS "-DUSE_BACKEND=EIGEN, using EIGEN backend.")
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/CPUPipe.cpp
+    ${SrcPath}/GoBoard.cpp
+    ${SrcPath}/Ladder.cpp
+    ${SrcPath}/Pattern.cpp
+    ${SrcPath}/SearchBoard.cpp
+    ${SrcPath}/ZobristHash.cpp
+
+elseif(USE_BACKEND STREQUAL "TRTONLY")
+  message(STATUS "-DUSE_BACKEND=TRTONLY, using TRTONLY backend.")
+  set(NEURALNET_BACKEND_SOURCES
+    ${SrcPath}/TRT.cpp
+    ${SrcPath}/TRTScheduler.cpp
 
 else()
   message(FATAL_ERROR "Unrecognized backend: " ${USE_BACKEND})
@@ -188,21 +232,16 @@ endif()
 #--------------------------- LEELA ZERO COMPILING AND LINKING --------------------------------------------------------------
 
 add_executable(leelaz
-  ${SrcPath}/CPUPipe.cpp
   ${SrcPath}/FastBoard.cpp
   ${SrcPath}/FastState.cpp
   ${SrcPath}/FullBoard.cpp
   ${SrcPath}/GameState.cpp
-  ${SrcPath}/GoBoard.cpp
   ${SrcPath}/GTP.cpp
   ${SrcPath}/KoState.cpp
-  ${SrcPath}/Ladder.cpp
   ${SrcPath}/LadderDetection.cpp
   ${SrcPath}/Network.cpp
   ${SrcPath}/NNCache.cpp
-  ${SrcPath}/Pattern.cpp
   ${SrcPath}/Random.cpp
-  ${SrcPath}/SearchBoard.cpp
   ${SrcPath}/SGFParser.cpp
   ${SrcPath}/SGFTree.cpp
   ${SrcPath}/SMP.cpp
@@ -215,7 +254,6 @@ add_executable(leelaz
   ${SrcPath}/UCTSearch.cpp
   ${SrcPath}/Utils.cpp
   ${SrcPath}/Zobrist.cpp
-  ${SrcPath}/ZobristHash.cpp
   ${NEURALNET_BACKEND_SOURCES}
   ${SrcPath}/Leela.cpp
 )
@@ -365,6 +403,28 @@ elseif(USE_BACKEND STREQUAL "BLAS")
     include_directories(${BLAS_INCLUDE_DIRS})
   endif()
   target_link_libraries(leelaz ${BLAS_LIBRARIES})
+elseif(USE_BACKEND STREQUAL "TRTONLY")
+  message(STATUS "Looking for system TensorRT and CuDNN library.")
+  find_package(CUDAToolkit REQUIRED)
+  find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS ${TENSORRT_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
+  if((NOT TENSORRT_INCLUDE_DIR))
+    message(FATAL_ERROR "NvInfer.h was NOT found, specify TENSORRT_INCLUDE_DIR to indicate where it is.")
+  endif()
+  find_library(TENSORRT_LIBRARY nvinfer HINTS ${TENSORRT_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
+  file(READ "${TENSORRT_INCLUDE_DIR}/NvInferVersion.h" tensorrt_version_header)
+  string(REGEX MATCH "#define NV_TENSORRT_MAJOR ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
+  set(TENSORRT_VERSION_MAJOR ${CMAKE_MATCH_1})
+  string(REGEX MATCH "#define NV_TENSORRT_MINOR ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
+  set(TENSORRT_VERSION_MINOR ${CMAKE_MATCH_1})
+  string(REGEX MATCH "#define NV_TENSORRT_PATCH ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
+  set(TENSORRT_VERSION_PATCH ${CMAKE_MATCH_1})
+  set(TENSORRT_VERSION "${TENSORRT_VERSION_MAJOR}.${TENSORRT_VERSION_MINOR}.${TENSORRT_VERSION_PATCH}")
+  if(TENSORRT_VERSION VERSION_LESS 8.6)
+    message(FATAL_ERROR "TensorRT 8.6 or greater is required but ${TENSORRT_VERSION} was found.")
+  endif()
+  add_definitions(-DUSE_TENSOR_RT)
+  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR})
+  target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})
 else()
   message(STATUS "Using built-in matrix library.")
   add_definitions(-DUSE_CPU_ONLY)

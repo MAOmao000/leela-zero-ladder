@@ -42,10 +42,14 @@
 
 #include "FastState.h"
 #include "NNCache.h"
+#if defined(TRT_ONLY)
+#include "TRTScheduler.h"
+#else
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
 #ifdef USE_CUDNN
 #include "CuDNNScheduler.h"
+#endif
 #endif
 #endif
 #include "ForwardPipe.h"

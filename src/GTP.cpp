@@ -126,7 +126,7 @@ int cfg_offense_stones;
 int cfg_ladder_depth;
 
 AnalyzeTags cfg_analyze_tags;
-#if defined(USE_TENSOR_RT)
+#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
 trtLog::Logger cfg_logger{};
 #endif
 
@@ -406,7 +406,7 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;
 #endif
     cfg_cache_plan = false;
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
     cfg_backend = backend_t::TENSORRT;
     cfg_execute_context = execute_t::SINGLE;
 #else
@@ -423,7 +423,7 @@ void GTP::setup_default_parameters() {
 #endif
 #endif
 #endif
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
     cfg_head_bn = head_bn_t::GPU_A;
 #else
     cfg_head_bn = head_bn_t::CPU;

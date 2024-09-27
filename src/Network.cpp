@@ -40,9 +40,11 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#ifndef TRT_ONLY
 #ifndef USE_BLAS
 #define EIGEN_NO_DEBUG // Disable assertions in your code．
 #include <Eigen/Dense>
+#endif
 #endif
 
 #ifdef __APPLE__
@@ -57,14 +59,20 @@
 #include <dnnl.hpp>
 #endif
 #endif
+#ifndef TRT_ONLY
 #include "CPUPipe.h"
+#endif
 #include "Network.h"
 #include "zlib.h"
+#ifdef TRT_ONLY
+#include "TRTScheduler.h"
+#else
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
 #include "UCTNode.h"
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
 #include "CuDNNScheduler.h"
+#endif
 #endif
 #endif
 #include "FastBoard.h"
@@ -77,12 +85,15 @@
 #include "ThreadPool.h"
 #include "Timing.h"
 #include "Utils.h"
+#ifndef TRT_ONLY
 #include "Ladder.h"
+#endif
 #include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
+#ifndef TRT_ONLY
 #ifndef USE_BLAS
 // Eigen helpers
 template <typename T>
@@ -93,6 +104,7 @@ using ConstEigenVectorMap =
 template <typename T>
 using ConstEigenMatrixMap =
     Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
+#endif
 #endif
 
 // Symmetry helper
@@ -165,6 +177,7 @@ void process_bn_var(container& weights) {
     }
 }
 
+#ifndef TRT_ONLY
 std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
                                                  const int outputs,
                                                  const int channels) {
@@ -230,6 +243,7 @@ std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
 
     return U;
 }
+#endif
 
 std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // Count size of the network
@@ -279,7 +293,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     wtfile.clear();
     wtfile.seekg(0, std::ios::beg);
 
-#if defined(USE_TENSOR_RT)
+#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
     auto fileSize = wtfile.tellg();
     std::string str;
     str.resize(fileSize);
@@ -566,15 +580,35 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 
     pipe->initialize(channels, int(m_net_type), m_model_hash);
 
+#if defined(TRT_ONLY)
+    pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
+#else
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
     } else {
         pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
     }
+#endif
 
     return std::move(pipe);
 }
 
+#if defined(TRT_ONLY)
+void Network::select_precision(const int channels) {
+    if (cfg_precision == precision_t::AUTO) {
+        myprintf("Initializing TensorRT (autodetecting precision).\n");
+        m_forward = init_net(channels, std::make_unique<TRTScheduler<float>>());
+        myprintf("Using TensorRT single precision.\n");
+        cfg_precision = precision_t::SINGLE;
+    } else if (cfg_precision == precision_t::SINGLE) {
+        myprintf("Initializing TensorRT (single precision).\n");
+        m_forward = init_net(channels, std::make_unique<TRTScheduler<float>>());
+    } else if (cfg_precision == precision_t::HALF) {
+        myprintf("Initializing TensorRT (half precision).\n");
+        m_forward = init_net(channels, std::make_unique<TRTScheduler<__half>>());
+    }
+}
+#else
 #ifdef USE_HALF
 void Network::select_precision(const int channels) {
     std::string backend("OpenCL");
@@ -729,8 +763,10 @@ void Network::select_precision(const int channels) {
     }
 }
 #endif
+#endif
 
 void Network::initialize(const int playouts, const std::string& weightsfile) {
+#ifndef TRT_ONLY
 #ifdef USE_BLAS
 #ifndef __APPLE__
 #ifdef USE_OPENBLAS
@@ -748,6 +784,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
 #else
     myprintf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
              EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
+#endif
 #endif
 
     m_fwd_weights = std::make_shared<ForwardPipeWeights>();
@@ -775,6 +812,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         exit(EXIT_FAILURE);
     }
 
+#ifndef TRT_ONLY
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         auto weight_index = size_t{0};
         // Input convolution
@@ -790,6 +828,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             weight_index++;
         }
     }
+#endif
 
     // Biases are not calculated and are typically zero but some networks might
     // still have non-zero biases.
@@ -803,6 +842,14 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_fwd_weights->m_batchnorm_means[i][j] -=
                 m_fwd_weights->m_conv_biases[i][j];
             m_fwd_weights->m_conv_biases[i][j] = 0.0f;
+#ifdef TRT_ONLY
+            for (auto k = size_t{0}; k < weights_size / means_size; k++) {
+                m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
+                    m_fwd_weights->m_batchnorm_stddevs[i][j];
+            }
+            m_fwd_weights->m_batchnorm_means[i][j] *=
+                -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
+#else
             if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
                 for (auto k = size_t{0}; k < weights_size / means_size; k++) {
                     m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
@@ -811,10 +858,21 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
                 m_fwd_weights->m_batchnorm_means[i][j] *=
                     -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
             }
+#endif
         }
     }
 
     for (auto i = size_t{0}; i < m_bn_val_w1.size(); i++) {
+#ifdef TRT_ONLY
+        m_fwd_weights->m_conv_val_b[i] -= m_bn_val_w1[i];
+        m_fwd_weights->m_conv_val_b[i] *= m_bn_val_w2[i];
+        for (auto j = size_t{0};
+             j < m_fwd_weights->m_conv_val_w.size() / m_bn_val_w2.size();
+             j++) {
+            m_fwd_weights->m_conv_val_w[j * m_bn_val_w2.size() + i] *=
+                m_bn_val_w2[i];
+        }
+#else
         if (cfg_backend == backend_t::TENSORRT && cfg_head_bn != head_bn_t::CPU) {
             if (cfg_head_bn == head_bn_t::GPU_B) {
                 m_fwd_weights->m_conv_val_b[i] -= m_bn_val_w1[i];
@@ -844,9 +902,20 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
             m_fwd_weights->m_conv_val_b[i] = 0.0f;
         }
+#endif
     }
 
     for (auto i = size_t{0}; i < m_bn_pol_w1.size(); i++) {
+#ifdef TRT_ONLY
+        m_fwd_weights->m_conv_pol_b[i] -= m_bn_pol_w1[i];
+        m_fwd_weights->m_conv_pol_b[i] *= m_bn_pol_w2[i];
+        for (auto j = size_t{0};
+             j < m_fwd_weights->m_conv_pol_w.size() / m_bn_pol_w2.size();
+             j++) {
+           m_fwd_weights->m_conv_pol_w[j * m_bn_pol_w2.size() + i] *=
+               m_bn_pol_w2[i];
+        }
+#else
         if (cfg_backend == backend_t::TENSORRT && cfg_head_bn != head_bn_t::CPU) {
             if (cfg_head_bn == head_bn_t::GPU_B) {
                 m_fwd_weights->m_conv_pol_b[i] -= m_bn_pol_w1[i];
@@ -876,7 +945,11 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
             m_fwd_weights->m_conv_pol_b[i] = 0.0f;
         }
+#endif
     }
+#ifdef TRT_ONLY
+    select_precision(channels);
+#else
 #ifdef USE_OPENCL
     if (cfg_cpu_only) {
         myprintf("Initializing CPU-only evaluation.\n");
@@ -915,12 +988,14 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     myprintf("Initializing CPU-only evaluation.\n");
     m_forward = init_net(channels, std::make_unique<CPUPipe>());
 #endif
+#endif
 
     // Need to estimate size before clearing up the pipe.
     get_estimated_size();
     m_fwd_weights.reset();
 }
 
+#ifndef TRT_ONLY
 template <unsigned int inputs, unsigned int outputs, bool ReLU, size_t W>
 std::vector<float> innerproduct(const std::vector<float>& input,
                                 const std::array<float, W>& weights,
@@ -1024,6 +1099,7 @@ std::vector<float> softmax(const std::vector<float>& input,
 
     return output;
 }
+#endif
 
 bool Network::probe_cache(const GameState* const state,
                           Network::Netresult& result) {
@@ -1132,8 +1208,13 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
 
     const auto input_data = gather_features(state, symmetry);
+#ifdef TRT_ONLY
+    std::vector<float> policy_data(POTENTIAL_MOVES);
+    std::vector<float> value_data(OUTPUTS_VALUE);
+#else
     std::vector<float> policy_data(OUTPUTS_POLICY * NUM_INTERSECTIONS);
     std::vector<float> value_data(OUTPUTS_VALUE * NUM_INTERSECTIONS);
+#endif
     try {
 #ifdef USE_OPENCL_SELFCHECK
         if (selfcheck) {
@@ -1151,6 +1232,14 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     }
 
     // Policy and value header Batch Normalization
+#ifdef TRT_ONLY
+    // Get the moves
+    std::vector<float> outputs;
+    std::copy(begin(policy_data), begin(policy_data) + POTENTIAL_MOVES, back_inserter(outputs));
+    // Now get the value
+    float winrate;
+    winrate = (1.0f + value_data[0]) / 2.0f;
+#else
     if (cfg_backend != backend_t::TENSORRT || cfg_head_bn == head_bn_t::CPU) {
         batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
                                      policy_data,
@@ -1187,15 +1276,22 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
         // Map TanH output range [-1..1] to [0..1] range
         winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
     }
+#endif
 
     Netresult result;
 
     char ladder_map[NUM_INTERSECTIONS] = {};
+#ifdef TRT_ONLY
+    if ((cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
+        LadderDetection(state, ladder_map);
+    }
+#else
     if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         LadderExtension(state, ladder_map);
     } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         LadderDetection(state, ladder_map);
     }
+#endif
 
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
