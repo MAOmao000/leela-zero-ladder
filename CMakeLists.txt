@@ -208,6 +208,7 @@ elseif(USE_BACKEND STREQUAL "BLAS")
     ${SrcPath}/Pattern.cpp
     ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/ZobristHash.cpp
+  )
 
 elseif(USE_BACKEND STREQUAL "EIGEN")
   message(STATUS "-DUSE_BACKEND=EIGEN, using EIGEN backend.")
@@ -218,12 +219,15 @@ elseif(USE_BACKEND STREQUAL "EIGEN")
     ${SrcPath}/Pattern.cpp
     ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/ZobristHash.cpp
+  )
 
 elseif(USE_BACKEND STREQUAL "TRTONLY")
   message(STATUS "-DUSE_BACKEND=TRTONLY, using TRTONLY backend.")
   set(NEURALNET_BACKEND_SOURCES
     ${SrcPath}/TRT.cpp
     ${SrcPath}/TRTScheduler.cpp
+    ${SrcPath}/sha2.cpp
+  )
 
 else()
   message(FATAL_ERROR "Unrecognized backend: " ${USE_BACKEND})
@@ -422,7 +426,7 @@ elseif(USE_BACKEND STREQUAL "TRTONLY")
   if(TENSORRT_VERSION VERSION_LESS 8.6)
     message(FATAL_ERROR "TensorRT 8.6 or greater is required but ${TENSORRT_VERSION} was found.")
   endif()
-  add_definitions(-DUSE_TENSOR_RT)
+  add_definitions(-DTRT_ONLY)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR})
   target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})
 else()

@@ -578,11 +578,11 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
 std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
-    pipe->initialize(channels, int(m_net_type), m_model_hash);
-
 #if defined(TRT_ONLY)
+    pipe->initialize(int(m_net_type), m_model_hash);
     pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
 #else
+    pipe->initialize(channels, int(m_net_type), m_model_hash);
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
     } else {

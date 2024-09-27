@@ -32,7 +32,9 @@
 
 #include "config.h"
 #ifdef USE_OPENCL
+#ifndef TRT_ONLY
 #include "OpenCL.h"
+#endif
 #else
 #ifdef USE_BLAS
 # include <string>
@@ -75,7 +77,11 @@ public:
 
     virtual ~ForwardPipe() = default;
 
+#ifdef TRT_ONLY
+    virtual void initialize(const int net_type, const std::string &model_hash = "") = 0;
+#else
     virtual void initialize(const int channels, const int net_type, const std::string &model_hash = "") = 0;
+#endif
     virtual bool needs_autodetect() {
         return false;
     };

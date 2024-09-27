@@ -52,7 +52,9 @@
 #include "Training.h"
 #include "Utils.h"
 #ifdef USE_OPENCL
+#ifndef TRT_ONLY
 #include "OpenCLScheduler.h"
+#endif
 #endif
 
 using namespace Utils;

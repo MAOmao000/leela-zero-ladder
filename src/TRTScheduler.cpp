@@ -81,7 +81,7 @@ TRTScheduler<net_t>::TRTScheduler() {
 }
 
 template <typename net_t>
-void TRTScheduler<net_t>::initialize(int channels, const int net_type, const std::string &model_hash) {
+void TRTScheduler<net_t>::initialize(const int net_type, const std::string &model_hash) {
     m_net_type = net_type;
 
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
@@ -180,7 +180,6 @@ void TRTScheduler<net_t>::push_convolve(unsigned int filter_size,
                                         unsigned int outputs,
                                         const std::vector<float>& weights,
                                         const std::vector<float>& biases,
-                                        const std::vector<float>& stddevs,
                                         const std::vector<float>& ip1_w,
                                         const std::vector<float>& ip1_b,
                                         const std::vector<float>& ip2_w,
@@ -188,7 +187,7 @@ void TRTScheduler<net_t>::push_convolve(unsigned int filter_size,
 
     for (const auto& trt: m_networks) {
         trt->push_convolve(filter_size, channels, outputs,
-            weights, biases, stddevs, ip1_w, ip1_b, ip2_w, ip2_b);
+            weights, biases, ip1_w, ip1_b, ip2_w, ip2_b);
     }
 }
 
@@ -235,11 +234,11 @@ void TRTScheduler<net_t>::push_weights(
     }
     // Output head convolutions
     push_convolve(1, outputs, Network::OUTPUTS_POLICY,
-                  weights->m_conv_pol_w, weights->m_conv_pol_b, weights->m_bn_pol_w2,
+                  weights->m_conv_pol_w, weights->m_conv_pol_b,
                   weights->m_ip_pol_w, weights->m_ip_pol_b,
                   weights->m_ip_pol_w, weights->m_ip_pol_b);
     push_convolve(1, outputs, Network::OUTPUTS_VALUE,
-                  weights->m_conv_val_w, weights->m_conv_val_b, weights->m_bn_val_w2,
+                  weights->m_conv_val_w, weights->m_conv_val_b,
                   weights->m_ip1_val_w, weights->m_ip1_val_b,
                   weights->m_ip2_val_w, weights->m_ip2_val_b);
 }

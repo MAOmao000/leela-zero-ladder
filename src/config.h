@@ -128,7 +128,9 @@ static constexpr auto MAX_CPUS = 256;
 #endif
 
 #ifdef USE_HALF
+#ifndef TRT_ONLY
 #include "half/half.hpp"
+#endif
 #endif
 
 #ifdef USE_OPENCL

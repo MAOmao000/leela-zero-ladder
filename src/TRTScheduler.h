@@ -102,8 +102,7 @@ public:
     virtual ~TRTScheduler();
     TRTScheduler();
 
-    virtual void initialize(int channels,
-                            const int net_type,
+    virtual void initialize(const int net_type,
                             const std::string &model_hash = nullptr);
     virtual void forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
@@ -144,7 +143,6 @@ public:
                        unsigned int outputs,
                        const std::vector<float>& weights,
                        const std::vector<float>& biases,
-                       const std::vector<float>& stddevs,
                        const std::vector<float>& ip1_w,
                        const std::vector<float>& ip1_b,
                        const std::vector<float>& ip2_w,
