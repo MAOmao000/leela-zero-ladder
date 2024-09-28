@@ -1276,32 +1276,15 @@ void CuDNN_Network<net_t>::push_weights(
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(CuDNN_Layer());
     }
-    if (typeid(net_t) == typeid(float)) {
-        auto weightSize = weights.size() * sizeof(float);
-
-        void *device_mem;
-        checkCUDA(cudaMalloc((void**)&device_mem, weightSize));
-        checkCUDA(cudaMemcpy(device_mem,
-                             (net_t*)&weights[0],
-                             weightSize,
-                             cudaMemcpyHostToDevice));
-        m_layers.back().weights.emplace_back(device_mem);
-    } else {
-        auto converted_weights = std::vector<net_t>();
-        for(auto i = size_t{0}; i < weights.size(); i++) {
-            converted_weights.emplace_back((net_t)weights[i]);
-        }
-
-        auto weightSize = weights.size() * sizeof(net_t);
-
-        void *device_mem;
-        checkCUDA(cudaMalloc((void**)&device_mem, weightSize));
-        checkCUDA(cudaMemcpy(device_mem,
-                             (net_t *)&converted_weights[0],
-                             weightSize,
-                             cudaMemcpyHostToDevice));
-        m_layers.back().weights.emplace_back(device_mem);
-    }
+    auto weights_net_t = std::vector<net_t>(weights.size());
+    std::copy(weights.begin(), weights.end(), weights_net_t.begin());
+    void *device_mem;
+    checkCUDA(cudaMalloc((void**)&device_mem, weights.size() * sizeof(net_t)));
+    checkCUDA(cudaMemcpy(device_mem,
+                         (net_t *)&weights_net_t[0],
+                         weights.size() * sizeof(net_t),
+                         cudaMemcpyHostToDevice));
+    m_layers.back().weights.emplace_back(device_mem);
 }
 
 template <typename net_t>
@@ -1342,25 +1325,15 @@ void CuDNN_Network<net_t>::push_weights_trt(
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(CuDNN_Layer());
     }
-    if (typeid(net_t) == typeid(float)) {
-        auto weightSize = weights.size() * sizeof(float);
-        void *host_mem;
-        cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
-        memcpy(host_mem, (net_t*)&weights[0], weightSize);
-        m_layers.back().weights.emplace_back(host_mem);
-        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
-    } else {
-        auto converted_weights = std::vector<net_t>();
-        for(auto i = size_t{0}; i < weights.size(); i++) {
-            converted_weights.emplace_back((net_t)weights[i]);
-        }
-        auto weightSize = weights.size() * sizeof(net_t);
-        void *host_mem;
-        cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
-        memcpy(host_mem, (net_t *)&converted_weights[0], weightSize);
-        m_layers.back().weights.emplace_back(host_mem);
-        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
-    }
+    auto weights_net_t = std::vector<net_t>(weights.size());
+    std::copy(weights.begin(), weights.end(), weights_net_t.begin());
+    void *host_mem;
+    checkCUDA(cudaHostAlloc((void **)&host_mem,
+                            weights.size() * sizeof(net_t),
+                            cudaHostAllocMapped));
+    memcpy(host_mem, (net_t *)&weights_net_t[0], weights.size() * sizeof(net_t));
+    m_layers.back().weights.emplace_back(host_mem);
+    m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
 template <typename net_t>
@@ -1386,7 +1359,9 @@ void CuDNN_Network<net_t>::push_weights_trt_col_major(
         }
     }
     void *host_mem;
-    cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
+    checkCUDA(cudaHostAlloc((void **)&host_mem,
+                            weightSize,
+                            cudaHostAllocMapped));
     memcpy(host_mem, (net_t*)&transposed_weights[0], weightSize);
     m_layers.back().weights.emplace_back(host_mem);
     m_layers.back().weights_size.emplace_back((int64_t)weights.size());
@@ -2562,25 +2537,16 @@ bool CuDNN_Network<net_t>::build(
     const int batch_size) {
 
     // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
-    if (typeid(net_t) == typeid(float)) {
-        mTuneDesc = strprintf(
-            R"|("salt"(%s%s)"model float"(%s,%d,%d,%d))|",
-            PROGRAM_VERSION_MAJOR,
-            PROGRAM_VERSION_MINOR,
-            "1.0",                    // modelVersion,
-            Network::INPUT_CHANNELS,  // numInputChannels,
-            cfg_execute_context,
-            batch_size);
-    } else {
-        mTuneDesc = strprintf(
-            R"|("salt"(%s%s)"model half"(%s,%d,%d,%d))|",
-            PROGRAM_VERSION_MAJOR,
-            PROGRAM_VERSION_MINOR,
-            "1.0",                    // modelVersion,
-            Network::INPUT_CHANNELS,  // numInputChannels,
-            cfg_execute_context,
-            batch_size);
-    }
+    mTuneDesc = strprintf(
+        R"|("salt"(%s%s)"model %s"(%s,%d,%d,%d))|",
+        PROGRAM_VERSION_MAJOR,
+        PROGRAM_VERSION_MINOR,
+        typeid(net_t) == typeid(float) ? "single" : "half",
+        "1.0",                    // modelVersion,
+        Network::INPUT_CHANNELS,  // numInputChannels,
+        cfg_execute_context,
+        batch_size
+    );
     auto builder
         = TrtUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(cfg_logger.getTRTLogger()));
     if (!builder) {

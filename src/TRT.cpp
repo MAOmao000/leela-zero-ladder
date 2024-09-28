@@ -144,25 +144,15 @@ void TRT<net_t>::push_weights(
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(TRT_Layer());
     }
-    if (typeid(net_t) == typeid(float)) {
-        auto weightSize = weights.size() * sizeof(float);
-        void *host_mem;
-        cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
-        memcpy(host_mem, (net_t*)&weights[0], weightSize);
-        m_layers.back().weights.emplace_back(host_mem);
-        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
-    } else {
-        auto converted_weights = std::vector<net_t>();
-        for(auto i = size_t{0}; i < weights.size(); i++) {
-            converted_weights.emplace_back((net_t)weights[i]);
-        }
-        auto weightSize = weights.size() * sizeof(net_t);
-        void *host_mem;
-        cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
-        memcpy(host_mem, (net_t *)&converted_weights[0], weightSize);
-        m_layers.back().weights.emplace_back(host_mem);
-        m_layers.back().weights_size.emplace_back((int64_t)weights.size());
-    }
+    auto weights_net_t = std::vector<net_t>(weights.size());
+    std::copy(weights.begin(), weights.end(), weights_net_t.begin());
+    void *host_mem;
+    checkCUDA(cudaHostAlloc((void **)&host_mem,
+                            weights.size() * sizeof(net_t),
+                            cudaHostAllocMapped));
+    memcpy(host_mem, (net_t *)&weights_net_t[0], weights.size() * sizeof(net_t));
+    m_layers.back().weights.emplace_back(host_mem);
+    m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
 template <typename net_t>
@@ -188,7 +178,9 @@ void TRT<net_t>::push_weights_col_major(
         }
     }
     void *host_mem;
-    cudaHostAlloc((void **)&host_mem, weightSize, cudaHostAllocMapped);
+    checkCUDA(cudaHostAlloc((void **)&host_mem,
+                            weightSize,
+                            cudaHostAllocMapped));
     memcpy(host_mem, (net_t*)&transposed_weights[0], weightSize);
     m_layers.back().weights.emplace_back(host_mem);
     m_layers.back().weights_size.emplace_back((int64_t)weights.size());
@@ -401,7 +393,7 @@ bool TRT<net_t>::build(
         R"|("salt"(%s%s)"model %s"(%s,%d,%d,%d))|",
         PROGRAM_VERSION_MAJOR,
         PROGRAM_VERSION_MINOR,
-        typeid(net_t) == typeid(float) ? "float" : "half",
+        typeid(net_t) == typeid(float) ? "single" : "half",
         "1.0",                    // modelVersion,
         Network::INPUT_CHANNELS,  // numInputChannels,
         cfg_execute_context,
