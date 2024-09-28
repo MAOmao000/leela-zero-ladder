@@ -144,13 +144,13 @@ void TRT<net_t>::push_weights(
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(TRT_Layer());
     }
-    auto weights_net_t = std::vector<net_t>(weights.size());
-    std::copy(weights.begin(), weights.end(), weights_net_t.begin());
+    // When TensorRT chooses a precision for a layer,
+    // it automatically converts weights as necessary to run the layer
     void *host_mem;
     checkCUDA(cudaHostAlloc((void **)&host_mem,
-                            weights.size() * sizeof(net_t),
+                            weights.size() * sizeof(float),
                             cudaHostAllocMapped));
-    memcpy(host_mem, (net_t *)&weights_net_t[0], weights.size() * sizeof(net_t));
+    memcpy(host_mem, (float *)&weights[0], weights.size() * sizeof(float));
     m_layers.back().weights.emplace_back(host_mem);
     m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
@@ -166,14 +166,16 @@ void TRT<net_t>::push_weights_col_major(
     if (layer >= m_layers.size()) {
         m_layers.emplace_back(TRT_Layer());
     }
+    // When TensorRT chooses a precision for a layer,
+    // it automatically converts weights as necessary to run the layer
     // Transpose from model's CK to TensorRT's KC
-    auto weightSize = weights.size() * sizeof(net_t);
-    auto transposed_weights = std::vector<net_t>(weights.size());
+    auto weightSize = weights.size() * sizeof(float);
+    auto transposed_weights = std::vector<float>(weights.size());
     for (int ch = 0; ch < channels; ch++) {
         for (int i = 0; i < column; i++) {
             for (int j = 0; j < row; j++) {
                 transposed_weights[ch * column * row + j * column + i] =
-                    (net_t)weights[ch * column * row + i * row + j];
+                    (float)weights[ch * column * row + i * row + j];
             }
         }
     }
@@ -181,7 +183,7 @@ void TRT<net_t>::push_weights_col_major(
     checkCUDA(cudaHostAlloc((void **)&host_mem,
                             weightSize,
                             cudaHostAllocMapped));
-    memcpy(host_mem, (net_t*)&transposed_weights[0], weightSize);
+    memcpy(host_mem, (float*)&transposed_weights[0], weightSize);
     m_layers.back().weights.emplace_back(host_mem);
     m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
@@ -270,17 +272,17 @@ void TRT<net_t>::push_convolve(
     const std::vector<float>& ip2_b) {
 
     size_t layer = get_layer_count();
-    push_weights(layer, weights);       // Here it is still float(Convert precision with push_weights)
-    push_weights(layer, biases);    // Here it is still float(Convert precision with push_weights)
+    push_weights(layer, weights);
+    push_weights(layer, biases);
     if (outputs == Network::OUTPUTS_VALUE) {
         push_weights_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels);
     } else {
-        push_weights(layer, ip1_w); // Here it is still float(Convert precision with push_weights)
+        push_weights(layer, ip1_w);
     }
-    push_weights(layer, ip1_b);     // Here it is still float(Convert precision with push_weights)
+    push_weights(layer, ip1_b);
     if (outputs == Network::OUTPUTS_VALUE) {
-        push_weights(layer, ip2_w); // Here it is still float(Convert precision with push_weights)
-        push_weights(layer, ip2_b); // Here it is still float(Convert precision with push_weights)
+        push_weights(layer, ip2_w);
+        push_weights(layer, ip2_b);
     }
     m_layers[layer].outputs = outputs;
     m_layers[layer].channels = channels;
@@ -1199,12 +1201,12 @@ ILayer* TRT<net_t>::buildConvLayer(
         outputs,
         {2, {filter_size, filter_size}},
         {
-            typeid(net_t) == typeid(float) ? DataType::kFLOAT : DataType::kHALF,
+            DataType::kFLOAT,
             weights,
             weights_size
         },
         {
-            typeid(net_t) == typeid(float) ? DataType::kFLOAT : DataType::kHALF,
+            DataType::kFLOAT,
             biases,
             biases_size
         }
