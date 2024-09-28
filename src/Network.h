@@ -47,7 +47,7 @@
 #else
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
-#ifdef USE_CUDNN
+#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
 #include "CuDNNScheduler.h"
 #endif
 #endif
