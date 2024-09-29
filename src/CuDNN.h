@@ -576,6 +576,7 @@ private:
         const int batch_size = 1
     );
 #endif
+#endif
 
     void push_weights(
         const size_t layer,
@@ -587,7 +588,6 @@ private:
         const int row,
         const int column
     );
-#endif
 
 #if defined(USE_TENSOR_RT)
     void push_weights_trt(

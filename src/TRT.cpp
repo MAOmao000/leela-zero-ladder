@@ -312,8 +312,6 @@ void TRT<net_t>::forward_activations(
     const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
     const auto pol_elements = batch_size * POTENTIAL_MOVES;
     const auto val_elements = batch_size;
-    auto pol_net_t = std::vector<net_t>(pol_elements);
-    auto val_net_t = std::vector<net_t>(val_elements);
 
     auto search = TRT_context.mBuffers.find("InputFeature");
     assert(search != TRT_context.mBuffers.end());
@@ -355,23 +353,20 @@ void TRT<net_t>::forward_activations(
     }
     search = TRT_context.mBuffers.find("OutputPolicy");
     assert(search != TRT_context.mBuffers.end());
-    checkCUDA(cudaMemcpyAsync(&pol_net_t[0],
+    checkCUDA(cudaMemcpyAsync(&output_pol[0],
                               search->second,
-                              pol_elements * sizeof(net_t),
+                              pol_elements * sizeof(float),
                               cudaMemcpyDeviceToHost,
                               m_streams[tid]));
     search = TRT_context.mBuffers.find("OutputValue");
     assert(search != TRT_context.mBuffers.end());
-    checkCUDA(cudaMemcpyAsync(&val_net_t[0],
+    checkCUDA(cudaMemcpyAsync(&output_val[0],
                               search->second,
-                              val_elements * sizeof(net_t),
+                              val_elements * sizeof(float),
                               cudaMemcpyDeviceToHost,
                               m_streams[tid]));
     // Asynchronously enqueue the inference work
     cudaStreamSynchronize(m_streams[tid]);
-
-    std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
-    std::copy(pol_net_t.begin(), pol_net_t.end(), output_pol.begin());
 }
 
 template <typename net_t>
@@ -679,7 +674,14 @@ bool TRT<net_t>::build(
             auto name = engine->getIOTensorName(i);
             auto dims = engine->getTensorShape(name);
             std::string_view name_str{name};
-            size_t size_byte = (name_str == "BatchSize") ? sizeof(int32_t) : sizeof(net_t);
+            size_t size_byte;
+            if (name_str == "BatchSize") {
+                size_byte = sizeof(int32_t);
+            } else if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
+                size_byte = sizeof(float);
+            } else {
+                size_byte = sizeof(net_t);
+            }
             size_t bytes = std::accumulate(dims.d + 1,
                                            dims.d + dims.nbDims,
                                            batch_size * size_byte,
@@ -1102,13 +1104,13 @@ void TRT<net_t>::constructNetwork(
     auto outputPolicy = outPolicyLayer->getOutput(0);
     network->markOutput(*outputPolicy);
     outputPolicy->setName("OutputPolicy");
-    outputPolicy->setType(typeid(net_t) == typeid(float) ? DataType::kFLOAT : DataType::kHALF);
+    outputPolicy->setType(DataType::kFLOAT);
     outputPolicy->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
 
     auto outputValue = outValueLayer->getOutput(0);
     network->markOutput(*outputValue);
     outputValue->setName("OutputValue");
-    outputValue->setType(typeid(net_t) == typeid(float) ? DataType::kFLOAT : DataType::kHALF);
+    outputValue->setType(DataType::kFLOAT);
     outputValue->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
     std::cout << "Done constructing network..." << std::endl;
 }

@@ -1267,7 +1267,6 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
 }
 #endif
 
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
 template <typename net_t>
 void CuDNN_Network<net_t>::push_weights(
     const size_t layer,
@@ -1314,7 +1313,6 @@ void CuDNN_Network<net_t>::push_weights_col_major(
                          cudaMemcpyHostToDevice));
     m_layers.back().weights.emplace_back(device_mem);
 }
-#endif
 
 #if defined(USE_TENSOR_RT)
 template <typename net_t>
@@ -1384,37 +1382,19 @@ void CuDNN_Network<net_t>::push_input_convolution(
 #endif
 
     size_t layer = get_layer_count();
-    if (cfg_NCHW) {
 #if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights);
-            push_weights_trt(layer, biases);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, biases);  // Here it is still float(Convert precision with push_weights)
+    if (cfg_backend == backend_t::TENSORRT) {
+        push_weights_trt(layer, weights);
+        push_weights_trt(layer, biases);
+    } else
 #endif
-        }
-#else
+    if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases);  // Here it is still float(Convert precision with push_weights)
-#endif
     } else {
         auto weights_convert = NCHW_to_NHWC<float>(weights, outputs, filter_size, filter_size, channels);
-#if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights_convert);
-            push_weights_trt(layer, biases);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights_convert); // Convert precision with push_weights
-            push_weights(layer, biases);          // Convert precision with push_weights
-#endif
-        }
-#else
         push_weights(layer, weights_convert); // Convert precision with push_weights
         push_weights(layer, biases);          // Convert precision with push_weights
-#endif
     }
     m_layers[layer].is_input_convolution = true;
     m_layers[layer].outputs = outputs;
@@ -1476,52 +1456,28 @@ void CuDNN_Network<net_t>::push_residual(
     const float scale_3) {
 
     size_t layer = get_layer_count();
-    if (cfg_NCHW) {
 #if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights_1);
-            push_weights_trt(layer, biases_1);
-            push_weights_trt(layer, weights_2);
-            push_weights_trt(layer, biases_2);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, weights_2); // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, biases_2);  // Here it is still float(Convert precision with push_weights)
+    if (cfg_backend == backend_t::TENSORRT) {
+        push_weights_trt(layer, weights_1);
+        push_weights_trt(layer, biases_1);
+        push_weights_trt(layer, weights_2);
+        push_weights_trt(layer, biases_2);
+    } else
 #endif
-        }
-#else
+    if (cfg_NCHW) {
         push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
         push_weights(layer, weights_2); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases_2);  // Here it is still float(Convert precision with push_weights)
-#endif
     } else {
         auto weights_convert_1 = NCHW_to_NHWC<float>(
             weights_1, outputs, filter_size, filter_size, channels);
         auto weights_convert_2 = NCHW_to_NHWC<float>(
             weights_2, outputs, filter_size, filter_size, channels);
-#if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights_convert_1);
-            push_weights_trt(layer, biases_1);
-            push_weights_trt(layer, weights_convert_2);
-            push_weights_trt(layer, biases_2);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights_convert_1); // Convert precision with push_weights
-            push_weights(layer, biases_1);          // Convert precision with push_weights
-            push_weights(layer, weights_convert_2); // Convert precision with push_weights
-            push_weights(layer, biases_2);          // Convert precision with push_weights
-#endif
-        }
-#else
         push_weights(layer, weights_convert_1); // Convert precision with push_weights
         push_weights(layer, biases_1);          // Convert precision with push_weights
         push_weights(layer, weights_convert_2); // Convert precision with push_weights
         push_weights(layer, biases_2);          // Convert precision with push_weights
-#endif
     }
     m_layers[layer].is_residual_block = true;
     m_layers[layer].outputs = outputs;
@@ -1606,30 +1562,19 @@ void CuDNN_Network<net_t>::push_residual_se(
 #endif
 
     size_t layer = get_layer_count();
-    if (cfg_NCHW) {
 #if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights_1);
-            push_weights_trt(layer, biases_1);
-            push_weights_trt(layer, weights_2);
-            push_weights_trt(layer, biases_2);
-            push_weights_trt(layer, se_fc1_w);
-            push_weights_trt(layer, se_fc1_b);
-            push_weights_trt(layer, se_fc2_w);
-            push_weights_trt(layer, se_fc2_b);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, weights_2); // Here it is still float(Convert precision with push_weights)
-            push_weights(layer, biases_2);  // Here it is still float(Convert precision with push_weights)
-            push_weights_col_major(layer, se_fc1_w, channels / 2, channels);
-            push_weights(layer, se_fc1_b);
-            push_weights_col_major(layer, se_fc2_w, channels * 2, channels / 2);
-            push_weights(layer, se_fc2_b);
+    if (cfg_backend == backend_t::TENSORRT) {
+        push_weights_trt(layer, weights_1);
+        push_weights_trt(layer, biases_1);
+        push_weights_trt(layer, weights_2);
+        push_weights_trt(layer, biases_2);
+        push_weights_trt(layer, se_fc1_w);
+        push_weights_trt(layer, se_fc1_b);
+        push_weights_trt(layer, se_fc2_w);
+        push_weights_trt(layer, se_fc2_b);
+    } else
 #endif
-        }
-#else
+    if (cfg_NCHW) {
         push_weights(layer, weights_1); // Here it is still float(Convert precision with push_weights)
         push_weights(layer, biases_1);  // Here it is still float(Convert precision with push_weights)
         push_weights(layer, weights_2); // Here it is still float(Convert precision with push_weights)
@@ -1638,35 +1583,11 @@ void CuDNN_Network<net_t>::push_residual_se(
         push_weights(layer, se_fc1_b);
         push_weights_col_major(layer, se_fc2_w, channels * 2, channels / 2);
         push_weights(layer, se_fc2_b);
-#endif
     } else {
         auto weights_convert_1 = NCHW_to_NHWC<float>(
             weights_1, outputs, filter_size, filter_size, channels);
         auto weights_convert_2 = NCHW_to_NHWC<float>(
             weights_2, outputs, filter_size, filter_size, channels);
-#if defined(USE_TENSOR_RT)
-        if (cfg_backend == backend_t::TENSORRT) {
-            push_weights_trt(layer, weights_convert_1);
-            push_weights_trt(layer, biases_1);
-            push_weights_trt(layer, weights_convert_2);
-            push_weights_trt(layer, biases_2);
-            push_weights_trt_col_major(layer, se_fc1_w, channels / 2, channels);
-            push_weights_trt(layer, se_fc1_b);
-            push_weights_trt_col_major(layer, se_fc2_w, channels * 2, channels / 2);
-            push_weights_trt(layer, se_fc2_b);
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-        } else {
-            push_weights(layer, weights_convert_1); // Convert precision with push_weights
-            push_weights(layer, biases_1);          // Convert precision with push_weights
-            push_weights(layer, weights_convert_2); // Convert precision with push_weights
-            push_weights(layer, biases_2);          // Convert precision with push_weights
-            push_weights_col_major(layer, se_fc1_w, channels / 2, channels);
-            push_weights(layer, se_fc1_b);
-            push_weights_col_major(layer, se_fc2_w, channels * 2, channels / 2);
-            push_weights(layer, se_fc2_b);
-#endif
-        }
-#else
         push_weights(layer, weights_convert_1); // Convert precision with push_weights
         push_weights(layer, biases_1);          // Convert precision with push_weights
         push_weights(layer, weights_convert_2); // Convert precision with push_weights
@@ -1675,7 +1596,6 @@ void CuDNN_Network<net_t>::push_residual_se(
         push_weights(layer, se_fc1_b);
         push_weights_col_major(layer, se_fc2_w, channels * 2, channels / 2);
         push_weights(layer, se_fc2_b);
-#endif
     }
     m_layers[layer].is_residual_block = true;
     m_layers[layer].is_se_block = true;
@@ -1747,45 +1667,22 @@ void CuDNN_Network<net_t>::push_convolve(
     size_t layer = get_layer_count();
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
-        if (cfg_NCHW) {
-            push_weights_trt(layer, weights);
-            if (cfg_head_bn == head_bn_t::GPU_A) {
-                push_weights_trt(layer, biases);
-                if (outputs == Network::OUTPUTS_VALUE) {
-                    push_weights_trt_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels);
-                } else {
-                    push_weights_trt(layer, ip1_w);
-                }
-                push_weights_trt(layer, ip1_b);
-                if (outputs == Network::OUTPUTS_VALUE) {
-                    push_weights_trt(layer, ip2_w);
-                    push_weights_trt(layer, ip2_b);
-                }
-            } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                push_weights_trt(layer, biases);
-                push_weights_trt(layer, stddevs);
+        push_weights_trt(layer, weights);
+        if (cfg_head_bn == head_bn_t::GPU_A) {
+            push_weights_trt(layer, biases);
+            if (outputs == Network::OUTPUTS_VALUE) {
+                push_weights_trt_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels);
+            } else {
+                push_weights_trt(layer, ip1_w);
             }
-        } else {
-            auto weights_convert = NCHW_to_NHWC<float>(
-                weights, outputs, filter_size, filter_size, channels);
-            push_weights_trt(layer, weights_convert);
-            if (cfg_head_bn == head_bn_t::GPU_A) {
-                push_weights_trt(layer, biases);
-                if (outputs == Network::OUTPUTS_POLICY) {
-                    auto ip_weights_convert = NCHW_to_NHWC<float>(
-                        ip1_w, ip1_w.size() / outputs, filter_size, filter_size, outputs);
-                    push_weights_trt(layer, ip_weights_convert);
-                    push_weights_trt(layer, ip1_b);
-                } else {
-                    push_weights_trt(layer, ip1_w);
-                    push_weights_trt(layer, ip1_b);
-                    push_weights_trt(layer, ip2_w);
-                    push_weights_trt(layer, ip2_b);
-                }
-            } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                push_weights_trt(layer, biases);
-                push_weights_trt(layer, stddevs);
+            push_weights_trt(layer, ip1_b);
+            if (outputs == Network::OUTPUTS_VALUE) {
+                push_weights_trt(layer, ip2_w);
+                push_weights_trt(layer, ip2_b);
             }
+        } else if (cfg_head_bn == head_bn_t::GPU_B) {
+            push_weights_trt(layer, biases);
+            push_weights_trt(layer, stddevs);
         }
         m_layers[layer].outputs = outputs;
         m_layers[layer].channels = channels;
@@ -1899,8 +1796,6 @@ void CuDNN_Network<net_t>::forward_activations(
         = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
     const auto val_elements
         = batch_size * m_layers.back().outputs * NUM_INTERSECTIONS;
-    auto pol_net_t = std::vector<net_t>(pol_elements);
-    auto val_net_t = std::vector<net_t>(val_elements);
 
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
@@ -1917,26 +1812,16 @@ void CuDNN_Network<net_t>::forward_activations(
         std::vector<net_t> val_net_trt_t = std::vector<net_t>(val_elements_trt);
         auto search = cudnn_context.mBuffers.find("InputFeature");
         assert(search != cudnn_context.mBuffers.end());
-        if (typeid(net_t) == typeid(float) && cfg_NCHW) {
+        if (typeid(net_t) == typeid(float)) {
             checkCUDA(cudaMemcpyAsync(
                 search->second,
                 (net_t*)&input[0],
                 inSize,
                 cudaMemcpyHostToDevice,
                 m_streams[tid]));
-        } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
-            auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
-            std::copy(input.begin(), input.end(), input_net_t.begin());
-            cudaMemcpyAsync(
-                search->second,
-                (net_t*)&input_net_t[0],
-                inSize,
-                cudaMemcpyHostToDevice,
-                m_streams[tid]);
         } else {
             auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
-            input_net_t = NCHW_to_NHWC<net_t>(
-                input, batch_size, BOARD_SIZE, BOARD_SIZE, m_layers[0].channels);
+            std::copy(input.begin(), input.end(), input_net_t.begin());
             cudaMemcpyAsync(
                 search->second,
                 (net_t*)&input_net_t[0],
@@ -1967,35 +1852,20 @@ void CuDNN_Network<net_t>::forward_activations(
         }
         search = cudnn_context.mBuffers.find("OutputPolicy");
         assert(search != cudnn_context.mBuffers.end());
-        checkCUDA(cudaMemcpyAsync(
-            &pol_net_trt_t[0],
-            search->second,
-            pol_elements_trt * sizeof(net_t),
-            cudaMemcpyDeviceToHost,
-            m_streams[tid]));
+        checkCUDA(cudaMemcpyAsync(&output_pol[0],
+                                  search->second,
+                                  pol_elements_trt * sizeof(float),
+                                  cudaMemcpyDeviceToHost,
+                                  m_streams[tid]));
         search = cudnn_context.mBuffers.find("OutputValue");
         assert(search != cudnn_context.mBuffers.end());
-        checkCUDA(cudaMemcpyAsync(
-            &val_net_trt_t[0],
-            search->second,
-            val_elements_trt * sizeof(net_t),
-            cudaMemcpyDeviceToHost,
-            m_streams[tid]));
+        checkCUDA(cudaMemcpyAsync(&output_val[0],
+                                  search->second,
+                                  val_elements_trt * sizeof(float),
+                                  cudaMemcpyDeviceToHost,
+                                  m_streams[tid]));
         // Asynchronously enqueue the inference work
         cudaStreamSynchronize(m_streams[tid]);
-
-        if (cfg_head_bn == head_bn_t::GPU_A) {
-            std::copy(val_net_trt_t.begin(), val_net_trt_t.end(), output_val.begin()); 
-            std::copy(pol_net_trt_t.begin(), pol_net_trt_t.end(), output_pol.begin());
-        } else if (cfg_NCHW) {
-            std::copy(val_net_trt_t.begin(), val_net_trt_t.end(), output_val.begin()); 
-            std::copy(pol_net_trt_t.begin(), pol_net_trt_t.end(), output_pol.begin());
-        } else {
-            output_val = NHWC_to_NCHW<net_t>(
-                val_net_trt_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_VALUE);
-            output_pol = NHWC_to_NCHW<net_t>(
-                pol_net_trt_t, batch_size, BOARD_SIZE, BOARD_SIZE, Network::OUTPUTS_POLICY);
-        }
         return;
     }
 #endif
@@ -2003,6 +1873,8 @@ void CuDNN_Network<net_t>::forward_activations(
 #if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
     // input: input(float) 18 chanels * (BOARD_SIZE * BOARD_SIZE)
 
+    auto pol_net_t = std::vector<net_t>(pol_elements);
+    auto val_net_t = std::vector<net_t>(val_elements);
     // Always allocates enough space for floats
     constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(float);
 
@@ -2825,7 +2697,14 @@ bool CuDNN_Network<net_t>::build(
             auto name = engine->getIOTensorName(i);
             auto dims = engine->getTensorShape(name);
             std::string_view name_str{name};
-            size_t size_byte = (name_str == "BatchSize") ? sizeof(int32_t) : sizeof(net_t);
+            size_t size_byte;
+            if (name_str == "BatchSize") {
+                size_byte = sizeof(int32_t);
+            } else if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
+                size_byte = sizeof(float);
+            } else {
+                size_byte = sizeof(net_t);
+            }
             size_t bytes = std::accumulate(dims.d + 1,
                                            dims.d + dims.nbDims,
                                            batch_size * size_byte,
@@ -3324,21 +3203,13 @@ void CuDNN_Network<net_t>::constructNetwork(
     auto outputPolicy = outPolicyLayer->getOutput(0);
     network->markOutput(*outputPolicy);
     outputPolicy->setName("OutputPolicy");
-    if (typeid(net_t) == typeid(float)) {
-        outputPolicy->setType(DataType::kFLOAT);
-    } else {
-        outputPolicy->setType(DataType::kHALF);
-    }
+    outputPolicy->setType(DataType::kFLOAT);
     outputPolicy->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
 
     auto outputValue = outValueLayer->getOutput(0);
     network->markOutput(*outputValue);
     outputValue->setName("OutputValue");
-    if (typeid(net_t) == typeid(float)) {
-        outputValue->setType(DataType::kFLOAT);
-    } else {
-        outputValue->setType(DataType::kHALF);
-    }
+    outputValue->setType(DataType::kFLOAT);
     outputValue->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
     std::cout << "Done constructing network..." << std::endl;
 }
