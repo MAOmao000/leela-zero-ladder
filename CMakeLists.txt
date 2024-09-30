@@ -25,7 +25,7 @@ set(Boost_USE_MULTITHREADED ON)
 find_package(Boost 1.58.0 REQUIRED program_options filesystem)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
-if(USE_BLAS)
+if(USE_BLAS OR USE_BACKEND STREQUAL "BLAS")
   # We need OpenBLAS for now, because we make some specific calls.
   # Ideally we'd use OpenBLAS is possible and fall back to
   # not doing those calls if it's not present.
