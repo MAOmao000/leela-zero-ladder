@@ -994,16 +994,10 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_init(
         Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
-        auto key = graph.key();
-        auto it = m_maintained_cache1.find(key);
-        if (it != m_maintained_cache1.end()) {
-            return it->second;
-        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
-        m_maintained_cache1.insert({key, std::make_tuple(graph, X, W, B, Y)});
         return std::make_tuple(graph, X, W, B, Y);
     };
 
@@ -1085,16 +1079,10 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_no_relu_init(
         Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
-        auto key = graph.key();
-        auto it = m_maintained_cache2.find(key);
-        if (it != m_maintained_cache2.end()) {
-            return it->second;
-        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
-        m_maintained_cache2.insert({key, std::make_tuple(graph, X, W, B, Y)});
         return std::make_tuple(graph, X, W, B, Y);
     };
 
@@ -1161,16 +1149,10 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_add_relu_init
         Y->set_output(true).set_stride({ k * h * w, 1, k * w, k });
 
         checkCUDNNFE(graph.validate());
-        auto key = graph.key();
-        auto it = m_maintained_cache3.find(key);
-        if (it != m_maintained_cache3.end()) {
-            return it->second;
-        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
-        m_maintained_cache3.insert({key, std::make_tuple(graph, X, Z, Y)});
         return std::make_tuple(graph, X, Z, Y);
     };
 
@@ -1243,16 +1225,10 @@ std::shared_ptr<conv_descriptor> CuDNN_Network<net_t>::convolve_fe_head_init(
         Y->set_output(true);
 
         checkCUDNNFE(graph.validate());
-        auto key = graph.key();
-        auto it = m_maintained_cache4.find(key);
-        if (it != m_maintained_cache4.end()) {
-            return it->second;
-        }
         checkCUDNNFE(graph.build_operation_graph(handle));
         checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
         checkCUDNNFE(graph.check_support(handle));
         checkCUDNNFE(graph.build_plans(handle));
-        m_maintained_cache4.insert({key, std::make_tuple(graph, X, W, Y)});
         return std::make_tuple(graph, X, W, Y);
     };
 

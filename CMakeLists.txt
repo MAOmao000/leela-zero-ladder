@@ -118,7 +118,7 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
     ${SrcPath}/Tuner.cpp
     ${SrcPath}/ZobristHash.cpp
   )
-  set(FE_INCLUDE_PATH "/home/x/cudnn-frontend/include")
+  #set(FE_INCLUDE_PATH "/home/x/cudnn-frontend/include")
   # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
     set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
@@ -330,6 +330,9 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
       endif()
       target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
+  endif()
+  if(FE_ROOT_DIR)
+    include_directories(${FE_ROOT_DIR}/include)
   endif()
   add_definitions(-DUSE_CUDNN_GRAPH)
   include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR} ${FE_INCLUDE_PATH})

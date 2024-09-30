@@ -668,38 +668,5 @@ private:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     std::string m_model_hash{""};
-
-#if defined(USE_CUDNN_GRAPH)
-    using graph_and_tensors1 =
-        std::tuple<fe::graph::Graph,
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // X
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // W
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // B
-            std::shared_ptr<fe::graph::Tensor_attributes>   // Y
-        >;
-    using graph_and_tensors2 =
-        std::tuple<fe::graph::Graph,
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // X
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // W
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // B
-            std::shared_ptr<fe::graph::Tensor_attributes>   // Y
-        >;
-    using graph_and_tensors3 =
-        std::tuple<fe::graph::Graph,
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // X
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // Z
-            std::shared_ptr<fe::graph::Tensor_attributes>   // Y
-        >;
-    using graph_and_tensors4 =
-        std::tuple<fe::graph::Graph,
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // X
-            std::shared_ptr<fe::graph::Tensor_attributes>,  // W
-            std::shared_ptr<fe::graph::Tensor_attributes>   // Y
-        >;
-    std::unordered_map<std::size_t, graph_and_tensors1> m_maintained_cache1;
-    std::unordered_map<std::size_t, graph_and_tensors2> m_maintained_cache2;
-    std::unordered_map<std::size_t, graph_and_tensors3> m_maintained_cache3;
-    std::unordered_map<std::size_t, graph_and_tensors4> m_maintained_cache4;
-#endif
 };
 #endif
