@@ -4,3 +4,7 @@
 [submodule "src/Eigen"]
 	path = src/Eigen
 	url = https://github.com/eigenteam/eigen-git-mirror
+[submodule "src/cudnn-frontend"]
+	path = src/cudnn-frontend
+	url = https://github.com/NVIDIA/cudnn-frontend.git
+	branch = main
