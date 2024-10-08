@@ -58,6 +58,13 @@ static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1; // including pass
 static constexpr auto KOMI = 7.5f;
 
 /*
+ * NetworkType: Whether the weight of MiniGo includes se-net.
+ */
+enum class NetworkType {
+    LEELA_ZERO, MINIGO_SE
+};
+
+/*
  * Features
  *
  * USE_BLAS: Optionally use a basic linear algebra library.
@@ -77,6 +84,10 @@ static constexpr auto KOMI = 7.5f;
 #if defined(USE_BLAS)
 #define USE_OPENBLAS
 #endif
+#endif
+
+#ifdef USE_TENSOR_RT
+#define USE_CUDNN
 #endif
 
 /*
@@ -114,8 +125,8 @@ static constexpr auto KOMI = 7.5f;
 
 
 static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
-static constexpr auto PROGRAM_VERSION_MAJOR = "1";
-static constexpr auto PROGRAM_VERSION_MINOR = "9";
+static constexpr auto PROGRAM_VERSION_MAJOR = "2";
+static constexpr auto PROGRAM_VERSION_MINOR = "0";
 
 /*
  * OpenBLAS limitation: the default configuration on some Linuxes
@@ -128,18 +139,14 @@ static constexpr auto MAX_CPUS = 256;
 #endif
 
 #ifdef USE_HALF
-#ifndef TRT_ONLY
 #include "half/half.hpp"
-#endif
 #endif
 
 #ifdef USE_OPENCL
 // If OpenCL are fully usable, then check the OpenCL against CPU
 // implementation with some probability.
-#ifndef TRT_ONLY
 #define USE_OPENCL_SELFCHECK
 static constexpr auto SELFCHECK_PROBABILITY = 2000;
-#endif
 #endif
 
 #if (_MSC_VER >= 1400) /* VC8+ Disable all deprecation warnings */

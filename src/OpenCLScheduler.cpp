@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,9 +31,9 @@
 
 #ifdef USE_OPENCL
 
-#include "GTP.h"
-#include "Network.h"
 #include "OpenCLScheduler.h"
+#include "OpenCL.h"
+#include "Network.h"
 #include "Random.h"
 #include "Utils.h"
 
@@ -58,9 +59,13 @@ private:
 };
 
 template <typename T>
-static std::vector<T> zeropad_U(const std::vector<float>& U, const int outputs,
-                                const int channels, const int outputs_pad,
-                                const int channels_pad) {
+static std::vector<T> zeropad_U(
+    const std::vector<float>& U,
+    const int outputs,
+    const int channels,
+    const int outputs_pad,
+    const int channels_pad)
+{
     // Fill with zeroes
     auto Upad = std::vector<T>(WINOGRAD_TILE * outputs_pad * channels_pad);
 
@@ -82,51 +87,55 @@ static std::vector<T> zeropad_U(const std::vector<float>& U, const int outputs,
 }
 
 template <typename net_t>
-OpenCLScheduler<net_t>::OpenCLScheduler() {
+OpenCLScheduler<net_t>::OpenCLScheduler()
+{
     // multi-gpu?
     auto gpus = cfg_gpus;
-
     // An empty GPU list from the command line represents autodetect.
     // Put a minus one GPU index here.
     if (gpus.empty()) {
         gpus = {-1};
     }
-
     auto silent{false};
 
+    m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+    m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
     for (auto gpu : gpus) {
         auto opencl = std::make_unique<OpenCL<net_t>>(gpu, silent);
         auto net = std::make_unique<OpenCL_Network<net_t>>(*opencl);
         m_opencl.push_back(std::move(opencl));
         m_networks.push_back(std::move(net));
-
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
     }
 }
 
 template <typename net_t>
-void OpenCLScheduler<net_t>::initialize(const int channels, const int net_type, const std::string &model_hash) {
-    (void) model_hash;
+void OpenCLScheduler<net_t>::initialize(
+    const int channels,
+    const NetworkType net_type,
+    const std::string &model_hash)
+{
     m_net_type = net_type;
-
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the
     // GPU.
+    size_t gpus_size;
+    if (cfg_gpus.empty()) {
+        gpus_size = 1;
+    } else {
+        gpus_size = cfg_gpus.size();
+    }
     auto num_worker_threads =
-        cfg_num_threads / cfg_batch_size / (m_opencl.size() + 1) + 1;
-    auto gnum = 0;
-    for (auto& opencl : m_opencl) {
-        opencl->initialize(channels, cfg_batch_size, net_type);
-
+        cfg_num_threads / cfg_batch_size / (gpus_size + 1) + 1;
+    for (auto gnum = 0; gnum < gpus_size; gnum++) {
+        m_opencl[gnum]->initialize(channels, cfg_batch_size, net_type);
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =
-                std::thread(&OpenCLScheduler<net_t>::batch_worker, this, gnum);
+                std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
             m_worker_threads.push_back(std::move(t));
         }
-        gnum++;
     }
-
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
     if (cfg_tune_only) {
@@ -135,19 +144,8 @@ void OpenCLScheduler<net_t>::initialize(const int channels, const int net_type, 
 }
 
 template <typename net_t>
-OpenCLScheduler<net_t>::~OpenCLScheduler() {
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        m_running = false;
-    }
-    m_cv.notify_all();
-    for (auto& x : m_worker_threads) {
-        x.join();
-    }
-}
-
-template <typename net_t>
-bool OpenCLScheduler<net_t>::needs_autodetect() {
+bool OpenCLScheduler<net_t>::needs_autodetect()
+{
     for (auto& opencl : m_opencl) {
         // If any card has no native fp16 compute, we'll have to benchmark.
         if (!opencl->has_fp16_compute() && !opencl->has_tensor_cores()) {
@@ -159,352 +157,139 @@ bool OpenCLScheduler<net_t>::needs_autodetect() {
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::push_input_convolution(
-    const unsigned int filter_size, const unsigned int channels,
+    const unsigned int filter_size,
+    const unsigned int channels,
     const unsigned int outputs,
-    const std::vector<float>& weights,
-    const std::vector<float>& means,
-    const std::vector<float>& variances) {
-
+    const size_t weight_index,
+    const std::shared_ptr<const ForwardPipeWeights> weights)
+{
     for (const auto& opencl_net : m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
-
         const auto mwg = tuners[0];
         const auto kwg = tuners[2];
         const auto vwm = tuners[3];
-
         const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
         const auto k_ceil = ceilMultiple(ceilMultiple(channels, kwg), vwm);
-
-        const auto Upad =
-            zeropad_U<net_t>(weights, outputs, channels, m_ceil, k_ceil);
-        opencl_net->push_input_convolution(filter_size, channels, outputs, Upad,
-                                           from_float(means),
-                                           from_float(variances));
+        const auto Upad = zeropad_U<net_t>(
+            weights->m_conv_weights[weight_index],
+            outputs,
+            channels,
+            m_ceil,
+            k_ceil
+        );
+        opencl_net->push_input_convolution(
+            filter_size,
+            channels,
+            outputs,
+            Upad,
+            from_float(weights->m_batchnorm_means[weight_index]),
+            from_float(weights->m_batchnorm_stddevs[weight_index])
+        );
     }
 }
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::push_residual(
-    const unsigned int filter_size, const unsigned int channels,
+    const unsigned int filter_size,
+    const unsigned int channels,
     const unsigned int outputs,
-    const std::vector<float>& weights_1,
-    const std::vector<float>& means_1,
-    const std::vector<float>& variances_1,
-    const std::vector<float>& weights_2,
-    const std::vector<float>& means_2,
-    const std::vector<float>& variances_2) {
+    const size_t weight_index,
+    const std::shared_ptr<const ForwardPipeWeights> weights)
+{
     for (const auto& opencl_net : m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
-
         const auto mwg = tuners[0];
         const auto vwm = tuners[3];
-
         const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
         const auto Upad1 =
-            zeropad_U<net_t>(weights_1, outputs, outputs, m_ceil, m_ceil);
+            zeropad_U<net_t>(weights->m_conv_weights[weight_index],
+                outputs, outputs, m_ceil, m_ceil);
         const auto Upad2 =
-            zeropad_U<net_t>(weights_2, outputs, outputs, m_ceil, m_ceil);
-        opencl_net->push_residual(filter_size, channels, outputs,
-                                  Upad1, from_float(means_1),
-                                  from_float(variances_1),
-                                  Upad2, from_float(means_2),
-                                  from_float(variances_2));
+            zeropad_U<net_t>(weights->m_conv_weights[weight_index + 1],
+                outputs, outputs, m_ceil, m_ceil);
+        opencl_net->push_residual(
+            filter_size,
+            channels,
+            outputs,
+            Upad1,
+            from_float(weights->m_batchnorm_means[weight_index]),
+            from_float(weights->m_batchnorm_stddevs[weight_index]),
+            Upad2,
+            from_float(weights->m_batchnorm_means[weight_index + 1]),
+            from_float(weights->m_batchnorm_stddevs[weight_index + 1])
+        );
     }
 }
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::push_residual_se(
-    unsigned int filter_size,
-    unsigned int channels,
-    unsigned int outputs,
-    const std::vector<float>& weights_1,
-    const std::vector<float>& means_1,
-    const std::vector<float>& variances_1,
-    const std::vector<float>& weights_2,
-    const std::vector<float>& means_2,
-    const std::vector<float>& variances_2,
-    const std::vector<float>& fc1_w,
-    const std::vector<float>& fc1_b,
-    const std::vector<float>& fc2_w,
-    const std::vector<float>& fc2_b) {
+    const unsigned int filter_size,
+    const unsigned int channels,
+    const unsigned int outputs,
+    const size_t weight_index,
+    const std::shared_ptr<const ForwardPipeWeights> weights)
+{
     for (const auto& opencl_net : m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
-
         const auto mwg = tuners[0];
         const auto vwm = tuners[3];
-
         const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
-        const auto Upad1 = zeropad_U<net_t>(weights_1,
-            outputs, outputs,
-            m_ceil, m_ceil);
-        const auto Upad2 = zeropad_U<net_t>(weights_2,
-            outputs, outputs,
-            m_ceil, m_ceil);
-        opencl_net->push_residual_se(filter_size, channels, outputs,
+        const auto Upad1 = zeropad_U<net_t>(
+            weights->m_conv_weights[weight_index],
+            outputs,
+            outputs,
+            m_ceil,
+            m_ceil
+        );
+        const auto Upad2 = zeropad_U<net_t>(
+            weights->m_conv_weights[weight_index + 1],
+            outputs,
+            outputs,
+            m_ceil,
+            m_ceil
+        );
+        opencl_net->push_residual_se(
+            filter_size,
+            channels,
+            outputs,
             Upad1,
-            from_float(means_1),
-            from_float(variances_1),
+            from_float(weights->m_batchnorm_means[weight_index]),
+            from_float(weights->m_batchnorm_stddevs[weight_index]),
             Upad2,
-            from_float(means_2),
-            from_float(variances_2),
-            from_float(fc1_w),
-            from_float(fc1_b),
-            from_float(fc2_w),
-            from_float(fc2_b));
+            from_float(weights->m_batchnorm_means[weight_index + 1]),
+            from_float(weights->m_batchnorm_stddevs[weight_index + 1]),
+            from_float(weights->m_se_weights[weight_index - 1]),
+            from_float(weights->m_se_biases[weight_index - 1]),
+            from_float(weights->m_se_weights[weight_index]),
+            from_float(weights->m_se_biases[weight_index])
+        );
     }
 }
 
 template <typename net_t>
-void OpenCLScheduler<net_t>::push_convolve(const unsigned int filter_size,
-                                           const unsigned int channels,
-                                           const unsigned int outputs,
-                                           const std::vector<float>& weights) {
-    for (const auto& opencl_net : m_networks) {
-        opencl_net->push_convolve(filter_size, channels, outputs,
-                                  from_float(weights));
-    }
-}
-
-template <typename net_t>
-void OpenCLScheduler<net_t>::push_weights(
-    const unsigned int filter_size, const unsigned int channels,
+void OpenCLScheduler<net_t>::push_convolve(
+    const unsigned int filter_size,
+    const unsigned int channels,
     const unsigned int outputs,
-    std::shared_ptr<const ForwardPipeWeights> weights) {
-
-    auto weight_index = size_t{0};
-
-    // Winograd filter transformation changes filter size to 4x4
-    push_input_convolution(filter_size, channels, outputs,
-                           weights->m_conv_weights[weight_index],
-                           weights->m_batchnorm_means[weight_index],
-                           weights->m_batchnorm_stddevs[weight_index]);
-    weight_index++;
-
-    if (m_net_type == int(NetworkType::LEELA_ZERO))
-    {
-        // residual blocks : except the first entry,
-        // the second ~ last entry is all on residual topwer
-        for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
-            push_residual(filter_size, outputs, outputs,
-                weights->m_conv_weights[weight_index],
-                weights->m_batchnorm_means[weight_index],
-                weights->m_batchnorm_stddevs[weight_index],
-                weights->m_conv_weights[weight_index + 1],
-                weights->m_batchnorm_means[weight_index + 1],
-                weights->m_batchnorm_stddevs[weight_index + 1]);
-            weight_index += 2;
-        }
-    }
-    else if (m_net_type == int(NetworkType::MINIGO_SE))
-    {
-        // residual blocks : except the first entry,
-        // the second ~ last entry is all on residual topwer
-        for (auto i = size_t{0}; i < weights->m_conv_weights.size() / 2; i++) {
-            push_residual_se(filter_size, outputs, outputs,
-                weights->m_conv_weights[weight_index],
-                weights->m_batchnorm_means[weight_index],
-                weights->m_batchnorm_stddevs[weight_index],
-                weights->m_conv_weights[weight_index + 1],
-                weights->m_batchnorm_means[weight_index + 1],
-                weights->m_batchnorm_stddevs[weight_index + 1],
-                weights->m_se_weights[weight_index - 1],
-                weights->m_se_biases[weight_index - 1],
-                weights->m_se_weights[weight_index],
-                weights->m_se_biases[weight_index]);
-            weight_index += 2;
-        }
-    }
-
-    // Output head convolutions
-    push_convolve(1, outputs, Network::OUTPUTS_POLICY, weights->m_conv_pol_w);
-    push_convolve(1, outputs, Network::OUTPUTS_VALUE, weights->m_conv_val_w);
-}
-
-template <typename net_t>
-void OpenCLScheduler<net_t>::forward(const std::vector<float>& input,
-                                     std::vector<float>& output_pol,
-                                     std::vector<float>& output_val) {
-    auto entry =
-        std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
-    std::unique_lock<std::mutex> lk(entry->mutex);
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        m_forward_queue.push_back(entry);
-
-        if (m_single_eval_in_progress.load()) {
-            m_waittime += 2;
-        }
-    }
-    m_cv.notify_one();
-    entry->cv.wait(lk);
-
-    if (m_draining) {
-        throw NetworkHaltException();
-    }
-}
-
-#ifndef NDEBUG
-struct batch_stats_t batch_stats;
-#endif
-
-template <typename net_t>
-void OpenCLScheduler<net_t>::batch_worker(const size_t gnum) {
-    constexpr auto in_size = Network::INPUT_CHANNELS * BOARD_SIZE * BOARD_SIZE;
-    constexpr auto out_pol_size =
-        Network::OUTPUTS_POLICY * BOARD_SIZE * BOARD_SIZE;
-    constexpr auto out_val_size =
-        Network::OUTPUTS_VALUE * BOARD_SIZE * BOARD_SIZE;
-
-    OpenCLContext context;
-
-    // batch scheduling heuristic.
-    // Returns the batch picked up from the queue (m_forward_queue)
-    // 1) Wait for m_waittime milliseconds for full batch
-    // 2) if we don't have a full batch then just do a single eval
-    //
-    // The purpose of m_waittime is to prevent the system from deadlocking
-    // because we were waiting for a job too long, while the job is never
-    // going to come due to a control dependency (e.g., evals stuck on a
-    // critical path).  To do so:
-    //
-    // 1) if we couldn't form a batch after waiting m_waittime ms, it means
-    // that we hit the critical path and should do scalar evals.
-    // Wait 1ms shorter next time.
-    //
-    // 2) if we picked up a single eval, but were getting additional evals
-    // while that single eval was being processed, it means that we made
-    // the wrong decision.  Wait 2ms longer next time.
-
-    auto pickup_task = [this]() {
-        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
-        size_t count = 0;
-
-        std::unique_lock<std::mutex> lk(m_mutex);
-        while (true) {
-            if (!m_running) {
-                return inputs;
-            }
-            count = m_forward_queue.size();
-            if (count >= cfg_batch_size) {
-                count = cfg_batch_size;
-                break;
-            }
-
-            bool timeout = !m_cv.wait_for(
-                lk, std::chrono::milliseconds(m_waittime), [this]() {
-                    return !m_running
-                           || m_forward_queue.size() >= cfg_batch_size;
-                });
-
-            if (!m_forward_queue.empty()) {
-                if (timeout
-                    && m_single_eval_in_progress.exchange(true) == false) {
-                    // Waited long enough but couldn't form a batch.
-                    // Check if there is any other single eval in progress,
-                    // and if not, do one from this thread.
-                    if (m_waittime > 1) {
-                        m_waittime--;
-                    }
-                    count = 1;
-                    break;
-                }
-            }
-        }
-        // Move 'count' evals from shared queue to local list.
-        auto end = begin(m_forward_queue);
-        std::advance(end, count);
-        std::move(begin(m_forward_queue), end, std::back_inserter(inputs));
-        m_forward_queue.erase(begin(m_forward_queue), end);
-
-        return inputs;
-    };
-
-    auto batch_input = std::vector<float>();
-    auto batch_output_pol = std::vector<float>();
-    auto batch_output_val = std::vector<float>();
-
-    while (true) {
-        auto inputs = pickup_task();
-        auto count = inputs.size();
-
-        if (!m_running) {
-            return;
-        }
-
-#ifndef NDEBUG
-        if (count == 1) {
-            batch_stats.single_evals++;
+    const std::shared_ptr<const ForwardPipeWeights> weights)
+{
+    for (const auto& opencl_net : m_networks) {
+        if (outputs == Network::OUTPUTS_POLICY) {
+            opencl_net->push_convolve(
+                filter_size,
+                channels,
+                outputs,
+                from_float(weights->m_conv_pol_w)
+            );
         } else {
-            batch_stats.batch_evals++;
-        }
-#endif
-
-        // prepare input for forward() call
-        batch_input.resize(in_size * count);
-        batch_output_pol.resize(out_pol_size * count);
-        batch_output_val.resize(out_val_size * count);
-
-        auto index = size_t{0};
-        for (auto& x : inputs) {
-            std::unique_lock<std::mutex> lk(x->mutex);
-            std::copy(begin(x->in), end(x->in),
-                      begin(batch_input) + in_size * index);
-            index++;
-        }
-
-        // run the NN evaluation
-        m_networks[gnum]->forward(batch_input, batch_output_pol,
-                                  batch_output_val, context, count);
-
-        // Get output and copy back
-        index = 0;
-        for (auto& x : inputs) {
-            std::copy(begin(batch_output_pol) + out_pol_size * index,
-                      begin(batch_output_pol) + out_pol_size * (index + 1),
-                      begin(x->out_p));
-            std::copy(begin(batch_output_val) + out_val_size * index,
-                      begin(batch_output_val) + out_val_size * (index + 1),
-                      begin(x->out_v));
-            x->cv.notify_all();
-            index++;
-        }
-
-        if (count == 1) {
-            m_single_eval_in_progress = false;
+            opencl_net->push_convolve(
+                filter_size,
+                channels,
+                outputs,
+                from_float(weights->m_conv_val_w)
+            );
         }
     }
-}
-
-template <typename net_t>
-void OpenCLScheduler<net_t>::drain() {
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
-    m_draining = true;
-
-    std::list<std::shared_ptr<ForwardQueueEntry>> fq;
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        std::move(m_forward_queue.begin(), m_forward_queue.end(),
-                  std::back_inserter(fq));
-        m_forward_queue.clear();
-    }
-
-    for (auto& x : fq) {
-        {
-            // dummy lock/unlock to make sure thread in forward() is sleeping
-            std::unique_lock<std::mutex> lk(x->mutex);
-        }
-        x->cv.notify_all();
-    }
-}
-
-template <typename net_t>
-void OpenCLScheduler<net_t>::resume() {
-    // UCTNode::think() should wait for all child threads to complete before resuming.
-    assert(m_forward_queue.empty());
-
-    m_draining = false;
 }
 
 template class OpenCLScheduler<float>;

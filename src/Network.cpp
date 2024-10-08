@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -40,11 +41,10 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#ifndef TRT_ONLY
+
 #ifndef USE_BLAS
 #define EIGEN_NO_DEBUG // Disable assertions in your code．
 #include <Eigen/Dense>
-#endif
 #endif
 
 #ifdef __APPLE__
@@ -59,21 +59,13 @@
 #include <dnnl.hpp>
 #endif
 #endif
-#ifndef TRT_ONLY
 #include "CPUPipe.h"
-#endif
 #include "Network.h"
 #include "zlib.h"
-#ifdef TRT_ONLY
-#include "TRTScheduler.h"
-#else
 #ifdef USE_OPENCL
 #include "OpenCLScheduler.h"
+#include "GPUScheduler.h"
 #include "UCTNode.h"
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-#include "CuDNNScheduler.h"
-#endif
-#endif
 #endif
 #include "FastBoard.h"
 #include "FastState.h"
@@ -85,15 +77,14 @@
 #include "ThreadPool.h"
 #include "Timing.h"
 #include "Utils.h"
-#ifndef TRT_ONLY
+// RAY's ladder check
 #include "Ladder.h"
-#endif
+// Leela's ladder check
 #include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
-#ifndef TRT_ONLY
 #ifndef USE_BLAS
 // Eigen helpers
 template <typename T>
@@ -104,7 +95,6 @@ using ConstEigenVectorMap =
 template <typename T>
 using ConstEigenMatrixMap =
     Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
-#endif
 #endif
 
 // Symmetry helper
@@ -177,7 +167,6 @@ void process_bn_var(container& weights) {
     }
 }
 
-#ifndef TRT_ONLY
 std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
                                                  const int outputs,
                                                  const int channels) {
@@ -243,7 +232,6 @@ std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
 
     return U;
 }
-#endif
 
 std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // Count size of the network
@@ -293,17 +281,19 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     wtfile.clear();
     wtfile.seekg(0, std::ios::beg);
 
-#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
-    auto fileSize = wtfile.tellg();
-    std::string str;
-    str.resize(fileSize);
-    wtfile.read(&str[0], fileSize);
-    char hashResultBuf[65];
-    SHA2::get256((const uint8_t*)str.data(), str.size(), hashResultBuf);
-    m_model_hash.assign(hashResultBuf);
-    // Re-read file and process
-    wtfile.clear();
-    wtfile.seekg(0, std::ios::beg);
+#ifdef USE_TENSOR_RT
+    if (cfg_backend == backend_t::TENSORRT) {
+        auto fileSize = wtfile.tellg();
+        std::string str;
+        str.resize(fileSize);
+        wtfile.read(&str[0], fileSize);
+        char hashResultBuf[65];
+        SHA2::get256((const uint8_t*)str.data(), str.size(), hashResultBuf);
+        m_model_hash.assign(hashResultBuf);
+        // Re-read file and process
+        wtfile.clear();
+        wtfile.seekg(0, std::ios::beg);
+    }
 #endif
     // Get the file format id out of the way
     std::getline(wtfile, line);
@@ -578,38 +568,21 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
 std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
-#if defined(TRT_ONLY)
-    pipe->initialize(int(m_net_type), m_model_hash);
-    pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
+    pipe->initialize(channels, m_net_type, m_model_hash);
+#ifdef USE_CPU_ONLY
+     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 #else
-    pipe->initialize(channels, int(m_net_type), m_model_hash);
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
     } else {
         pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
     }
 #endif
-
     return std::move(pipe);
 }
 
-#if defined(TRT_ONLY)
-void Network::select_precision(const int channels) {
-    if (cfg_precision == precision_t::AUTO) {
-        myprintf("Initializing TensorRT (autodetecting precision).\n");
-        m_forward = init_net(channels, std::make_unique<TRTScheduler<float>>());
-        myprintf("Using TensorRT single precision.\n");
-        cfg_precision = precision_t::SINGLE;
-    } else if (cfg_precision == precision_t::SINGLE) {
-        myprintf("Initializing TensorRT (single precision).\n");
-        m_forward = init_net(channels, std::make_unique<TRTScheduler<float>>());
-    } else if (cfg_precision == precision_t::HALF) {
-        myprintf("Initializing TensorRT (half precision).\n");
-        m_forward = init_net(channels, std::make_unique<TRTScheduler<__half>>());
-    }
-}
-#else
 #ifdef USE_HALF
+#ifndef USE_CPU_ONLY
 void Network::select_precision(const int channels) {
     std::string backend("OpenCL");
     if (cfg_backend == backend_t::TENSORRT) {
@@ -626,20 +599,18 @@ void Network::select_precision(const int channels) {
         // Setup fp16 here so that we can see if we can skip autodetect.
         // However, if fp16 sanity check fails we will return a fp32 and pray it works.
         myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
-#ifdef USE_TENSOR_RT
         if (cfg_backend == backend_t::TENSORRT) {
             m_forward =
-                init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+                init_net(channels, std::make_unique<GPUScheduler<float>>());
             myprintf("Using %s single precision.\n", backend.c_str());
             return;
         }
-#endif
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-        if (cfg_backend != backend_t::OPENCL) {
-            std::unique_ptr<ForwardPipe> fp16_net = std::make_unique<CuDNNScheduler<__half>>();
+        else if (cfg_backend != backend_t::OPENCL) {
+            std::unique_ptr<ForwardPipe> fp16_net =
+                std::make_unique<GPUScheduler<half_float::half>>();
             if (fp16_net->needs_autodetect()) {
                 m_forward =
-                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
+                    init_net(channels, std::make_unique<GPUScheduler<float>>());
                 myprintf("Using %s single precision.\n", backend.c_str());
             } else {
                 m_forward = init_net(channels, std::move(fp16_net));
@@ -647,16 +618,10 @@ void Network::select_precision(const int channels) {
             }
             return;
         }
-#endif
-        std::unique_ptr<ForwardPipe> fp16_net;
-        if (cfg_backend == backend_t::OPENCL) {
-            fp16_net = std::make_unique<OpenCLScheduler<half_float::half>>();
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-        } else {
-            fp16_net = std::make_unique<CuDNNScheduler<__half>>();
-#endif
-        }
-        if (cfg_backend != backend_t::TENSORRT && !fp16_net->needs_autodetect()) {
+        // backend = OPENCL
+        std::unique_ptr<ForwardPipe> fp16_net =
+            std::make_unique<OpenCLScheduler<half_float::half>>();
+        if (!fp16_net->needs_autodetect()) {
             try {
                 myprintf("%s: using fp16/half or tensor core compute support.\n", backend.c_str());
                 m_forward = init_net(channels, std::move(fp16_net));
@@ -666,36 +631,20 @@ void Network::select_precision(const int channels) {
                          "despite driver claiming support.\n", backend.c_str());
                 myprintf("Falling back to single precision\n");
                 m_forward.reset();
-                if (cfg_backend == backend_t::OPENCL) {
                     m_forward = init_net(
                         channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-                } else {
-                    m_forward = init_net(
-                        channels, std::make_unique<CuDNNScheduler<float>>());
-#endif
-                }
             }
             return;
         }
-
         // Start by setting up fp32.
         try {
             m_forward.reset();
-            if (cfg_backend == backend_t::OPENCL) {
-                m_forward =
-                    init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-            } else {
-                m_forward =
-                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
-#endif
-            }
+            m_forward =
+                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
             score_fp32 = benchmark_time(100);
         } catch (...) {
             // empty - if exception thrown just throw away fp32 net
         }
-
         // Now benchmark fp16.
         try {
             m_forward.reset();
@@ -704,36 +653,21 @@ void Network::select_precision(const int channels) {
         } catch (...) {
             // empty - if exception thrown just throw away fp16 net
         }
-
         if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
             myprintf("Both single precision and half precision failed to run.\n");
             throw std::runtime_error("Failed to initialize net.");
         } else if (score_fp16 < 0.0f) {
             myprintf("Using %s single precision (half precision failed to run).\n", backend.c_str());
             m_forward.reset();
-            if (cfg_backend == backend_t::OPENCL) {
-                m_forward =
-                    init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-            } else {
-                m_forward =
-                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
-#endif
-            }
+            m_forward =
+                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
         } else if (score_fp32 < 0.0f) {
             myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
         } else if (score_fp32 * 1.05f > score_fp16) {
             myprintf("Using %s single precision (less than 5%% slower than half).\n", backend.c_str());
             m_forward.reset();
-            if (cfg_backend == backend_t::OPENCL) {
-                m_forward =
-                    init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
-            } else {
-                m_forward =
-                    init_net(channels, std::make_unique<CuDNNScheduler<float>>());
-#endif
-            }
+            m_forward =
+                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
         } else {
             myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
         }
@@ -743,22 +677,18 @@ void Network::select_precision(const int channels) {
         if (cfg_backend == backend_t::OPENCL) {
             m_forward =
                 init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         } else {
             m_forward =
-                init_net(channels, std::make_unique<CuDNNScheduler<float>>());
-#endif
+                init_net(channels, std::make_unique<GPUScheduler<float>>());
         }
     } else if (cfg_precision == precision_t::HALF) {
         myprintf("Initializing %s (half precision).\n", backend.c_str());
         if (cfg_backend == backend_t::OPENCL) {
             m_forward = init_net(
                 channels, std::make_unique<OpenCLScheduler<half_float::half>>());
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH) || defined(USE_TENSOR_RT)
         } else {
             m_forward = init_net(
-                channels, std::make_unique<CuDNNScheduler<__half>>());
-#endif
+                channels, std::make_unique<GPUScheduler<half_float::half>>());
         }
     }
 }
@@ -766,7 +696,6 @@ void Network::select_precision(const int channels) {
 #endif
 
 void Network::initialize(const int playouts, const std::string& weightsfile) {
-#ifndef TRT_ONLY
 #ifdef USE_BLAS
 #ifndef __APPLE__
 #ifdef USE_OPENBLAS
@@ -784,7 +713,6 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
 #else
     myprintf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
              EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
-#endif
 #endif
 
     m_fwd_weights = std::make_shared<ForwardPipeWeights>();
@@ -812,7 +740,6 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
         exit(EXIT_FAILURE);
     }
 
-#ifndef TRT_ONLY
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         auto weight_index = size_t{0};
         // Input convolution
@@ -828,7 +755,6 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             weight_index++;
         }
     }
-#endif
 
     // Biases are not calculated and are typically zero but some networks might
     // still have non-zero biases.
@@ -842,15 +768,18 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_fwd_weights->m_batchnorm_means[i][j] -=
                 m_fwd_weights->m_conv_biases[i][j];
             m_fwd_weights->m_conv_biases[i][j] = 0.0f;
-#ifdef TRT_ONLY
-            for (auto k = size_t{0}; k < weights_size / means_size; k++) {
-                m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
-                    m_fwd_weights->m_batchnorm_stddevs[i][j];
-            }
-            m_fwd_weights->m_batchnorm_means[i][j] *=
-                -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
-#else
-            if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
+
+            if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
+                continue;
+            } else if (cfg_backend == backend_t::TENSORRT && cfg_head_bn == head_bn_t::GPU_A) {
+                for (auto k = size_t{0}; k < weights_size / means_size; k++) {
+                    m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
+                        m_fwd_weights->m_batchnorm_stddevs[i][j];
+                }
+                m_fwd_weights->m_batchnorm_means[i][j] *=
+                    -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
+
+            } else if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
                 for (auto k = size_t{0}; k < weights_size / means_size; k++) {
                     m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
                         m_fwd_weights->m_batchnorm_stddevs[i][j];
@@ -858,22 +787,24 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
                 m_fwd_weights->m_batchnorm_means[i][j] *=
                     -1.0f * m_fwd_weights->m_batchnorm_stddevs[i][j];
             }
-#endif
         }
     }
 
     for (auto i = size_t{0}; i < m_bn_val_w1.size(); i++) {
-#ifdef TRT_ONLY
-        m_fwd_weights->m_conv_val_b[i] -= m_bn_val_w1[i];
-        m_fwd_weights->m_conv_val_b[i] *= m_bn_val_w2[i];
-        for (auto j = size_t{0};
-             j < m_fwd_weights->m_conv_val_w.size() / m_bn_val_w2.size();
-             j++) {
-            m_fwd_weights->m_conv_val_w[j * m_bn_val_w2.size() + i] *=
-                m_bn_val_w2[i];
-        }
-#else
-        if (cfg_backend == backend_t::TENSORRT && cfg_head_bn != head_bn_t::CPU) {
+        if (cfg_cpu_only || cfg_backend != backend_t::TENSORRT) {
+            m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
+            m_fwd_weights->m_conv_val_b[i] = 0.0f;
+        } else if (cfg_head_bn == head_bn_t::GPU_A) {
+            m_fwd_weights->m_conv_val_b[i] -= m_bn_val_w1[i];
+            m_fwd_weights->m_conv_val_b[i] *= m_bn_val_w2[i];
+            for (auto j = size_t{0};
+                 j < m_fwd_weights->m_conv_val_w.size() / m_bn_val_w2.size();
+                 j++) {
+                m_fwd_weights->m_conv_val_w[j * m_bn_val_w2.size() + i] *=
+                    m_bn_val_w2[i];
+            }
+
+        } else if (cfg_head_bn != head_bn_t::CPU) {
             if (cfg_head_bn == head_bn_t::GPU_B) {
                 m_fwd_weights->m_conv_val_b[i] -= m_bn_val_w1[i];
                 m_fwd_weights->m_conv_val_b[i] *= m_bn_val_w2[i];
@@ -902,21 +833,23 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
             m_fwd_weights->m_conv_val_b[i] = 0.0f;
         }
-#endif
     }
 
     for (auto i = size_t{0}; i < m_bn_pol_w1.size(); i++) {
-#ifdef TRT_ONLY
-        m_fwd_weights->m_conv_pol_b[i] -= m_bn_pol_w1[i];
-        m_fwd_weights->m_conv_pol_b[i] *= m_bn_pol_w2[i];
-        for (auto j = size_t{0};
-             j < m_fwd_weights->m_conv_pol_w.size() / m_bn_pol_w2.size();
-             j++) {
-           m_fwd_weights->m_conv_pol_w[j * m_bn_pol_w2.size() + i] *=
-               m_bn_pol_w2[i];
-        }
-#else
-        if (cfg_backend == backend_t::TENSORRT && cfg_head_bn != head_bn_t::CPU) {
+        if (cfg_cpu_only || cfg_backend != backend_t::TENSORRT) {
+            m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
+            m_fwd_weights->m_conv_pol_b[i] = 0.0f;
+        } else if (cfg_head_bn == head_bn_t::GPU_A) {
+            m_fwd_weights->m_conv_pol_b[i] -= m_bn_pol_w1[i];
+            m_fwd_weights->m_conv_pol_b[i] *= m_bn_pol_w2[i];
+            for (auto j = size_t{0};
+                 j < m_fwd_weights->m_conv_pol_w.size() / m_bn_pol_w2.size();
+                 j++) {
+               m_fwd_weights->m_conv_pol_w[j * m_bn_pol_w2.size() + i] *=
+                   m_bn_pol_w2[i];
+            }
+
+        } else if (cfg_head_bn != head_bn_t::CPU) {
             if (cfg_head_bn == head_bn_t::GPU_B) {
                 m_fwd_weights->m_conv_pol_b[i] -= m_bn_pol_w1[i];
                 m_fwd_weights->m_conv_pol_b[i] *= m_bn_pol_w2[i];
@@ -945,49 +878,52 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
             m_fwd_weights->m_conv_pol_b[i] = 0.0f;
         }
-#endif
     }
-#ifdef TRT_ONLY
-    select_precision(channels);
-#else
-#ifdef USE_OPENCL
-    if (cfg_cpu_only) {
-        myprintf("Initializing CPU-only evaluation.\n");
-        m_forward = init_net(channels, std::make_unique<CPUPipe>());
+#ifndef USE_CPU_ONLY
+    if (!cfg_cpu_only && cfg_backend == backend_t::TENSORRT) {
+        select_precision(channels);
     } else {
+#endif
+#ifdef USE_OPENCL
+        if (cfg_cpu_only) {
+            myprintf("Initializing CPU-only evaluation.\n");
+            m_forward = init_net(channels, std::make_unique<CPUPipe>());
+        } else {
 #ifdef USE_OPENCL_SELFCHECK
-        if (cfg_backend == backend_t::OPENCL) {
-            // initialize CPU reference first, so that we can self-check
-            // when doing fp16 vs. fp32 detections
-            m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
-        }
+            if (cfg_backend == backend_t::OPENCL) {
+                // initialize CPU reference first, so that we can self-check
+                // when doing fp16 vs. fp32 detections
+                m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
+            }
 #endif
 #ifdef USE_HALF
-        // HALF support is enabled, and we are using the GPU.
-        // Select the precision to use at runtime.
-        select_precision(channels);
+            // HALF support is enabled, and we are using the GPU.
+            // Select the precision to use at runtime.
+            select_precision(channels);
 #else
-        std::string backend("OpenCL");
-        if (cfg_backend == backend_t::TENSORRT) {
-            backend = "TensorRT";
-        } else if (cfg_backend == backend_t::CUDNNGRAPH) {
-            backend = "cuDNN Graph";
-        } else if (cfg_backend == backend_t::CUDNN) {
-            backend = "cuDNN";
-        }
-        myprintf("Initializing %s (single precision).\n", backend);
-        if (cfg_backend == backend_t::OPENCL) {
-            m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        } else {
-            m_forward = init_net(channels, std::make_unique<CuDNNScheduler<float>>());
-        }
+            std::string backend("OpenCL");
+            if (cfg_backend == backend_t::TENSORRT) {
+                backend = "TensorRT";
+            } else if (cfg_backend == backend_t::CUDNNGRAPH) {
+                backend = "cuDNN Graph";
+            } else if (cfg_backend == backend_t::CUDNN) {
+                backend = "cuDNN";
+            }
+            myprintf("Initializing %s (single precision).\n", backend);
+            if (cfg_backend == backend_t::OPENCL) {
+                m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+            } else {
+                m_forward = init_net(channels, std::make_unique<GPUScheduler<float>>());
+            }
 #endif
+        }
+#ifndef USE_CPU_ONLY
     }
+#endif
 
 #else // !USE_OPENCL
     myprintf("Initializing CPU-only evaluation.\n");
     m_forward = init_net(channels, std::make_unique<CPUPipe>());
-#endif
 #endif
 
     // Need to estimate size before clearing up the pipe.
@@ -995,7 +931,6 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     m_fwd_weights.reset();
 }
 
-#ifndef TRT_ONLY
 template <unsigned int inputs, unsigned int outputs, bool ReLU, size_t W>
 std::vector<float> innerproduct(const std::vector<float>& input,
                                 const std::array<float, W>& weights,
@@ -1099,7 +1034,6 @@ std::vector<float> softmax(const std::vector<float>& input,
 
     return output;
 }
-#endif
 
 bool Network::probe_cache(const GameState* const state,
                           Network::Netresult& result) {
@@ -1208,13 +1142,21 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
 
     const auto input_data = gather_features(state, symmetry);
-#ifdef TRT_ONLY
-    std::vector<float> policy_data(POTENTIAL_MOVES);
-    std::vector<float> value_data(OUTPUTS_VALUE);
-#else
-    std::vector<float> policy_data(OUTPUTS_POLICY * NUM_INTERSECTIONS);
-    std::vector<float> value_data(OUTPUTS_VALUE * NUM_INTERSECTIONS);
-#endif
+    size_t policy_data_size;
+    size_t value_data_size;
+    if (!cfg_cpu_only &&
+        cfg_backend == backend_t::TENSORRT &&
+        cfg_head_bn == head_bn_t::GPU_A) {
+
+        policy_data_size = POTENTIAL_MOVES;
+        value_data_size = OUTPUTS_VALUE;
+    } else {
+        policy_data_size = OUTPUTS_POLICY * NUM_INTERSECTIONS;
+        value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    }
+    std::vector<float> policy_data(policy_data_size);
+    std::vector<float> value_data(value_data_size);
+
     try {
 #ifdef USE_OPENCL_SELFCHECK
         if (selfcheck) {
@@ -1232,66 +1174,69 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     }
 
     // Policy and value header Batch Normalization
-#ifdef TRT_ONLY
-    // Get the moves
     std::vector<float> outputs;
-    std::copy(begin(policy_data), begin(policy_data) + POTENTIAL_MOVES, back_inserter(outputs));
-    // Now get the value
     float winrate;
-    winrate = (1.0f + value_data[0]) / 2.0f;
-#else
-    if (cfg_backend != backend_t::TENSORRT || cfg_head_bn == head_bn_t::CPU) {
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
-                                     policy_data,
-                                     m_bn_pol_w1.data(),
-                                     m_bn_pol_w2.data());
-
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
-                                     value_data,
-                                     m_bn_val_w1.data(),
-                                     m_bn_val_w2.data());
-    }
-    // Get the moves
-    std::vector<float> outputs;
-    if (cfg_backend == backend_t::TENSORRT && cfg_head_bn == head_bn_t::GPU_A) {
+    if (!cfg_cpu_only &&
+        cfg_backend == backend_t::TENSORRT &&
+        cfg_head_bn == head_bn_t::GPU_A) {
+        // Get the moves
         std::copy(begin(policy_data), begin(policy_data) + POTENTIAL_MOVES, back_inserter(outputs));
-    } else {
-        const auto policy_out =
-            innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
-                policy_data, m_ip_pol_w, m_ip_pol_b);
-        outputs = softmax(policy_out, cfg_softmax_temp);
-    }
-
-    // Now get the value
-    float winrate;
-    if (cfg_backend == backend_t::TENSORRT && cfg_head_bn == head_bn_t::GPU_A) {
+        // Now get the value
         winrate = (1.0f + value_data[0]) / 2.0f;
     } else {
-        const auto winrate_data =
-            innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
-                value_data, m_ip1_val_w, m_ip1_val_b);
-        const auto winrate_out =
-            innerproduct<VALUE_LAYER, 1, false>(
-                winrate_data, m_ip2_val_w, m_ip2_val_b);
-        // Map TanH output range [-1..1] to [0..1] range
-        winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
+        if (cfg_cpu_only ||
+            cfg_backend != backend_t::TENSORRT ||
+            cfg_head_bn == head_bn_t::CPU) {
+
+            batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
+                                         policy_data,
+                                         m_bn_pol_w1.data(),
+                                         m_bn_pol_w2.data());
+
+            batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
+                                         value_data,
+                                         m_bn_val_w1.data(),
+                                         m_bn_val_w2.data());
+        }
+        // Get the moves
+        if (!cfg_cpu_only &&
+            cfg_backend == backend_t::TENSORRT &&
+            cfg_head_bn == head_bn_t::GPU_A) {
+
+            std::copy(begin(policy_data), begin(policy_data) + POTENTIAL_MOVES, back_inserter(outputs));
+        } else {
+            const auto policy_out =
+                innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
+                    policy_data, m_ip_pol_w, m_ip_pol_b);
+            outputs = softmax(policy_out, cfg_softmax_temp);
+        }
+
+        // Now get the value
+        if (!cfg_cpu_only &&
+            cfg_backend == backend_t::TENSORRT &&
+            cfg_head_bn == head_bn_t::GPU_A) {
+
+            winrate = (1.0f + value_data[0]) / 2.0f;
+        } else {
+            const auto winrate_data =
+                innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
+                    value_data, m_ip1_val_w, m_ip1_val_b);
+            const auto winrate_out =
+                innerproduct<VALUE_LAYER, 1, false>(
+                    winrate_data, m_ip2_val_w, m_ip2_val_b);
+            // Map TanH output range [-1..1] to [0..1] range
+            winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
+        }
     }
-#endif
 
     Netresult result;
 
     char ladder_map[NUM_INTERSECTIONS] = {};
-#ifdef TRT_ONLY
-    if ((cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
-        LadderDetection(state, ladder_map);
-    }
-#else
     if (cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         LadderExtension(state, ladder_map);
     } else if (!cfg_use_ray_ladder && (cfg_ladder_defense || cfg_ladder_offense) && cfg_ladder_check) {
         LadderDetection(state, ladder_map);
     }
-#endif
 
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];

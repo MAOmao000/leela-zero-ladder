@@ -42,25 +42,11 @@
 
 #include "FastState.h"
 #include "NNCache.h"
-#if defined(TRT_ONLY)
-#include "TRTScheduler.h"
-#else
-#ifdef USE_OPENCL
-#include "OpenCLScheduler.h"
-#if defined(USE_CUDNN) || defined(USE_CUDNN_GRAPH)
-#include "CuDNNScheduler.h"
-#endif
-#endif
-#endif
 #include "ForwardPipe.h"
 #include "GameState.h"
 #ifdef USE_OPENCL_SELFCHECK
 #include "SMP.h"
 #endif
-
-enum class NetworkType {
-    LEELA_ZERO, MINIGO_SE
-};
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto FILTER_SIZE = 3;

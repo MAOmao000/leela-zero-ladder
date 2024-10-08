@@ -78,10 +78,18 @@ int cfg_random_min_visits;
 float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
+backend_t cfg_backend;
+head_bn_t cfg_head_bn;
+bool cfg_NCHW;
 #ifdef USE_OPENCL
 std::vector<int> cfg_gpus;
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
+#ifdef USE_TENSOR_RT
+trtLog::Logger cfg_logger{};
+#endif
+bool cfg_cache_plan;
+execute_t cfg_execute_context;
 #ifdef USE_HALF
 precision_t cfg_precision;
 #endif
@@ -109,11 +117,6 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
-bool cfg_cache_plan;
-execute_t cfg_execute_context;
-backend_t cfg_backend;
-head_bn_t cfg_head_bn;
-bool cfg_NCHW;
 bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
 
@@ -126,9 +129,6 @@ int cfg_offense_stones;
 int cfg_ladder_depth;
 
 AnalyzeTags cfg_analyze_tags;
-#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
-trtLog::Logger cfg_logger{};
-#endif
 
 /* Parses tags for the lz-analyze GTP command and friends */
 AnalyzeTags::AnalyzeTags(std::istringstream& cmdstream, const GameState& game) {
@@ -369,10 +369,27 @@ void GTP::setup_default_parameters() {
     cfg_gpus = {};
     cfg_sgemm_exhaustive = false;
     cfg_tune_only = false;
+    cfg_cache_plan = false;
+#ifdef USE_TENSOR_RT
+    cfg_backend = backend_t::TENSORRT;
+#else
+#ifdef USE_CUDNN
+    cfg_backend = backend_t::CUDNNGRAPH;
+#else
+    cfg_backend = backend_t::OPENCL;
+#endif
+#endif
+    cfg_execute_context = execute_t::SINGLE;
+    cfg_head_bn = head_bn_t::GPU_A;
+    cfg_NCHW = false;
 
 #ifdef USE_HALF
     cfg_precision = precision_t::AUTO;
 #endif
+#else
+    cfg_backend = backend_t::NONE;
+    cfg_head_bn = head_bn_t::NONE;
+    cfg_NCHW = false;
 #endif
     cfg_puct = 0.8f;
     cfg_logpuct = 0.015f;
@@ -405,30 +422,6 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
-    cfg_cache_plan = false;
-#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
-    cfg_backend = backend_t::TENSORRT;
-    cfg_execute_context = execute_t::SINGLE;
-#else
-#ifdef USE_CUDNN_GRAPH
-    cfg_backend = backend_t::CUDNNGRAPH;
-    cfg_execute_context = execute_t::NONE;
-#else
-#ifdef USE_CUDNN
-    cfg_backend = backend_t::CUDNN;
-    cfg_execute_context = execute_t::NONE;
-#else
-    cfg_backend = backend_t::OPENCL;
-    cfg_execute_context = execute_t::NONE;
-#endif
-#endif
-#endif
-#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
-    cfg_head_bn = head_bn_t::GPU_A;
-#else
-    cfg_head_bn = head_bn_t::CPU;
-#endif
-    cfg_NCHW = false;
     cfg_alpha_zero_search = true;
     cfg_use_stdev_uct = true;
 

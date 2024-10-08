@@ -81,85 +81,21 @@ include_directories(${Boost_INCLUDE_DIRS})
 include_directories(${ZLIB_INCLUDE_DIRS})
 
 set(USE_BACKEND CACHE STRING "EIGEN")
-if(USE_BACKEND STREQUAL "TENSORRT")
-  message(STATUS "-DUSE_BACKEND=TENSORRT, using TENSORRT backend.")
-  enable_language(CUDA)
-  set(CUDA_STANDARD 17)
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/CuDNN.cpp
-    ${SrcPath}/CuDNNScheduler.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/OpenCL.cpp
-    ${SrcPath}/OpenCLScheduler.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
-    ${SrcPath}/Tuner.cpp
-    ${SrcPath}/ZobristHash.cpp
-    ${SrcPath}/sha2.cpp
-  )
-
-elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
-  message(STATUS "-DUSE_BACKEND=CUDNNGRAPH, using CUDNNGRAPH backend.")
-  enable_language(CUDA)
-  set(CUDA_STANDARD 17)
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/CuDNN.cpp
-    ${SrcPath}/CuDNNScheduler.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/OpenCL.cpp
-    ${SrcPath}/OpenCLScheduler.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
-    ${SrcPath}/SEnet.cu
-    ${SrcPath}/Tuner.cpp
-    ${SrcPath}/ZobristHash.cpp
-  )
-  # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
-  if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
-    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
-    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.5)
-    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86 87)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.1)
-    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80 86)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.0)
-    set(CMAKE_CUDA_ARCHITECTURES 35 37 50 52 53 60 61 62 70 72 75 80)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
-  elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 10.2)
-    set(CMAKE_CUDA_ARCHITECTURES 30 35 37 50 52 53 60 61 62 70 72 75)
-    set(CMAKE_CUDA_FLAGS "-Wno-deprecated-gpu-targets")
+if(USE_BACKEND STREQUAL "TENSORRT" OR USE_BACKEND STREQUAL "CUDNN")
+  if(USE_BACKEND STREQUAL "TENSORRT")
+    message(STATUS "-DUSE_BACKEND=TENSORRT, using TENSORRT backend.")
+    add_definitions(-DUSE_TENSOR_RT)
   else()
-    message(WARNING "CUDA 10.2 or greater is recommended, but attempting to build anyways")
-    set(CMAKE_CUDA_ARCHITECTURES 30 37 53 70)
+    message(STATUS "-DUSE_BACKEND=CUDNN, using CUDNN backend.")
+  add_definitions(-DUSE_CUDNN)
   endif()
-
-elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
-  message(STATUS "-DUSE_BACKEND=CUDNNLEGACY, using CUDNNLEGACY backend.")
   enable_language(CUDA)
   set(CUDA_STANDARD 17)
   set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/CuDNN.cpp
-    ${SrcPath}/CuDNNScheduler.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/OpenCL.cpp
-    ${SrcPath}/OpenCLScheduler.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
     ${SrcPath}/SEnet.cu
-    ${SrcPath}/Tuner.cpp
-    ${SrcPath}/ZobristHash.cpp
   )
+  enable_language(CUDA)
+  set(CUDA_STANDARD 17)
   # https://en.wikipedia.org/wiki/CUDA#GPUs_supported
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
     set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 72 75 80 86 87 89 90)
@@ -186,47 +122,13 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
 
 elseif(USE_BACKEND STREQUAL "OPENCL")
   message(STATUS "-DUSE_BACKEND=OPENCL, using OPENCL backend.")
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/OpenCL.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
-    ${SrcPath}/OpenCLScheduler.cpp
-    ${SrcPath}/Tuner.cpp
-    ${SrcPath}/ZobristHash.cpp
-  )
 
 elseif(USE_BACKEND STREQUAL "BLAS")
   message(STATUS "-DUSE_BACKEND=BLAS, using BLAS backend.")
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
-    ${SrcPath}/ZobristHash.cpp
-  )
+  add_definitions(-DUSE_BLAS)
 
 elseif(USE_BACKEND STREQUAL "EIGEN")
   message(STATUS "-DUSE_BACKEND=EIGEN, using EIGEN backend.")
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/CPUPipe.cpp
-    ${SrcPath}/GoBoard.cpp
-    ${SrcPath}/Ladder.cpp
-    ${SrcPath}/Pattern.cpp
-    ${SrcPath}/SearchBoard.cpp
-    ${SrcPath}/ZobristHash.cpp
-  )
-
-elseif(USE_BACKEND STREQUAL "TRTONLY")
-  message(STATUS "-DUSE_BACKEND=TRTONLY, using TRTONLY backend.")
-  set(NEURALNET_BACKEND_SOURCES
-    ${SrcPath}/TRT.cpp
-    ${SrcPath}/TRTScheduler.cpp
-    ${SrcPath}/sha2.cpp
-  )
 
 else()
   message(FATAL_ERROR "Unrecognized backend: " ${USE_BACKEND})
@@ -234,32 +136,15 @@ endif()
 
 #--------------------------- LEELA ZERO COMPILING AND LINKING --------------------------------------------------------------
 
-add_executable(leelaz
-  ${SrcPath}/FastBoard.cpp
-  ${SrcPath}/FastState.cpp
-  ${SrcPath}/FullBoard.cpp
-  ${SrcPath}/GameState.cpp
-  ${SrcPath}/GTP.cpp
-  ${SrcPath}/KoState.cpp
-  ${SrcPath}/LadderDetection.cpp
-  ${SrcPath}/Network.cpp
-  ${SrcPath}/NNCache.cpp
-  ${SrcPath}/Random.cpp
-  ${SrcPath}/SGFParser.cpp
-  ${SrcPath}/SGFTree.cpp
-  ${SrcPath}/SMP.cpp
-  ${SrcPath}/TimeControl.cpp
-  ${SrcPath}/Timing.cpp
-  ${SrcPath}/Training.cpp
-  ${SrcPath}/UCTNode.cpp
-  ${SrcPath}/UCTNodePointer.cpp
-  ${SrcPath}/UCTNodeRoot.cpp
-  ${SrcPath}/UCTSearch.cpp
-  ${SrcPath}/Utils.cpp
-  ${SrcPath}/Zobrist.cpp
-  ${NEURALNET_BACKEND_SOURCES}
-  ${SrcPath}/Leela.cpp
-)
+set(leelaz_MAIN "${SrcPath}/Leela.cpp")
+file(GLOB leelaz_SRC "${SrcPath}/*.cpp")
+list(REMOVE_ITEM leelaz_SRC ${leelaz_MAIN})
+
+# Reuse for leelaz and gtest
+add_library(objs OBJECT ${leelaz_SRC})
+
+add_executable(leelaz $<TARGET_OBJECTS:objs> ${NEURALNET_BACKEND_SOURCES} ${leelaz_MAIN})
+
 target_compile_features(leelaz PUBLIC cxx_std_17 c_std_17)
 
 if(USE_BACKEND STREQUAL "TENSORRT")
@@ -281,30 +166,10 @@ if(USE_BACKEND STREQUAL "TENSORRT")
   if(TENSORRT_VERSION VERSION_LESS 8.6)
     message(FATAL_ERROR "TensorRT 8.6 or greater is required but ${TENSORRT_VERSION} was found.")
   endif()
-  find_package(OpenCL REQUIRED)
-  if(USE_BLAS)
-    find_package(BLAS)
-    if(BLAS_FOUND)
-      find_path(BLAS_INCLUDE_DIRS openblas_config.h
-        /usr/include
-        /usr/local/include
-        /usr/include/openblas
-        /opt/OpenBLAS/include
-        /usr/include/x86_64-linux-gnu
-        $ENV{BLAS_HOME}/include)
-      add_definitions(-DUSE_BLAS)
-      if((UNIX AND NOT APPLE) OR WIN32)
-        include_directories(${BLAS_INCLUDE_DIRS})
-      endif()
-      target_link_libraries(leelaz ${BLAS_LIBRARIES})
-    endif()
-  endif()
-  add_definitions(-DUSE_TENSOR_RT)
-  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR})
-  include_directories(${OpenCL_INCLUDE_DIRS})
-  target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})
-  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cudnn-frontend/include)
+  target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY} ${CUDNN_LIBRARY})
+  target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
+elseif(USE_BACKEND STREQUAL "CUDNN")
   message(STATUS "Looking for system CuDNN library.")
   find_package(CUDAToolkit REQUIRED)
   find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
@@ -312,44 +177,15 @@ elseif(USE_BACKEND STREQUAL "CUDNNGRAPH")
     message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
   endif()
   find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
-  find_package(OpenCL REQUIRED)
-  if(USE_BLAS)
-    find_package(BLAS)
-    if(BLAS_FOUND)
-      find_path(BLAS_INCLUDE_DIRS openblas_config.h
-        /usr/include
-        /usr/local/include
-        /usr/include/openblas
-        /opt/OpenBLAS/include
-        /usr/include/x86_64-linux-gnu
-        $ENV{BLAS_HOME}/include)
-      add_definitions(-DUSE_BLAS)
-      if((UNIX AND NOT APPLE) OR WIN32)
-        include_directories(${BLAS_INCLUDE_DIRS})
-      endif()
-      target_link_libraries(leelaz ${BLAS_LIBRARIES})
-    endif()
-  endif()
-  if(FE_ROOT_DIR)
-    include_directories(${FE_ROOT_DIR}/include)
-  else()
-    message(FATAL_ERROR "FE_ROOT_DIR is not specified, specify FE_ROOT_DIR to indicate where it is.")
-  endif()
-  add_definitions(-DUSE_CUDNN_GRAPH)
-  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
-  include_directories(${OpenCL_INCLUDE_DIRS})
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/cudnn-frontend/include)
   target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
   target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
-  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
-  message(STATUS "Looking for system CuDNN library.")
-  find_package(CUDAToolkit REQUIRED)
-  find_path(CUDNN_INCLUDE_DIR cudnn.h HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
-  if((NOT CUDNN_INCLUDE_DIR))
-    message(FATAL_ERROR "cudnn.h was NOT found, specify CUDNN_INCLUDE_DIR to indicate where it is.")
-  endif()
-  find_library(CUDNN_LIBRARY cudnn HINTS ${CUDNN_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
+endif()
+
+if(USE_BACKEND STREQUAL "TENSORRT" OR USE_BACKEND STREQUAL "CUDNN" OR USE_BACKEND STREQUAL "OPENCL")
   find_package(OpenCL REQUIRED)
+  include_directories(${OpenCL_INCLUDE_DIRS})
+  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
   if(USE_BLAS)
     find_package(BLAS)
     if(BLAS_FOUND)
@@ -365,35 +201,13 @@ elseif(USE_BACKEND STREQUAL "CUDNNLEGACY")
         include_directories(${BLAS_INCLUDE_DIRS})
       endif()
       target_link_libraries(leelaz ${BLAS_LIBRARIES})
-    endif()
-  endif()
-  add_definitions(-DUSE_CUDNN)
-  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${CUDNN_INCLUDE_DIR} ${CUBLAS_INCLUDE_DIR})
-  include_directories(${OpenCL_INCLUDE_DIRS})
-  target_link_libraries(leelaz CUDA::cudart_static ${CUDNN_LIBRARY})
-  target_link_libraries(leelaz CUDA::cublas ${CUDNN_LIBRARY})
-  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
-elseif(USE_BACKEND STREQUAL "OPENCL")
-  find_package(OpenCL REQUIRED)
-  if(USE_BLAS)
-    find_package(BLAS)
-    if(BLAS_FOUND)
-      find_path(BLAS_INCLUDE_DIRS openblas_config.h
-        /usr/include
-        /usr/local/include
-        /usr/include/openblas
-        /opt/OpenBLAS/include
-        /usr/include/x86_64-linux-gnu
-        $ENV{BLAS_HOME}/include)
-      add_definitions(-DUSE_BLAS)
-      if((UNIX AND NOT APPLE) OR WIN32)
-        include_directories(${BLAS_INCLUDE_DIRS})
+      if(DNNL_ROOT_DIR)
+        add_definitions(-DUSE_DNNL)
+        include_directories(${DNNL_ROOT_DIR}/include ${DNNL_ROOT_DIR}/build/include)
+        target_link_libraries(leelaz ${DNNL_ROOT_DIR}/build/src/libdnnl.a)
       endif()
-      target_link_libraries(leelaz ${BLAS_LIBRARIES})
     endif()
   endif()
-  include_directories(${OpenCL_INCLUDE_DIRS})
-  target_link_libraries(leelaz ${OpenCL_LIBRARIES})
 elseif(USE_BACKEND STREQUAL "BLAS")
   message(STATUS "Looking for system BLAS/OpenBLAS library.")
   find_package(BLAS REQUIRED)
@@ -404,46 +218,25 @@ elseif(USE_BACKEND STREQUAL "BLAS")
     /opt/OpenBLAS/include
     /usr/include/x86_64-linux-gnu
     $ENV{BLAS_HOME}/include)
-  add_definitions(-DUSE_BLAS)
   add_definitions(-DUSE_CPU_ONLY)
   if((UNIX AND NOT APPLE) OR WIN32)
     include_directories(${BLAS_INCLUDE_DIRS})
   endif()
   target_link_libraries(leelaz ${BLAS_LIBRARIES})
-elseif(USE_BACKEND STREQUAL "TRTONLY")
-  message(STATUS "Looking for system TensorRT and CuDNN library.")
-  find_package(CUDAToolkit REQUIRED)
-  find_path(TENSORRT_INCLUDE_DIR NvInfer.h HINTS ${TENSORRT_ROOT_DIR} ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES include)
-  if((NOT TENSORRT_INCLUDE_DIR))
-    message(FATAL_ERROR "NvInfer.h was NOT found, specify TENSORRT_INCLUDE_DIR to indicate where it is.")
+  if(DNNL_ROOT_DIR)
+    add_definitions(-DUSE_DNNL)
+    include_directories(${DNNL_ROOT_DIR}/include ${DNNL_ROOT_DIR}/build/include)
+    target_link_libraries(leelaz ${DNNL_ROOT_DIR}/build/src/libdnnl.a)
   endif()
-  find_library(TENSORRT_LIBRARY nvinfer HINTS ${TENSORRT_ROOT_DIR} ${CUDAToolkit_LIBRARY_DIR} PATH_SUFFIXES lib64)
-  file(READ "${TENSORRT_INCLUDE_DIR}/NvInferVersion.h" tensorrt_version_header)
-  string(REGEX MATCH "#define NV_TENSORRT_MAJOR ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
-  set(TENSORRT_VERSION_MAJOR ${CMAKE_MATCH_1})
-  string(REGEX MATCH "#define NV_TENSORRT_MINOR ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
-  set(TENSORRT_VERSION_MINOR ${CMAKE_MATCH_1})
-  string(REGEX MATCH "#define NV_TENSORRT_PATCH ([0-9]+)" tensorrt_version_macro ${tensorrt_version_header})
-  set(TENSORRT_VERSION_PATCH ${CMAKE_MATCH_1})
-  set(TENSORRT_VERSION "${TENSORRT_VERSION_MAJOR}.${TENSORRT_VERSION_MINOR}.${TENSORRT_VERSION_PATCH}")
-  if(TENSORRT_VERSION VERSION_LESS 8.6)
-    message(FATAL_ERROR "TensorRT 8.6 or greater is required but ${TENSORRT_VERSION} was found.")
-  endif()
-  add_definitions(-DTRT_ONLY)
-  include_directories(${CUDAToolkit_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR})
-  target_link_libraries(leelaz CUDA::cudart_static ${TENSORRT_LIBRARY})
 else()
   message(STATUS "Using built-in matrix library.")
   add_definitions(-DUSE_CPU_ONLY)
 endif()
+
 if(APPLE)
   include_directories("/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers")
 endif()
-if(DNNL_ROOT_DIR)
-  add_definitions(-DUSE_DNNL)
-  include_directories(${DNNL_ROOT_DIR}/include ${DNNL_ROOT_DIR}/build/include)
-  target_link_libraries(leelaz ${DNNL_ROOT_DIR}/build/src/libdnnl.a)
-endif()
+
 target_link_libraries(leelaz ${Boost_LIBRARIES})
 target_link_libraries(leelaz ${ZLIB_LIBRARIES})
 target_link_libraries(leelaz ${CMAKE_THREAD_LIBS_INIT})

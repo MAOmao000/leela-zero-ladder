@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017 Henrik Forsten
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,90 +17,17 @@
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef TRT_H_INCLUDED
-#define TRT_H_INCLUDED
+#ifndef BACKENDTENSORRT_H_INCLUDED
+#define BACKENDTENSORRT_H_INCLUDED
 
-#include "config.h"
+#include "Backend.h"
 
-#include <cassert>
-#include <cstddef>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <cudnn.h>
-#include <cublas_v2.h>
-#include <stdlib.h>
-#include <fstream>
-#include <ostream>
-#include <iostream>
-#include <new>
-#include <numeric>
-#include <type_traits>
-#include <algorithm>
-#include <functional>
-#include <cstdlib>
-#include <map>
-#include <iterator>
-#include <filesystem>
-#include <stdarg.h>
+class BackendContext;
+struct conv_descriptor;
+struct InferDeleter;
 
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM
-#include <cuda_runtime_api.h>
-#include "NvInfer.h"
-#include "NvInferRuntimeBase.h"
-#include "NvInferSafeRuntime.h"
-#include "NvInferConsistency.h"
-
-#include "sha2.h"
-
-template <typename net_t> class TRT;
-
-#define ASSERT(condition)                                         \
-    do {                                                          \
-        if (!(condition)) {                                       \
-            myprintf_error("Assertion failure %s(%d): %s\n",      \
-                __FILE__, __LINE__, #condition);                  \
-            throw std::runtime_error("TensorRT error");           \
-        }                                                         \
-    } while (0)
-
-#define checkCUDNN(expression)                                    \
-    {                                                             \
-        cudnnStatus_t status = (expression);                      \
-        if (status != CUDNN_STATUS_SUCCESS) {                     \
-            myprintf_error("Error on %s(%d): %s\n",               \
-                __FILE__, __LINE__, cudnnGetErrorString(status)); \
-            throw std::runtime_error("cuDNN error");              \
-        }                                                         \
-    }
-
-#define checkCUDA(error)                                          \
-    {                                                             \
-        if (error != cudaSuccess) {                               \
-            myprintf_error("Error on %s(%d): %s\n",               \
-                __FILE__, __LINE__, cudaGetErrorString(error));   \
-            throw std::runtime_error("CUDA error");               \
-        }                                                         \
-    }
-
-class TRT_Layer {
-    template <typename> friend class TRT;
-    template <typename> friend class TRTScheduler;
-private:
-    unsigned int channels{0};
-    unsigned int outputs{0};
-    unsigned int filter_size{0};
-    bool is_input_convolution{false};
-    bool is_residual_block{false};
-    bool is_se_block{false};
-    bool is_value{false};
-    bool is_policy{false};
-    std::vector<void *> weights;
-    std::vector<int64_t> weights_size;
-    std::string name;
-};
+template <typename net_t> class Backend;
+template <typename net_t> class BackendTRT;
 
 static std::string vformat(const char *fmt, va_list ap) {
     // Allocate a buffer on the stack that's big enough for us almost
@@ -148,48 +76,21 @@ inline std::string readFileBinary(
     return str;
 }
 
-struct InferDeleter {
-    template <typename T>
-    void operator()(T* obj) const {
-        delete obj;
-    }
-};
-
 template <typename T>
-using TRTUniquePtr = std::unique_ptr<T, InferDeleter>;
-
-class TRTContext {
-    template <typename> friend class TRT;
-    template <typename> friend class TRTScheduler;
-private:
-    std::unique_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
-    std::unique_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
-    std::map<std::string, void*> mBuffers;
-    bool m_buffers_allocated{false};
-};
+using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 
 template <typename net_t>
-class TRT {
-    template <typename> friend class TRTScheduler;
+class BackendTRT : public Backend<net_t> {
+    using Backend::Backend;
 public:
-    TRT(
-        const int gpu,
-        const bool silent = false
-    );
-
-    void initialize(
-        const int net_type,
-        const int num_worker_threads,
-        const std::string &model_hash = ""
-    );
-
     void push_input_convolution(
         const unsigned int filter_size,
-        unsigned int channels,
+        const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& biases
-    );
+        const std::vector<float>& biases,
+        const float scale
+    ) override;
 
     void push_residual(
         const unsigned int filter_size,
@@ -198,8 +99,11 @@ public:
         const std::vector<float>& weights_1,
         const std::vector<float>& biases_1,
         const std::vector<float>& weights_2,
-        const std::vector<float>& biases_2
-    );
+        const std::vector<float>& biases_2,
+        const float scale_1,
+        const float scale_2,
+        const float scale_3
+    ) override;
 
     void push_residual_se(
         const unsigned int filter_size,
@@ -212,8 +116,11 @@ public:
         const std::vector<float>& se_fc1_w,
         const std::vector<float>& se_fc1_b,
         const std::vector<float>& se_fc2_w,
-        const std::vector<float>& se_fc2_b
-    );
+        const std::vector<float>& se_fc2_b,
+        const float scale_1,
+        const float scale_2,
+        const float scale_3
+    ) override;
 
     void push_convolve(
         const unsigned int filter_size,
@@ -221,47 +128,23 @@ public:
         const unsigned int outputs,
         const std::vector<float>& weights,
         const std::vector<float>& biases,
+        const std::vector<float>& stddevs,
         const std::vector<float>& ip1_w,
         const std::vector<float>& ip1_b,
         const std::vector<float>& ip2_w,
         const std::vector<float>& ip2_b
-    );
+    ) override;
 
-    size_t get_layer_count() const {
-        return m_layers.size();
-    }
-
-    void forward(
-        const std::vector<float>& input,
-        std::vector<float>& output_pol,
-        std::vector<float>& output_val,
-        const int tid,
-        const int batch_size = 1
-    );
-
+private:
     void forward_activations(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
-        TRTContext& cudnn_context,
+        BackendContext& cudnn_context,
         const int tid,
         const int batch_size = 1
-    );
+    ) override;
 
-    bool has_fp16_compute() {
-        return m_fp16_compute;
-    }
-
-    bool has_tensor_cores() {
-        return m_tensorcore;
-    }
-
-    std::vector<TRT_Layer> m_layers;
-    std::vector<std::unique_ptr<TRTContext>> m_context;
-    std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
-    std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
-
-private:
     void push_weights(
         const size_t layer,
         const std::vector<float>& weights
@@ -283,7 +166,7 @@ private:
 
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
-        TRTUniquePtr<nvinfer1::INetworkDefinition>& network,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         nvinfer1::IOptimizationProfile* profile,
         nvinfer1::IOptimizationProfile* profile_n,
         const int batch_size
@@ -291,7 +174,7 @@ private:
 
     nvinfer1::ITensor* initInputs(
         char const *inputName,
-        TRTUniquePtr<nvinfer1::INetworkDefinition>& network,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         nvinfer1::IOptimizationProfile* profile,
         nvinfer1::IOptimizationProfile* profile_n,
         const int channels,
@@ -307,34 +190,27 @@ private:
         void* weights,
         int64_t biases_size,
         void* biases,
-        TRTUniquePtr<nvinfer1::INetworkDefinition>& network,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name,
         unsigned int outputs
     );
 
     nvinfer1::ILayer* buildActivationLayer(
         nvinfer1::ITensor* input,
-        TRTUniquePtr<nvinfer1::INetworkDefinition>& network,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name,
         nvinfer1::ActivationType act_type
     );
 
     nvinfer1::ILayer* applyGPoolLayer(
         nvinfer1::ITensor* input,
-        TRTUniquePtr<nvinfer1::INetworkDefinition>& network,
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name
     );
 
-    // Serves as a hash of the network architecture specific to tuning
-    std::string mTuneDesc;
-
-    std::vector<cudaStream_t> m_streams;
-
-    int m_net_type{0};
-    int m_num_worker_threads{1};
-    cudaDeviceProp m_device_prop;
-    bool m_fp16_compute{false};
-    bool m_tensorcore{false};
-    std::string m_model_hash{""};
+    std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
+    std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
+    std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
+    std::map<std::string, nvinfer1::Weights> mWeightMap;
 };
 #endif

@@ -39,10 +39,54 @@
 #include "GameState.h"
 #include "Network.h"
 #include "UCTSearch.h"
-#if defined(TRT_ONLY)
-#include "TRTScheduler.h"
-#elif defined(USE_TENSOR_RT)
-#include "CuDNNScheduler.h"
+
+#ifdef USE_TENSOR_RT
+#include "NvInfer.h"
+
+namespace trtLog {
+// Logger for TensorRT
+class Logger : public nvinfer1::ILogger {
+public:
+    Logger(Severity severity = Severity::kERROR)
+        : mReportableSeverity(severity) {}
+    void log(ILogger::Severity severity, const char* msg) noexcept override {
+        // suppress information level log
+        if (severity <= mReportableSeverity) {
+            switch (severity) {
+                case Severity::kINTERNAL_ERROR:
+                    std::cerr << "[F] " << msg << std::endl;
+                    break;
+                case Severity::kERROR:
+                    std::cerr << "[E] " << msg << std::endl;
+#ifndef NDEBUG
+                    std::cout << boost::stacktrace::stacktrace();
+                    exit(0);
+#endif
+                    break;
+                case Severity::kWARNING:
+                    std::cerr << "[W] " << msg << std::endl;
+                    break;
+                case Severity::kINFO:
+                    std::cerr << "[I] " << msg << std::endl;
+                    break;
+                case Severity::kVERBOSE:
+                    std::cerr << "[V] " << msg << std::endl;
+                    break;
+                default:
+                    std::cerr << "[?] " << msg << std::endl;
+            }
+        }
+    }
+    nvinfer1::ILogger& getTRTLogger() noexcept {
+        return *this;
+    }
+    void setReportableSeverity(Severity severity) noexcept {
+        mReportableSeverity = severity;
+    }
+private:
+    Severity mReportableSeverity;
+};
+}
 #endif
 
 struct MoveToAvoid {
@@ -103,10 +147,27 @@ extern int cfg_random_min_visits;
 extern float cfg_random_temp;
 extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
+enum class backend_t {
+    NONE, OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
+};
+extern backend_t cfg_backend;
+enum class head_bn_t {
+    NONE, CPU, GPU_A, GPU_B
+};
+extern head_bn_t cfg_head_bn;
+extern bool cfg_NCHW;
 #ifdef USE_OPENCL
 extern std::vector<int> cfg_gpus;
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
+enum class execute_t {
+    NONE, SINGLE, DOUBLE
+};
+extern execute_t cfg_execute_context;
+#ifdef USE_TENSOR_RT
+extern trtLog::Logger cfg_logger;
+#endif
+extern bool cfg_cache_plan;
 #ifdef USE_HALF
 enum class precision_t {
     AUTO, SINGLE, HALF
@@ -137,20 +198,6 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
-extern bool cfg_cache_plan;
-enum class execute_t {
-    NONE, SINGLE, DOUBLE
-};
-extern execute_t cfg_execute_context;
-enum class backend_t {
-    OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
-};
-extern backend_t cfg_backend;
-enum class head_bn_t {
-    CPU, GPU_A, GPU_B
-};
-extern head_bn_t cfg_head_bn;
-extern bool cfg_NCHW;
 extern bool cfg_alpha_zero_search;
 extern bool cfg_use_stdev_uct;
 
@@ -163,9 +210,6 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 
 extern AnalyzeTags cfg_analyze_tags;
-#if defined(USE_TENSOR_RT) || defined(TRT_ONLY)
-extern trtLog::Logger cfg_logger;
-#endif
 
 static constexpr size_t MiB = 1024LL * 1024LL;
 

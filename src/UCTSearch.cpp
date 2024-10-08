@@ -52,9 +52,7 @@
 #include "Training.h"
 #include "Utils.h"
 #ifdef USE_OPENCL
-#ifndef TRT_ONLY
-#include "OpenCLScheduler.h"
-#endif
+#include "GPUScheduler.h"
 #endif
 
 using namespace Utils;
@@ -874,7 +872,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
              (m_playouts * 100.0) / (elapsed_centis + 1));
 
 #ifdef USE_OPENCL
-#if !defined(USE_CUDNN) && !defined(USE_CUDNN_GRAPH) && !defined(USE_TENSOR_RT)
+#if !defined(USE_CUDNN) && !defined(USE_TENSOR_RT)
 #ifndef NDEBUG
     myprintf("batch stats: %d %d\n",
              batch_stats.single_evals.load(), batch_stats.batch_evals.load());
