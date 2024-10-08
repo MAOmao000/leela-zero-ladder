@@ -66,7 +66,7 @@ using ConstEigenVectorMap =
     Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>>;
 #endif
 
-void CPUPipe::initialize(int channels, const int net_type, const std::string &model_hash) {
+void CPUPipe::initialize(const int channels, const NetworkType net_type, const std::string &model_hash) {
     (void) model_hash;
     m_input_channels = channels;
     m_net_type = net_type;
@@ -514,7 +514,7 @@ void CPUPipe::forward(const std::vector<float>& input,
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
                            m_weights->m_conv_weights[i + 1], V, M, conv_out);
-        if (m_net_type == int(NetworkType::LEELA_ZERO))
+        if (m_net_type == NetworkType::LEELA_ZERO)
         {
             batchnorm<NUM_INTERSECTIONS>(
                 output_channels, conv_out,
@@ -522,7 +522,7 @@ void CPUPipe::forward(const std::vector<float>& input,
                 m_weights->m_batchnorm_stddevs[i + 1].data(),
                 res.data());
         }
-        else if (m_net_type == int(NetworkType::MINIGO_SE))
+        else if (m_net_type == NetworkType::MINIGO_SE)
         {
             batchnorm_no_relu<NUM_INTERSECTIONS>(
                 output_channels, conv_out,
@@ -563,7 +563,7 @@ void CPUPipe::forward(const std::vector<float>& input,
 void CPUPipe::push_weights(const unsigned int /*filter_size*/,
                            const unsigned int /*channels*/,
                            const unsigned int outputs,
-                           std::shared_ptr<const ForwardPipeWeights> weights) {
+                           const std::shared_ptr<const ForwardPipeWeights> weights) {
 
     m_weights = weights;
 

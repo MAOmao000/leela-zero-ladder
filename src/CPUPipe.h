@@ -39,14 +39,14 @@
 
 class CPUPipe : public ForwardPipe {
 public:
-    virtual void initialize(int channels, const int net_type, const std::string &model_hash = nullptr);
-    virtual void forward(const std::vector<float>& input,
-                         std::vector<float>& output_pol,
-                         std::vector<float>& output_val);
+    void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") override;
+    void forward(const std::vector<float>& input,
+                 std::vector<float>& output_pol,
+                 std::vector<float>& output_val) override;
 
-    virtual void push_weights(
-        unsigned int filter_size, unsigned int channels, unsigned int outputs,
-        std::shared_ptr<const ForwardPipeWeights> weights);
+    void push_weights(
+        const unsigned int filter_size, const unsigned int channels, const unsigned int outputs,
+        const std::shared_ptr<const ForwardPipeWeights> weights) override;
 
 private:
     void winograd_transform_in(const std::vector<float>& in,
@@ -76,6 +76,6 @@ private:
     std::vector<float> m_conv_pol_b;
     std::vector<float> m_conv_val_b;
 
-    /*NetworkType*/int m_net_type;
+    NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 #endif

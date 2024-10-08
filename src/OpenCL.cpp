@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -1047,7 +1048,7 @@ OpenCL<net_t>::OpenCL(const int gpu, const bool silent) {
 
 template <typename net_t>
 void OpenCL<net_t>::initialize(const int channels, const size_t batch_size,
-                               const /*NetworkType*/int net_type) {
+                               const NetworkType net_type) {
     m_batch_size = batch_size;
     m_net_type = net_type;
     // Make program of the source code in the context

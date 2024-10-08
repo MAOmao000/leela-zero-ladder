@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -35,7 +36,6 @@
 #define CL_HPP_MINIMUM_OPENCL_VERSION 110
 #define CL_HPP_TARGET_OPENCL_VERSION  120
 #define CL_HPP_ENABLE_EXCEPTIONS
-//#include <CL/cl2.hpp>
 #include <CL/opencl.hpp>
 #include <cassert>
 #include <cstddef>
@@ -248,7 +248,7 @@ class OpenCL {
 public:
     OpenCL(int gpu, bool silent = false);
 
-    void initialize(int channels, size_t batch_size, /*NetworkType*/int net_type);
+    void initialize(int channels, size_t batch_size, NetworkType net_type);
     void ensure_context_initialized(OpenCLContext& opencl_context);
     std::string get_device_name();
     bool has_fp16_compute();
@@ -280,7 +280,7 @@ private:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     bool m_init_ok{false};
-    /*NetworkType*/int m_net_type; // {LEELA_ZERO};
+    NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 
 extern const std::string sourceCode_sgemm;

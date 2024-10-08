@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,12 +33,10 @@
 
 #include "config.h"
 #ifdef USE_OPENCL
-#ifndef TRT_ONLY
 #include "OpenCL.h"
-#endif
 #else
 #ifdef USE_BLAS
-# include <string>
+#include <string>
 #endif
 #endif
 
@@ -77,11 +76,8 @@ public:
 
     virtual ~ForwardPipe() = default;
 
-#ifdef TRT_ONLY
-    virtual void initialize(const int net_type, const std::string &model_hash = "") = 0;
-#else
-    virtual void initialize(const int channels, const int net_type, const std::string &model_hash = "") = 0;
-#endif
+    virtual void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") = 0;
+
     virtual bool needs_autodetect() {
         return false;
     };
@@ -89,8 +85,10 @@ public:
                          std::vector<float>& output_pol,
                          std::vector<float>& output_val) = 0;
     virtual void push_weights(
-        unsigned int filter_size, unsigned int channels, unsigned int outputs,
-        std::shared_ptr<const ForwardPipeWeights> weights) = 0;
+        const unsigned int filter_size,
+        const unsigned int channels,
+        const unsigned int outputs,
+        const std::shared_ptr<const ForwardPipeWeights> weights) = 0;
 
     virtual void drain() {}
     virtual void resume() {}
