@@ -22,6 +22,7 @@
 
 #include "config.h"
 
+#if defined(USE_TENSOR_RT) || defined(USE_CUDNN)
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -47,10 +48,10 @@
 #include <cudnn.h>
 #include <cublas_v2.h>
 #include <cudnn_frontend.h>
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM
-#include <cuda_runtime_api.h>
 
 #if defined(USE_TENSOR_RT)
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
+#include <cuda_runtime_api.h>
 #include "NvInfer.h"
 #include "NvInferRuntimeBase.h"
 #include "NvInferSafeRuntime.h"
@@ -477,15 +478,15 @@ public:
         const int batch_size = 1
     );
 
-    size_t get_layer_count() const {
+    virtual size_t get_layer_count() const {
         return m_layers.size();
     }
 
-    bool has_fp16_compute() {
+    virtual bool has_fp16_compute() const {
         return m_fp16_compute;
     }
 
-    bool has_tensor_cores() {
+    virtual bool has_tensor_cores() const {
         return m_tensorcore;
     }
 
@@ -504,4 +505,5 @@ protected:
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 
+#endif
 #endif

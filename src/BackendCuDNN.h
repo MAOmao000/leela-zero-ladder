@@ -25,13 +25,15 @@
 class BackendContext;
 struct conv_descriptor;
 
-template <typename net_t> class Backend;
-template <typename net_t> class BackendCuDNN;
-
 template <typename net_t>
 class BackendCuDNN : public Backend<net_t> {
-    using Backend::Backend;
 public:
+    BackendCuDNN() : Backend<net_t>() {}
+    BackendCuDNN(
+        const int gpu,
+        const bool silent = false)
+        : Backend<net_t>(gpu, silent) {}
+
     void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
@@ -149,5 +151,13 @@ private:
         const int row,
         const int column
     );
+
+    size_t get_layer_count() const override {
+        return this->m_layers.size();
+    }
+
+    bool has_tensor_cores() const override {
+        return this->m_tensorcore;
+    }
 };
 #endif

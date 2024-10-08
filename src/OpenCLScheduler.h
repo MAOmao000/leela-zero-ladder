@@ -60,27 +60,27 @@ private:
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
-        const std::shared_ptr<const ForwardPipeWeights> weights
+        const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights
     ) override;
     void push_residual(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
-        const std::shared_ptr<const ForwardPipeWeights> weights
+        const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights
     ) override;
     void push_residual_se(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
-        const std::shared_ptr<const ForwardPipeWeights> weights
+        const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights
     ) override;
     void push_convolve(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
-        const std::shared_ptr<const ForwardPipeWeights> weights
+        const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights
     ) override;
 
     std::vector<std::unique_ptr<OpenCL<net_t>>> m_opencl;

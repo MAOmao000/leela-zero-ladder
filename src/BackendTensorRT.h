@@ -26,9 +26,6 @@ class BackendContext;
 struct conv_descriptor;
 struct InferDeleter;
 
-template <typename net_t> class Backend;
-template <typename net_t> class BackendTRT;
-
 static std::string vformat(const char *fmt, va_list ap) {
     // Allocate a buffer on the stack that's big enough for us almost
     // all the time.  Be prepared to allocate dynamically if it doesn't fit.
@@ -81,8 +78,13 @@ using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 
 template <typename net_t>
 class BackendTRT : public Backend<net_t> {
-    using Backend::Backend;
 public:
+    BackendTRT() : Backend<net_t>() {}
+    BackendTRT(
+        const int gpu,
+        const bool silent = false)
+        : Backend<net_t>(gpu, silent) {}
+
     void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
@@ -207,6 +209,10 @@ private:
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string op_name
     );
+
+    size_t get_layer_count() const override {
+        return this->m_layers.size();
+    }
 
     std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
     std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;

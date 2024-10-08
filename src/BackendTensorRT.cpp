@@ -104,7 +104,7 @@ bool BackendTRT<net_t>::build(
         config->addOptimizationProfile(profile_n);
     }
 
-    if (m_device_prop.major >= 8) {
+    if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
         config->setBuilderOptimizationLevel(2);
@@ -125,7 +125,7 @@ bool BackendTRT<net_t>::build(
         assert(std::filesystem::is_directory(cacheDir));
 
         uint8_t deviceHash[32];
-        SHA2::get256(m_device_prop.name, deviceHash);
+        SHA2::get256(this->m_device_prop.name, deviceHash);
 
         // Truncated to 4 bytes
         char deviceIdent[4 * 2 + 1];
@@ -191,7 +191,7 @@ bool BackendTRT<net_t>::build(
                 } else {
                     std::string cachedParamStr = plan.substr(plan.size() - paramStr.size());
                     std::string modelHash = plan.substr(plan.size() - 64 - paramStr.size(), 64);
-                    if (modelHash != m_model_hash) {
+                    if (modelHash != this->m_model_hash) {
                         std::cout << "Plan cache is corrupted or is for the wrong model in " + planCacheFile << std::endl;
                         plan.clear();
                     } else if (cachedParamStr != paramStr) {
@@ -216,14 +216,14 @@ bool BackendTRT<net_t>::build(
                     static_cast<char*>(planBuffer->data()),
                     static_cast<char*>(planBuffer->data()) + planBuffer->size()
                 );
-                if (m_model_hash.size() != 64) {
+                if (this->m_model_hash.size() != 64) {
                     std::cerr << "Unexpected model hash size" << std::endl;
                     return false;
                 }
                 plan.insert(
                     plan.end(),
-                    m_model_hash.begin(),
-                    m_model_hash.end()
+                    this->m_model_hash.begin(),
+                    this->m_model_hash.end()
                 );
                 plan.insert(
                     plan.end(),
@@ -347,7 +347,7 @@ bool BackendTRT<net_t>::build(
                                            std::multiplies<size_t>());
             checkCUDA(cudaMalloc(&buffer, bytes));
             if (name_str == "BatchSize") {
-                auto input_batch = std::vector<int32_t>(batch_size * m_layers[1].channels, 0);
+                auto input_batch = std::vector<int32_t>(batch_size * this->m_layers[1].channels, 0);
                 checkCUDA(cudaMemcpy(
                     buffer,
                     (int32_t*)&input_batch[0],
@@ -375,7 +375,7 @@ bool BackendTRT<net_t>::build(
         context->m_buffers_allocated = true;
         mRuntime.emplace_back(std::move(runtime));
         mEngine.emplace_back(std::move(engine));
-        m_context.emplace_back(std::move(context));
+        this->m_context.emplace_back(std::move(context));
     }
     return true;
 }
@@ -395,12 +395,12 @@ void BackendTRT<net_t>::constructNetwork(
     IShapeLayer* inShapeLayer = nullptr;
     ICastLayer* castLayer = nullptr;
 
-    if (m_net_type == NetworkType::MINIGO_SE) {
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
         auto batchSizeTensor = initInputs("BatchSize",
                                           network,
                                           profile,
                                           profile_n,
-                                          m_layers[1].channels,
+                                          this->m_layers[1].channels,
                                           1,
                                           1,
                                           batch_size);
@@ -414,8 +414,8 @@ void BackendTRT<net_t>::constructNetwork(
             UnaryOperation::kABS);
     }
 
-    for (auto iter = std::begin(m_layers);
-         iter != std::end(m_layers); iter++) {
+    for (auto iter = std::begin(this->m_layers);
+         iter != std::end(this->m_layers); iter++) {
 
         const auto& layer = *iter;
         if (layer.is_input_convolution) {
@@ -607,7 +607,7 @@ void BackendTRT<net_t>::constructNetwork(
         } else {
             const auto niter = std::next(iter);
             auto weights = begin(layer.weights);
-            if (niter == std::end(m_layers)) {
+            if (niter == std::end(this->m_layers)) {
                 if (cfg_head_bn == head_bn_t::GPU_A) {
                     auto conv_val_bias = begin(layer.weights)  + 1;
                     auto ip1_val_weight = begin(layer.weights) + 2;
@@ -1000,8 +1000,8 @@ void BackendTRT<net_t>::push_weights(
     const size_t layer,
     const std::vector<float>& weights) {
 
-    if (layer >= m_layers.size()) {
-        m_layers.emplace_back(BackendLayer());
+    if (layer >= this->m_layers.size()) {
+        this->m_layers.emplace_back(BackendLayer());
     }
     // When TensorRT chooses a precision for a layer,
     // it automatically converts weights as necessary to run the layer
@@ -1010,8 +1010,8 @@ void BackendTRT<net_t>::push_weights(
                             weights.size() * sizeof(float),
                             cudaHostAllocMapped));
     memcpy(host_mem, (float *)&weights[0], weights.size() * sizeof(float));
-    m_layers.back().weights.emplace_back(host_mem);
-    m_layers.back().weights_size.emplace_back((int64_t)weights.size());
+    this->m_layers.back().weights.emplace_back(host_mem);
+    this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
 template <typename net_t>
@@ -1022,8 +1022,8 @@ void BackendTRT<net_t>::push_weights_col_major(
     const int column,
     const int channels) {
 
-    if (layer >= m_layers.size()) {
-        m_layers.emplace_back(BackendLayer());
+    if (layer >= this->m_layers.size()) {
+        this->m_layers.emplace_back(BackendLayer());
     }
     // When TensorRT chooses a precision for a layer,
     // it automatically converts weights as necessary to run the layer
@@ -1043,8 +1043,8 @@ void BackendTRT<net_t>::push_weights_col_major(
                             weightSize,
                             cudaHostAllocMapped));
     memcpy(host_mem, (float*)&transposed_weights[0], weightSize);
-    m_layers.back().weights.emplace_back(host_mem);
-    m_layers.back().weights_size.emplace_back((int64_t)weights.size());
+    this->m_layers.back().weights.emplace_back(host_mem);
+    this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
 template <typename net_t>
@@ -1063,11 +1063,11 @@ void BackendTRT<net_t>::push_input_convolution(
     push_weights(layer, weights);
     push_weights(layer, biases);
 
-    m_layers[layer].is_input_convolution = true;
-    m_layers[layer].outputs = outputs;
-    m_layers[layer].filter_size = filter_size;
-    m_layers[layer].channels = channels;
-    m_layers[layer].name = "in." + std::to_string(layer);
+    this->m_layers[layer].is_input_convolution = true;
+    this->m_layers[layer].outputs = outputs;
+    this->m_layers[layer].filter_size = filter_size;
+    this->m_layers[layer].channels = channels;
+    this->m_layers[layer].name = "in." + std::to_string(layer);
 }
 
 template <typename net_t>
@@ -1094,11 +1094,11 @@ void BackendTRT<net_t>::push_residual(
     push_weights(layer, weights_2);
     push_weights(layer, biases_2);
 
-    m_layers[layer].is_residual_block = true;
-    m_layers[layer].outputs = outputs;
-    m_layers[layer].filter_size = filter_size;
-    m_layers[layer].channels = channels;
-    m_layers[layer].name = "res." + std::to_string(layer);
+    this->m_layers[layer].is_residual_block = true;
+    this->m_layers[layer].outputs = outputs;
+    this->m_layers[layer].filter_size = filter_size;
+    this->m_layers[layer].channels = channels;
+    this->m_layers[layer].name = "res." + std::to_string(layer);
 }
 
 template <typename net_t>
@@ -1133,12 +1133,12 @@ void BackendTRT<net_t>::push_residual_se(
     push_weights(layer, se_fc2_w);
     push_weights(layer, se_fc2_b);
 
-    m_layers[layer].is_residual_block = true;
-    m_layers[layer].is_se_block = true;
-    m_layers[layer].outputs = outputs;
-    m_layers[layer].filter_size = filter_size;
-    m_layers[layer].channels = channels;
-    m_layers[layer].name = "res." + std::to_string(layer);
+    this->m_layers[layer].is_residual_block = true;
+    this->m_layers[layer].is_se_block = true;
+    this->m_layers[layer].outputs = outputs;
+    this->m_layers[layer].filter_size = filter_size;
+    this->m_layers[layer].channels = channels;
+    this->m_layers[layer].name = "res." + std::to_string(layer);
 }
 
 template <typename net_t>
@@ -1173,18 +1173,18 @@ void BackendTRT<net_t>::push_convolve(
         push_weights(layer, biases);
         push_weights(layer, stddevs);
     }
-    m_layers[layer].outputs = outputs;
-    m_layers[layer].channels = channels;
-    m_layers[layer].filter_size = filter_size;
+    this->m_layers[layer].outputs = outputs;
+    this->m_layers[layer].channels = channels;
+    this->m_layers[layer].filter_size = filter_size;
     if (outputs == Network::OUTPUTS_POLICY) {
-        m_layers[layer].is_policy = true;
-        m_layers[layer].name = "pol." + std::to_string(layer);
+        this->m_layers[layer].is_policy = true;
+        this->m_layers[layer].name = "pol." + std::to_string(layer);
         return;
     }
-    m_layers[layer].is_value = true;
-    m_layers[layer].name = "val." + std::to_string(layer);
+    this->m_layers[layer].is_value = true;
+    this->m_layers[layer].name = "val." + std::to_string(layer);
 
-    if (build(m_num_worker_threads, cfg_batch_size)) {
+    if (build(this->m_num_worker_threads, cfg_batch_size)) {
         return;
     }
     exit(EXIT_FAILURE);
@@ -1199,7 +1199,7 @@ void BackendTRT<net_t>::forward_activations(
     const int tid,
     const int batch_size) {
 
-    const auto inSize = batch_size * sizeof(net_t) * m_layers[0].channels * NUM_INTERSECTIONS;
+    const auto inSize = batch_size * sizeof(net_t) * this->m_layers[0].channels * NUM_INTERSECTIONS;
 
     size_t pol_elements;
     size_t val_elements;
@@ -1208,9 +1208,9 @@ void BackendTRT<net_t>::forward_activations(
         val_elements = batch_size;
     } else {
         pol_elements
-            = batch_size * m_layers[m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
+            = batch_size * this->m_layers[this->m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
         val_elements
-            = batch_size * m_layers.back().outputs * NUM_INTERSECTIONS;
+            = batch_size * this->m_layers.back().outputs * NUM_INTERSECTIONS;
     }
     std::vector<net_t> pol_net_t = std::vector<net_t>(pol_elements);
     std::vector<net_t> val_net_t = std::vector<net_t>(val_elements);
@@ -1222,37 +1222,37 @@ void BackendTRT<net_t>::forward_activations(
             (net_t*)&input[0],
             inSize,
             cudaMemcpyHostToDevice,
-            m_streams[tid]));
+            this->m_streams[tid]));
     } else {
-        auto input_net_t = std::vector<net_t>(batch_size * m_layers[0].channels * NUM_INTERSECTIONS);
+        auto input_net_t = std::vector<net_t>(batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());
         cudaMemcpyAsync(
             search->second,
             (net_t*)&input_net_t[0],
             inSize,
             cudaMemcpyHostToDevice,
-            m_streams[tid]);
+            this->m_streams[tid]);
     }
     if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
         cudnn_context.mContext->setInputShape("InputFeature",
-            Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
     } else {
         cudnn_context.mContext_n->setInputShape("InputFeature",
-            Dims4(batch_size, m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
     }
-    if (m_net_type == NetworkType::MINIGO_SE) {
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
             cudnn_context.mContext->setInputShape("BatchSize",
-                Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
+                Dims({4, {(unsigned int)batch_size, this->m_layers[1].channels, 1, 1}}));
         } else {
             cudnn_context.mContext_n->setInputShape("BatchSize",
-                Dims({4, {(unsigned int)batch_size, m_layers[1].channels, 1, 1}}));
+                Dims({4, {(unsigned int)batch_size, this->m_layers[1].channels, 1, 1}}));
         }
     }
     if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-        ASSERT(cudnn_context.mContext->enqueueV3(m_streams[tid]));
+        ASSERT(cudnn_context.mContext->enqueueV3(this->m_streams[tid]));
     } else {
-        ASSERT(cudnn_context.mContext_n->enqueueV3(m_streams[tid]));
+        ASSERT(cudnn_context.mContext_n->enqueueV3(this->m_streams[tid]));
     }
     search = cudnn_context.mBuffers.find("OutputPolicy");
     assert(search != cudnn_context.mBuffers.end());
@@ -1260,16 +1260,16 @@ void BackendTRT<net_t>::forward_activations(
                               search->second,
                               pol_elements * sizeof(float),
                               cudaMemcpyDeviceToHost,
-                              m_streams[tid]));
+                              this->m_streams[tid]));
     search = cudnn_context.mBuffers.find("OutputValue");
     assert(search != cudnn_context.mBuffers.end());
     checkCUDA(cudaMemcpyAsync(&output_val[0],
                               search->second,
                               val_elements * sizeof(float),
                               cudaMemcpyDeviceToHost,
-                              m_streams[tid]));
+                              this->m_streams[tid]));
     // Asynchronously enqueue the inference work
-    cudaStreamSynchronize(m_streams[tid]);
+    cudaStreamSynchronize(this->m_streams[tid]);
 }
 
 template class BackendTRT<float>;

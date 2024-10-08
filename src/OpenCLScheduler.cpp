@@ -98,13 +98,13 @@ OpenCLScheduler<net_t>::OpenCLScheduler()
     }
     auto silent{false};
 
-    m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
-    m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    this->m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+    this->m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
     for (auto gpu : gpus) {
         auto opencl = std::make_unique<OpenCL<net_t>>(gpu, silent);
         auto net = std::make_unique<OpenCL_Network<net_t>>(*opencl);
         m_opencl.push_back(std::move(opencl));
-        m_networks.push_back(std::move(net));
+        this->m_networks.push_back(std::move(net));
         // Starting next GPU, let's not dump full list of GPUs.
         silent = true;
     }
@@ -116,7 +116,8 @@ void OpenCLScheduler<net_t>::initialize(
     const NetworkType net_type,
     const std::string &model_hash)
 {
-    m_net_type = net_type;
+    (void) model_hash;
+    this->m_net_type = net_type;
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the
     // GPU.
@@ -133,7 +134,7 @@ void OpenCLScheduler<net_t>::initialize(
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =
                 std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
-            m_worker_threads.push_back(std::move(t));
+            this->m_worker_threads.push_back(std::move(t));
         }
     }
     // Exit immediately after tuning.  We should exit here because we skipped
@@ -161,9 +162,9 @@ void OpenCLScheduler<net_t>::push_input_convolution(
     const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
-    const std::shared_ptr<const ForwardPipeWeights> weights)
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
 {
-    for (const auto& opencl_net : m_networks) {
+    for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
         const auto mwg = tuners[0];
         const auto kwg = tuners[2];
@@ -194,9 +195,9 @@ void OpenCLScheduler<net_t>::push_residual(
     const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
-    const std::shared_ptr<const ForwardPipeWeights> weights)
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
 {
-    for (const auto& opencl_net : m_networks) {
+    for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
         const auto mwg = tuners[0];
         const auto vwm = tuners[3];
@@ -227,9 +228,9 @@ void OpenCLScheduler<net_t>::push_residual_se(
     const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
-    const std::shared_ptr<const ForwardPipeWeights> weights)
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
 {
-    for (const auto& opencl_net : m_networks) {
+    for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
         const auto mwg = tuners[0];
         const auto vwm = tuners[3];
@@ -271,9 +272,9 @@ void OpenCLScheduler<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
-    const std::shared_ptr<const ForwardPipeWeights> weights)
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
 {
-    for (const auto& opencl_net : m_networks) {
+    for (const auto& opencl_net : this->m_networks) {
         if (outputs == Network::OUTPUTS_POLICY) {
             opencl_net->push_convolve(
                 filter_size,
