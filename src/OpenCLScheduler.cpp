@@ -129,7 +129,7 @@ void OpenCLScheduler<net_t>::initialize(
     }
     auto num_worker_threads =
         cfg_num_threads / cfg_batch_size / (gpus_size + 1) + 1;
-    for (auto gnum = 0; gnum < gpus_size; gnum++) {
+    for (auto gnum = size_t{0}; gnum < gpus_size; gnum++) {
         m_opencl[gnum]->initialize(channels, cfg_batch_size, net_type);
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =

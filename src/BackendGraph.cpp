@@ -615,7 +615,7 @@ void BackendGraph<net_t>::push_convolve(
             this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
         }
     } else {
-        m_layers[layer].is_policy = true;
+        this->m_layers[layer].is_policy = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
             auto conv_desc_single
                 = convolve_head_init(this->m_handle[i], channels, outputs, filter_size);

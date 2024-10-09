@@ -462,6 +462,7 @@ void GPUScheduler<net_t>::batch_worker(
     const size_t gnum,
     const size_t tid)
 {
+    (void) tid;
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
     OpenCLContext context;
     // batch scheduling heuristic.
