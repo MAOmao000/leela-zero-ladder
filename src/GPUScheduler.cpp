@@ -440,7 +440,7 @@ void GPUScheduler<net_t>::forward(
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
         if (m_single_eval_in_progress.load()) {
-            m_waittime += 2;
+            m_waittime += 1; // 2;
         }
     }
     m_cv.notify_one();
