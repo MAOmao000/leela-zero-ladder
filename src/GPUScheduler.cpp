@@ -440,7 +440,7 @@ void GPUScheduler<net_t>::forward(
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
         if (m_single_eval_in_progress.load()) {
-            m_waittime += 1; // 2;
+            m_waittime += 2;
         }
     }
     m_cv.notify_one();
@@ -504,18 +504,22 @@ void GPUScheduler<net_t>::batch_worker(
             if (!m_forward_queue.empty()) {
                 if (timeout
                     && m_single_eval_in_progress.exchange(true) == false) {
-                    // Waited long enough but couldn't form a batch.
-                    // Check if there is any other single eval in progress,
-                    // and if not, do one from this thread.
-                    if (m_waittime > 1) {
-                        m_waittime--;
-                    }
-                    if (cfg_execute_context == execute_t::SINGLE)
+                    if (cfg_backend == backend_t::TENSORRT
+                        && cfg_execute_context == execute_t::SINGLE) {
                         count = m_forward_queue.size();
-                    else
+                    } else {
                         count = 1;
+                        // Waited long enough but couldn't form a batch.
+                        // Check if there is any other single eval in progress,
+                        // and if not, do one from this thread.
+                        if (m_waittime > 1) {
+                            m_waittime--;
+                        }
+                    }
                     break;
                 }
+            } else {
+                m_waittime = 10;
             }
         }
         // Move 'count' evals from shared queue to local list.
@@ -597,7 +601,7 @@ void GPUScheduler<net_t>::batch_worker(
             index++;
         }
         if (count < cfg_batch_size) {
-            m_single_eval_in_progress = false;
+            m_single_eval_in_progress.exchange(false);
         }
     }
 }
