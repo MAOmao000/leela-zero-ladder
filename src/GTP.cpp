@@ -362,7 +362,7 @@ void GTP::setup_default_parameters() {
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
     cfg_max_cache_ratio_percent = 10;
     cfg_z_entries = 1000;
-    cfg_timemanage = TimeManagement::OFF; // AUTO;
+    cfg_timemanage = TimeManagement::AUTO;
     cfg_lagbuffer_cs = 100;
     cfg_weightsfile = leelaz_file("best-network");
 #ifdef USE_OPENCL
@@ -422,8 +422,8 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;
 #endif
-    cfg_alpha_zero_search = true;
-    cfg_use_stdev_uct = true;
+    cfg_alpha_zero_search = false;
+    cfg_use_stdev_uct = false;
 
     cfg_use_ray_ladder = false;
     cfg_ladder_check = true;

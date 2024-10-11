@@ -110,8 +110,14 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            cfg_batch_size =
-                (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+            if (cfg_backend == backend_t::CUDNNGRAPH
+                || cfg_backend == backend_t::CUDNN) {
+                cfg_batch_size =
+                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 1);
+            } else {
+                cfg_batch_size =
+                    (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+            }
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -123,11 +129,22 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            cfg_batch_size = cfg_num_threads * 5 / 6;
+            if (cfg_backend == backend_t::CUDNNGRAPH
+                || cfg_backend == backend_t::CUDNN) {
+                cfg_batch_size = cfg_num_threads * 5 / 3;
+            } else {
+                cfg_batch_size = cfg_num_threads * 5 / 6;
+            }
         }
 
-        cfg_num_threads =
-            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        if (cfg_backend == backend_t::CUDNNGRAPH
+            || cfg_backend == backend_t::CUDNN) {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 1);
+        } else {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        }
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -266,7 +283,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("cut_policy", po::value<float>())
         ("uct_search", po::value<std::string>()->default_value("alpha_zero"),
                        "[alpha_zero|leela_zero] Select whether to use AlphaZero or LeelaZero for cpuct expression.")
-        ("no_stdev_uct", "Disable sample variance in UCT formula.");
+        ("use_stdev_uct", "Enable sample variance in UCT formula.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -395,8 +412,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-    if (vm.count("no_stdev_uct")) {
-        cfg_use_stdev_uct = false;
+    if (vm.count("use_stdev_uct")) {
+        cfg_use_stdev_uct = true;
     }
 #endif
 
