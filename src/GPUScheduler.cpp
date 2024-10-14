@@ -57,13 +57,8 @@ GPUScheduler<net_t>::GPUScheduler()
     if (gpus.empty()) {
         gpus = {-1};
     }
-    if (cfg_backend == backend_t::TENSORRT) {
-        m_out_pol_size = POTENTIAL_MOVES;
-        m_out_val_size = Network::OUTPUTS_VALUE;
-    } else {
-        m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
-        m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
-    }
+    m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+    m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     auto silent{false};
     for (auto gpu : gpus) {
@@ -337,26 +332,14 @@ void GPUScheduler<net_t>::push_convolve(
                 filter_size,
                 channels,
                 outputs,
-                weights->m_conv_pol_w,
-                weights->m_conv_pol_b,
-                weights->m_bn_pol_w2,
-                weights->m_ip_pol_w,
-                weights->m_ip_pol_b,
-                weights->m_ip_pol_w, // The following are dummy arguments
-                weights->m_ip_pol_b  // The following are dummy arguments
+                weights->m_conv_pol_w
             );
         } else {
             backend->push_convolve(
                 filter_size,
                 channels,
                 outputs,
-                weights->m_conv_val_w,
-                weights->m_conv_val_b,
-                weights->m_bn_val_w2,
-                weights->m_ip1_val_w,
-                weights->m_ip1_val_b,
-                weights->m_ip2_val_w,
-                weights->m_ip2_val_b
+                weights->m_conv_val_w
             );
         }
     }

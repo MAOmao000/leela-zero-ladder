@@ -477,22 +477,9 @@ void BackendCuDNN<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
-    const std::vector<float>& weights,
-    const std::vector<float>& biases,
-    const std::vector<float>& stddevs,
-    const std::vector<float>& ip1_w,
-    const std::vector<float>& ip1_b,
-    const std::vector<float>& ip2_w,
-    const std::vector<float>& ip2_b) {
+    const std::vector<float>& weights) {
 
     size_t layer = get_layer_count();
-
-    (void) biases;
-    (void) stddevs;
-    (void) ip1_w;
-    (void) ip1_b;
-    (void) ip2_w;
-    (void) ip2_b;
 
     if (cfg_NCHW) {
         push_weights(layer, weights); // Here it is still float(Convert precision with push_weights)
