@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LocalDebuggerCommandArguments>--benchmark -w C:\IGO\leela-zero\msvc\x64\Release\000990-pallas.gz -t20 --batchsize 10 --precision single --head-bn gpu-a</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>--benchmark -w C:\IGO\leela-zero\msvc\x64\Release\05dbca157002b9fd618145d22803beae0f7e4015af48ac50f246b9316e315544.gz --cache-plan --no_ladder_check --head-bn cpu --batchsize 1 --execute-context double</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerEnvironment>CUDNN_FRONTEND_LOG_INFO=1
 CUDNN_FRONTEND_LOG_FILE=stdout
