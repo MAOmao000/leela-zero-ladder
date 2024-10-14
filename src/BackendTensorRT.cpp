@@ -148,7 +148,7 @@ bool BackendTRT<net_t>::build(
 
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_%d_%d_batch%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_%d_batch%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -160,7 +160,6 @@ bool BackendTRT<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 cfg_execute_context,
-                cfg_head_bn,
                 batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
@@ -243,7 +242,7 @@ bool BackendTRT<net_t>::build(
             }
         } else {
             auto timingCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_%d_%d_batch%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_%d_batch%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -252,7 +251,6 @@ bool BackendTRT<net_t>::build(
                 BOARD_SIZE,
                 BOARD_SIZE,
                 cfg_execute_context,
-                cfg_head_bn,
                 batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
@@ -328,9 +326,9 @@ bool BackendTRT<net_t>::build(
         if (cfg_execute_context == execute_t::DOUBLE) {
             context->mContext_n.reset(engine->createExecutionContext());
         }
-        for (auto i = 0; i < engine->getNbIOTensors(); i++) {
+        for (auto j = 0; j < engine->getNbIOTensors(); j++) {
             void* buffer = nullptr;
-            auto name = engine->getIOTensorName(i);
+            auto name = engine->getIOTensorName(j);
             auto dims = engine->getTensorShape(name);
             std::string_view name_str{name};
             size_t size_byte;
@@ -608,230 +606,27 @@ void BackendTRT<net_t>::constructNetwork(
             const auto niter = std::next(iter);
             auto weights = begin(layer.weights);
             if (niter == std::end(this->m_layers)) {
-                if (cfg_head_bn == head_bn_t::GPU_A) {
-                    auto conv_val_bias = begin(layer.weights)  + 1;
-                    auto ip1_val_weight = begin(layer.weights) + 2;
-                    auto ip1_val_bias = begin(layer.weights)   + 3;
-                    auto ip2_val_weight = begin(layer.weights) + 4;
-                    auto ip2_val_bias = begin(layer.weights)   + 5;
-                    // value_conv = tf.layers.conv2d(shared_output, filters=1, kernel_size=1, padding='same', use_bias=False)
-                    // value_conv = tf.layers.batch_normalization(value_conv, axis=1, momentum=.95, epsilon=1e-5, center=False, scale=False, fused=True, training=False)
-                    auto valueConvLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        layer.weights_size[1],
-                        conv_val_bias[0],
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                    // value_conv = tf.nn.relu(value_conv)
-                    auto actValueLayer = buildActivationLayer(
-                        valueConvLayer->getOutput(0),
-                        network,
-                        layer.name + ".act",
-                        ActivationType::kRELU);
-                    // value_conv = tf.reshape(value_conv, [-1, 1 * go.N * go.N])
-                    int32_t const batch = actValueLayer->getOutput(0)->getDimensions().d[0];
-                    int32_t const mmInputs = actValueLayer->getOutput(0)->getDimensions().d[1]
-                        * actValueLayer->getOutput(0)->getDimensions().d[2]
-                        * actValueLayer->getOutput(0)->getDimensions().d[3]; 
-                    auto inputReshape = network->addShuffle(*actValueLayer->getOutput(0));
-                    inputReshape->setReshapeDimensions(Dims{2, {batch, mmInputs}});
-                    inputReshape->setName((layer.name + ".shuffle1").c_str());
-                    auto filter1Const =
-                        network->addConstant(
-                            Dims{2, {NUM_INTERSECTIONS, layer.channels}},
-                            {DataType::kFLOAT, ip1_val_weight[0], layer.weights_size[2]}
-                        );
-                    // value_fc_hidden = tf.layers.dense(value_conv, units=256)
-                    auto val1MatMulLayer = network->addMatrixMultiply(
-                        *inputReshape->getOutput(0),
-                        MatrixOperation::kNONE,
-                        *filter1Const->getOutput(0),
-                        MatrixOperation::kNONE);
-                    val1MatMulLayer->setName((layer.name + ".matmul1").c_str());
-                    // value_fc_hidden = tf.layers.dense(value_conv, units=256)
-                    auto bias1Const =
-                        network->addConstant(
-                            Dims{2, {1, layer.channels}},
-                            {DataType::kFLOAT, ip1_val_bias[0], layer.weights_size[3]}
-                        );
-                    auto val1BiasLayer = network->addElementWise(
-                        *val1MatMulLayer->getOutput(0),
-                        *bias1Const->getOutput(0),
-                        ElementWiseOperation::kSUM);
-                    val1BiasLayer->setName((layer.name + ".bias1").c_str());
-                    // value_fc_hidden = tf.nn.relu(value_fc_hidden)
-                    auto ip1ActValueLayer = buildActivationLayer(
-                        val1BiasLayer->getOutput(0),
-                        network,
-                        layer.name + ".ip1act",
-                        ActivationType::kRELU);
-                    // value_fc_hidden = tf.layers.dense(value_conv, units=1)
-                    auto filter2Const =
-                        network->addConstant(
-                            Dims{2, {layer.channels, 1}},
-                            {DataType::kFLOAT, ip2_val_weight[0], layer.weights_size[4]}
-                        );
-                    auto val2MatMulLayer = network->addMatrixMultiply(
-                        *ip1ActValueLayer->getOutput(0),
-                        MatrixOperation::kNONE,
-                        *filter2Const->getOutput(0),
-                        MatrixOperation::kNONE);
-                    val2MatMulLayer->setName((layer.name + ".matmul2").c_str());
-                    // value_fc_hidden = tf.layers.dense(value_conv, units=1)
-                    auto bias2Const =
-                        network->addConstant(
-                            Dims{2, {1, 1}},
-                            {DataType::kFLOAT, ip2_val_bias[0], layer.weights_size[5]}
-                        );
-                    auto val2BiasLayer = network->addElementWise(
-                        *val2MatMulLayer->getOutput(0),
-                        *bias2Const->getOutput(0),
-                        ElementWiseOperation::kSUM);
-                    val2BiasLayer->setName((layer.name + ".bias2").c_str());
-                    // value_fc_hidden = tf.reshape(value_fc_hidden, [-1])
-                    // value_output = tf.nn.tanh(value_fc_hidden)
-                    outValueLayer = buildActivationLayer(
-                        val2BiasLayer->getOutput(0),
-                        network,
-                        layer.name + ".tanh",
-                        ActivationType::kTANH);
-                } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                    auto conv_val_bias = begin(layer.weights) + 1;
-                    auto bn_val_stddevs = begin(layer.weights) + 2;
-                    auto valueConvLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        0,
-                        nullptr,
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                    auto valueBatchNormLayer = network->addScale(
-                        *valueConvLayer->getOutput(0),
-                        ScaleMode::kCHANNEL,
-                        {DataType::kFLOAT, conv_val_bias[0], static_cast<int64_t>(layer.weights_size[1])},
-                        {DataType::kFLOAT, bn_val_stddevs[0], static_cast<int64_t>(layer.weights_size[2])},
-                        {DataType::kFLOAT, nullptr, 0});
-                    valueBatchNormLayer->setName((layer.name + ".bn").c_str());
-                    outValueLayer = buildActivationLayer(
-                        valueBatchNormLayer->getOutput(0),
-                        network,
-                        layer.name + ".act",
-                        ActivationType::kRELU);
-                } else {
-                    outValueLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        0,
-                        nullptr,
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                }
+                outValueLayer = buildConvLayer(
+                    outputConv,
+                    layer.filter_size,
+                    layer.weights_size[0],
+                    weights[0],
+                    0,
+                    nullptr,
+                    network,
+                    layer.name + ".conv",
+                    layer.outputs);
             } else {
-                if (cfg_head_bn == head_bn_t::GPU_A) {
-                    auto conv_pol_bias = begin(layer.weights) + 1;
-                    auto ip_pol_weight = begin(layer.weights) + 2;
-                    auto ip_pol_bias = begin(layer.weights)   + 3;
-                    // policy_conv = tf.layers.conv2d(shared_output, filters=2, kernel_size=1, padding='same', use_bias=False)
-                    // policy_conv = tf.layers.batch_normalization(policy_conv, axis=1, momentum=.95, epsilon=1e-5, center=False, scale=False, fused=True, training=False)
-                    auto policyConvLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        layer.weights_size[1],
-                        conv_pol_bias[0],
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                    // policy_conv = tf.nn.relu(policy_conv)
-                    auto actPolicyLayer = buildActivationLayer(
-                        policyConvLayer->getOutput(0),
-                        network,
-                        layer.name + ".act",
-                        ActivationType::kRELU);
-                    // policy_conv = tf.reshape(policy_conv, [-1, 2 * go.N * go.N])
-                    int32_t const batch = actPolicyLayer->getOutput(0)->getDimensions().d[0];
-                    int32_t const mmInputs = actPolicyLayer->getOutput(0)->getDimensions().d[1]
-                        * actPolicyLayer->getOutput(0)->getDimensions().d[2]
-                        * actPolicyLayer->getOutput(0)->getDimensions().d[3]; 
-                    auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
-                    inputReshape->setReshapeDimensions(Dims{2, {batch, mmInputs}});
-                    inputReshape->setName((layer.name + ".shuffle1").c_str());
-                    // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
-                    auto filterConst =
-                        network->addConstant(
-                            Dims{2, {POTENTIAL_MOVES, layer.outputs * NUM_INTERSECTIONS}},
-                            {DataType::kFLOAT, ip_pol_weight[0], layer.weights_size[2]}
-                        );
-                    auto polMatMulLayer = network->addMatrixMultiply(
-                        *inputReshape->getOutput(0),
-                        MatrixOperation::kNONE,
-                        *filterConst->getOutput(0),
-                        MatrixOperation::kTRANSPOSE
-                        );
-                    polMatMulLayer->setName((layer.name + ".matmul").c_str());
-                    // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
-                    auto biasConst =
-                        network->addConstant(
-                            Dims{2, {1, POTENTIAL_MOVES}},
-                            {DataType::kFLOAT, ip_pol_bias[0], layer.weights_size[3]}
-                        );
-                    auto polBiasLayer = network->addElementWise(
-                        *polMatMulLayer->getOutput(0),
-                        *biasConst->getOutput(0),
-                        ElementWiseOperation::kSUM);
-                    polBiasLayer->setName((layer.name + ".bias").c_str());
-                    // policy_output = tf.nn.softmax(logits)
-                    outPolicyLayer = network->addSoftMax(*polBiasLayer->getOutput(0));	
-                    static_cast<ISoftMaxLayer*>(outPolicyLayer)->setAxes(1U << 1);	
-                    outPolicyLayer->setName((layer.name + ".softmax").c_str());
-                } else if (cfg_head_bn == head_bn_t::GPU_B) {
-                    auto conv_pol_bias = begin(layer.weights) + 1;
-                    auto bn_pol_stddevs = begin(layer.weights) + 2;
-                    auto policyConvLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        0,
-                        nullptr,
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                    auto policyBatchNormLayer = network->addScale(
-                        *policyConvLayer->getOutput(0),
-                        ScaleMode::kCHANNEL,
-                        {DataType::kFLOAT, conv_pol_bias[0], static_cast<int64_t>(layer.weights_size[1])},
-                        {DataType::kFLOAT, bn_pol_stddevs[0], static_cast<int64_t>(layer.weights_size[2])},
-                        {DataType::kFLOAT, nullptr, 0});
-                    policyBatchNormLayer->setName((layer.name + ".bn").c_str());
-                    outPolicyLayer = buildActivationLayer(
-                        policyBatchNormLayer->getOutput(0),
-                        network,
-                        layer.name + ".act",
-                        ActivationType::kRELU);
-                } else {
-                    outPolicyLayer = buildConvLayer(
-                        outputConv,
-                        layer.filter_size,
-                        layer.weights_size[0],
-                        weights[0],
-                        0,
-                        nullptr,
-                        network,
-                        layer.name + ".conv",
-                        layer.outputs);
-                }
+                outPolicyLayer = buildConvLayer(
+                    outputConv,
+                    layer.filter_size,
+                    layer.weights_size[0],
+                    weights[0],
+                    0,
+                    nullptr,
+                    network,
+                    layer.name + ".conv",
+                    layer.outputs);
             }
         }
     }
@@ -1146,33 +941,11 @@ void BackendTRT<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
-    const std::vector<float>& weights,
-    const std::vector<float>& biases,
-    const std::vector<float>& stddevs,
-    const std::vector<float>& ip1_w,
-    const std::vector<float>& ip1_b,
-    const std::vector<float>& ip2_w,
-    const std::vector<float>& ip2_b) {
+    const std::vector<float>& weights) {
 
     size_t layer = get_layer_count();
 
     push_weights(layer, weights);
-    if (cfg_head_bn == head_bn_t::GPU_A) {
-        push_weights(layer, biases);
-        if (outputs == Network::OUTPUTS_VALUE) {
-            push_weights_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels);
-        } else {
-            push_weights(layer, ip1_w);
-        }
-        push_weights(layer, ip1_b);
-        if (outputs == Network::OUTPUTS_VALUE) {
-            push_weights(layer, ip2_w);
-            push_weights(layer, ip2_b);
-        }
-    } else if (cfg_head_bn == head_bn_t::GPU_B) {
-        push_weights(layer, biases);
-        push_weights(layer, stddevs);
-    }
     this->m_layers[layer].outputs = outputs;
     this->m_layers[layer].channels = channels;
     this->m_layers[layer].filter_size = filter_size;
@@ -1203,15 +976,10 @@ void BackendTRT<net_t>::forward_activations(
 
     size_t pol_elements;
     size_t val_elements;
-    if (cfg_head_bn == head_bn_t::GPU_A) {
-        pol_elements = batch_size * POTENTIAL_MOVES;
-        val_elements = batch_size;
-    } else {
-        pol_elements
-            = batch_size * this->m_layers[this->m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
-        val_elements
-            = batch_size * this->m_layers.back().outputs * NUM_INTERSECTIONS;
-    }
+    pol_elements
+        = batch_size * this->m_layers[this->m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
+    val_elements
+        = batch_size * this->m_layers.back().outputs * NUM_INTERSECTIONS;
     std::vector<net_t> pol_net_t = std::vector<net_t>(pol_elements);
     std::vector<net_t> val_net_t = std::vector<net_t>(val_elements);
     auto search = cudnn_context.mBuffers.find("InputFeature");

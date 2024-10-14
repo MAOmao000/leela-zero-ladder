@@ -151,10 +151,6 @@ enum class backend_t {
     NONE, OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
 };
 extern backend_t cfg_backend;
-enum class head_bn_t {
-    NONE, CPU, GPU_A, GPU_B
-};
-extern head_bn_t cfg_head_bn;
 extern bool cfg_NCHW;
 #ifdef USE_OPENCL
 extern std::vector<int> cfg_gpus;

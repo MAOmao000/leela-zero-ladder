@@ -79,7 +79,6 @@ float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
 backend_t cfg_backend;
-head_bn_t cfg_head_bn;
 bool cfg_NCHW;
 #ifdef USE_OPENCL
 std::vector<int> cfg_gpus;
@@ -346,92 +345,90 @@ void GTP::initialize(std::unique_ptr<Network>&& net) {
 }
 
 void GTP::setup_default_parameters() {
-    cfg_gtp_mode = false;
-    cfg_allow_pondering = true;
+    cfg_gtp_mode = false;       // -g, --gtp
+    cfg_allow_pondering = true; // --noponder
 
     // we will re-calculate this on Leela.cpp
-    cfg_num_threads = 1;
+    cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
-    cfg_batch_size = 1;
+    cfg_batch_size = 1;         // --batchsize
 
-    cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;
-    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
-    cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;
-    cfg_min_visits = 10; // 1600;
+    cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
+    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
+    cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;    // -v, --visits
+    cfg_min_visits = 10;                               // --min_visits_needed 1600
     // This will be overwriiten in initialize() after network size is known.
-    cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY;
-    cfg_max_cache_ratio_percent = 10;
-    cfg_z_entries = 1000;
-    cfg_timemanage = TimeManagement::AUTO;
-    cfg_lagbuffer_cs = 100;
-    cfg_weightsfile = leelaz_file("best-network");
+    cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
+    cfg_max_cache_ratio_percent = 10;      // fix
+    cfg_z_entries = 1000;                  // --z_entries
+    cfg_timemanage = TimeManagement::AUTO; // --timemanage
+    cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
+    cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
 #ifdef USE_OPENCL
-    cfg_gpus = {};
-    cfg_sgemm_exhaustive = false;
-    cfg_tune_only = false;
-    cfg_cache_plan = false;
+    cfg_gpus = {};                // --gpu
+    cfg_sgemm_exhaustive = false; // --full-tuner
+    cfg_tune_only = false;        // --tune-only
+    cfg_cache_plan = false;       // --cache-plan
 #ifdef USE_TENSOR_RT
-    cfg_backend = backend_t::TENSORRT;
+    cfg_backend = backend_t::TENSORRT;   // --backend
 #else
 #ifdef USE_CUDNN
-    cfg_backend = backend_t::CUDNNGRAPH;
+    cfg_backend = backend_t::CUDNNGRAPH; // --backend
 #else
-    cfg_backend = backend_t::OPENCL;
+    cfg_backend = backend_t::OPENCL;     // --backend
 #endif
 #endif
-    cfg_execute_context = execute_t::SINGLE;
-    cfg_head_bn = head_bn_t::GPU_A;
-    cfg_NCHW = false;
+    cfg_execute_context = execute_t::SINGLE; // --execute-context
+    cfg_NCHW = false;                        // --channel-first
 
 #ifdef USE_HALF
-    cfg_precision = precision_t::AUTO;
+    cfg_precision = precision_t::AUTO; // --precision
 #endif
 #else
-    cfg_backend = backend_t::NONE;
-    cfg_head_bn = head_bn_t::NONE;
-    cfg_NCHW = false;
+    cfg_backend = backend_t::NONE; // --backend
+    cfg_NCHW = false;              // --channel-first
 #endif
-    cfg_puct = 0.8f;
-    cfg_logpuct = 0.015f;
-    cfg_logconst = 1.7f;
-    cfg_puct_init = 1.07f; // 1.25f; // 1.0f;
-    cfg_puct_base = 36465.0f; // 19652.0f; //500.0f;
-    cfg_puct_log = 1.0f; // 0.45f;
-    cfg_dynamic_k_factor = 4.0f;
-    cfg_dynamic_k_base = 20000.0f;
-    cfg_stdev_scale = 0.85f;
-    cfg_stdev_prior = 0.4f;
-    cfg_softmax_temp = 1.0f;
-    cfg_fpu_reduction = 0.25f;
-    cfg_cut_policy = 0.0f;
+    cfg_puct = 0.8f;               // --puct
+    cfg_logpuct = 0.015f;          // --logpuct
+    cfg_logconst = 1.7f;           // --logconst
+    cfg_puct_init = 1.25f;         // --puct_init
+    cfg_puct_base = 19652.0f;      // --puct_base
+    cfg_puct_log = 1.0f;           // --puct_log 0.45f;
+    cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
+    cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
+    cfg_stdev_scale = 0.85f;       // --puct_stdev_scale
+    cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
+    cfg_softmax_temp = 1.0f;       // --softmax_temp
+    cfg_fpu_reduction = 0.25f;     // --fpu_reduction
+    cfg_cut_policy = 0.0f;         // --cut_policy
     // see UCTSearch::should_resign
-    cfg_resignpct = -1;
-    cfg_noise = false;
-    cfg_fpu_root_reduction = cfg_fpu_reduction;
-    cfg_ci_alpha = 1e-5f;
-    cfg_lcb_min_visit_ratio = 0.10f;
-    cfg_random_cnt = 0; // 20; // 0;
-    cfg_random_min_visits = 1;
-    cfg_random_temp = 1.0f; // 0.25f; // 1.0f;
-    cfg_dumbpass = false;
-    cfg_logfile_handle = nullptr;
-    cfg_quiet = false;
-    cfg_benchmark = false;
+    cfg_resignpct = -1;            // -r, --resignpct
+    cfg_noise = false;             // --noise
+    cfg_fpu_root_reduction = cfg_fpu_reduction; // --noise
+    cfg_ci_alpha = 1e-5f;            // --ci_alpha
+    cfg_lcb_min_visit_ratio = 0.10f; // --lcb_visits_ratio
+    cfg_random_cnt = 0;              // -m, --randomcnt 20;
+    cfg_random_min_visits = 1;       // --randomvisits
+    cfg_random_temp = 1.0f;          // --randomtemp 0.25f;
+    cfg_dumbpass = false;            // -d, --dumbpass
+    cfg_logfile_handle = nullptr;    // -l, --logfile
+    cfg_quiet = false;               // -q, --quiet
+    cfg_benchmark = false;           // --benchmark
 #ifdef USE_CPU_ONLY
-    cfg_cpu_only = true;
+    cfg_cpu_only = true;  // --cpu-only
 #else
-    cfg_cpu_only = false;
+    cfg_cpu_only = false; // --cpu-only
 #endif
-    cfg_alpha_zero_search = false;
-    cfg_use_stdev_uct = false;
+    cfg_alpha_zero_search = false; // --uct_search
+    cfg_use_stdev_uct = false;     // --use_stdev_uct
 
-    cfg_use_ray_ladder = false;
-    cfg_ladder_check = true;
-    cfg_ladder_defense = 10;
-    cfg_ladder_offense = 10;
-    cfg_defense_stones = 1;
-    cfg_offense_stones = 3;
-    cfg_ladder_depth = 200;
+    cfg_use_ray_ladder = false; // --use_ray_ladder
+    cfg_ladder_check = true;    // --no_ladder_check
+    cfg_ladder_defense = 10;    // --ladder_defense
+    cfg_ladder_offense = 10;    // --ladder_offense
+    cfg_defense_stones = 1;     // --defense_stones
+    cfg_offense_stones = 3;     // --offense_stones
+    cfg_ladder_depth = 200;     // --ladder_depth
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -444,7 +441,7 @@ void GTP::setup_default_parameters() {
     // If the above fails, this is one of our best, portable, bets.
     std::uint64_t seed2 =
         std::chrono::high_resolution_clock::now().time_since_epoch().count();
-    cfg_rng_seed = seed1 ^ seed2;
+    cfg_rng_seed = seed1 ^ seed2; // -s, --seed
 }
 
 const std::string GTP::s_commands[] = {
