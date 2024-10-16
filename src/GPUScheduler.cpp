@@ -332,14 +332,16 @@ void GPUScheduler<net_t>::push_convolve(
                 filter_size,
                 channels,
                 outputs,
-                weights->m_conv_pol_w
+                weights->m_conv_pol_w,
+                weights->m_bn_pol_w1
             );
         } else {
             backend->push_convolve(
                 filter_size,
                 channels,
                 outputs,
-                weights->m_conv_val_w
+                weights->m_conv_val_w,
+                weights->m_bn_val_w1
             );
         }
     }

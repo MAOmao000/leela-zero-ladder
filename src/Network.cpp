@@ -334,6 +334,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 2:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_pol_w1));
+                        m_fwd_weights->m_bn_pol_w1 = std::move(weights);
                         break;
                     case 3:
                         std::copy(cbegin(weights), cend(weights),
@@ -361,6 +362,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 8:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_val_w1));
+                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         break;
                     case 9:
                         std::copy(cbegin(weights), cend(weights),
@@ -442,6 +444,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 2:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_pol_w1));
+                        m_fwd_weights->m_bn_pol_w1 = std::move(weights);
                         break;
                     case 3:
                         std::copy(cbegin(weights), cend(weights),
@@ -469,6 +472,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 8:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_bn_val_w1));
+                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
                         break;
                     case 9:
                         std::copy(cbegin(weights), cend(weights),
@@ -749,7 +753,10 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             m_fwd_weights->m_batchnorm_means[i][j] -=
                 m_fwd_weights->m_conv_biases[i][j];
             m_fwd_weights->m_conv_biases[i][j] = 0.0f;
-
+            // out = stddev x (conv(in) x w + b - mean)
+            //     = stddev x conv(in) x w + stddev x (b - mean)
+            //     = conv(in) x (w x stddev) + stddev x (b - mean)
+            //     = conv(in) x m_conv_weights + m_batchnorm_means
             if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
                 for (auto k = size_t{0}; k < weights_size / means_size; k++) {
                     m_fwd_weights->m_conv_weights[i][j * weights_size / means_size + k] *=
@@ -760,13 +767,33 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             }
         }
     }
+    auto means_size = m_bn_val_w1.size();
+    auto weights_size = m_fwd_weights->m_conv_val_w.size();
     for (auto i = size_t{0}; i < m_bn_val_w1.size(); i++) {
         m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
         m_fwd_weights->m_conv_val_b[i] = 0.0f;
+        if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
+            for (auto k = size_t{0}; k < weights_size / means_size; k++) {
+                m_fwd_weights->m_conv_val_w[i * weights_size / means_size + k] *=
+                    m_fwd_weights->m_bn_val_w2[i];
+            }
+            m_fwd_weights->m_bn_val_w1[i] =
+                m_bn_val_w1[i] * -1.0f * m_fwd_weights->m_bn_val_w2[i];
+        }
     }
+    means_size = m_bn_pol_w1.size();
+    weights_size = m_fwd_weights->m_conv_pol_w.size();
     for (auto i = size_t{0}; i < m_bn_pol_w1.size(); i++) {
         m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
         m_fwd_weights->m_conv_pol_b[i] = 0.0f;
+        if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
+            for (auto k = size_t{0}; k < weights_size / means_size; k++) {
+                m_fwd_weights->m_conv_pol_w[i * weights_size / means_size + k] *=
+                    m_fwd_weights->m_bn_pol_w2[i];
+            }
+            m_fwd_weights->m_bn_pol_w1[i] =
+                m_bn_pol_w1[i] * -1.0f * m_fwd_weights->m_bn_pol_w2[i];
+        }
     }
 #ifndef USE_CPU_ONLY
     if (!cfg_cpu_only && cfg_backend == backend_t::TENSORRT) {
@@ -1048,15 +1075,17 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     } catch(...) {
         throw;
     }
-    // Policy and value header Batch Normalization
-    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
-                                 policy_data,
-                                 m_bn_pol_w1.data(),
-                                 m_bn_pol_w2.data());
-    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
-                                 value_data,
-                                 m_bn_val_w1.data(),
-                                 m_bn_val_w2.data());
+    if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
+        // Policy and value header Batch Normalization
+        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
+                                     policy_data,
+                                     m_bn_pol_w1.data(),
+                                     m_bn_pol_w2.data());
+        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
+                                     value_data,
+                                     m_bn_val_w1.data(),
+                                     m_bn_val_w2.data());
+    }
     // Get the moves
     const auto policy_out =
         innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
@@ -1250,6 +1279,7 @@ size_t Network::get_estimated_size() {
     // Policy head
     result += m_fwd_weights->m_conv_pol_w.size() * sizeof(float);
     result += m_fwd_weights->m_conv_pol_b.size() * sizeof(float);
+    result += m_fwd_weights->m_bn_pol_w1.size() * sizeof(float);
     result += m_fwd_weights->m_bn_pol_w2.size() * sizeof(float);
     result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w1
     result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w2
@@ -1260,6 +1290,7 @@ size_t Network::get_estimated_size() {
     // Value head
     result += m_fwd_weights->m_conv_val_w.size() * sizeof(float);
     result += m_fwd_weights->m_conv_val_b.size() * sizeof(float);
+    result += m_fwd_weights->m_bn_val_w1.size() * sizeof(float);
     result += m_fwd_weights->m_bn_val_w2.size() * sizeof(float);
     result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w1
     result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w2

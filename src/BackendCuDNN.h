@@ -77,7 +77,8 @@ public:
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
-        const std::vector<float>& weights
+        const std::vector<float>& weights,
+        const std::vector<float>& biases
     ) override;
 
 private:
@@ -89,16 +90,6 @@ private:
         const int tid,
         const int batch_size = 1
     ) override;
-
-    void convolve(
-        const int tid,
-        const void *bufferIn,
-        void *bufferOut,
-        const void *weights,
-        void *workspace,
-        const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha
-    );
 
     void convolveActivation(
         const int tid,

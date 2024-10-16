@@ -339,10 +339,11 @@ bool BackendTRT<net_t>::build(
             } else {
                 size_byte = sizeof(net_t);
             }
-            size_t bytes = std::accumulate(dims.d + 1,
-                                           dims.d + dims.nbDims,
-                                           batch_size * size_byte,
-                                           std::multiplies<size_t>());
+            size_t bytes = std::accumulate(
+                dims.d + 1,
+                dims.d + dims.nbDims,
+                batch_size * size_byte,
+                std::multiplies<size_t>());
             checkCUDA(cudaMalloc(&buffer, bytes));
             if (name_str == "BatchSize") {
                 auto input_batch = std::vector<int32_t>(batch_size * this->m_layers[1].channels, 0);
@@ -394,14 +395,15 @@ void BackendTRT<net_t>::constructNetwork(
     ICastLayer* castLayer = nullptr;
 
     if (this->m_net_type == NetworkType::MINIGO_SE) {
-        auto batchSizeTensor = initInputs("BatchSize",
-                                          network,
-                                          profile,
-                                          profile_n,
-                                          this->m_layers[1].channels,
-                                          1,
-                                          1,
-                                          batch_size);
+        auto batchSizeTensor = initInputs(
+            "BatchSize",
+            network,
+            profile,
+            profile_n,
+            this->m_layers[1].channels,
+            1,
+            1,
+            batch_size);
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
         inShapeLayer = network->addShape(*batchSizeTensor);
@@ -417,14 +419,15 @@ void BackendTRT<net_t>::constructNetwork(
 
         const auto& layer = *iter;
         if (layer.is_input_convolution) {
-            inputFeature = initInputs("InputFeature",
-                                      network,
-                                      profile,
-                                      profile_n,
-                                      layer.channels,
-                                      BOARD_SIZE,
-                                      BOARD_SIZE,
-                                      batch_size);
+            inputFeature = initInputs(
+                "InputFeature",
+                network,
+                profile,
+                profile_n,
+                layer.channels,
+                BOARD_SIZE,
+                BOARD_SIZE,
+                batch_size);
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             auto initialConvLayer = buildConvLayer(
@@ -605,28 +608,43 @@ void BackendTRT<net_t>::constructNetwork(
         } else {
             const auto niter = std::next(iter);
             auto weights = begin(layer.weights);
+            auto biases = begin(layer.weights) + 1;
             if (niter == std::end(this->m_layers)) {
-                outValueLayer = buildConvLayer(
+                //outValueLayer = buildConvLayer(
+                auto valueConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
                     weights[0],
-                    0,
-                    nullptr,
+                    layer.weights_size[1],
+                    biases[0],
                     network,
                     layer.name + ".conv",
                     layer.outputs);
+                // value_conv = tf.nn.relu(value_conv)
+                outValueLayer = buildActivationLayer(
+                    valueConvLayer->getOutput(0),
+                    network,
+                    layer.name + ".act",
+                    ActivationType::kRELU);
             } else {
-                outPolicyLayer = buildConvLayer(
+                //outPolicyLayer = buildConvLayer(
+                auto policyConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
                     layer.weights_size[0],
                     weights[0],
-                    0,
-                    nullptr,
+                    layer.weights_size[1],
+                    biases[0],
                     network,
                     layer.name + ".conv",
                     layer.outputs);
+                // policy_conv = tf.nn.relu(policy_conv)
+                outPolicyLayer = buildActivationLayer(
+                    policyConvLayer->getOutput(0),
+                    network,
+                    layer.name + ".act",
+                    ActivationType::kRELU);
             }
         }
     }
@@ -660,53 +678,62 @@ ITensor* BackendTRT<net_t>::initInputs(
 
     std::string_view name_str{inputName};
     if (name_str == "BatchSize") {
-        inputFeature
-            = network->addInput(inputName,
-                                DataType::kINT32,
-                                {4, {-1, channels, rows, cols}});
+        inputFeature = network->addInput(
+            inputName,
+            DataType::kINT32,
+            {4, {-1, channels, rows, cols}});
     } else if (typeid(net_t) == typeid(float)) {
-        inputFeature
-            = network->addInput(inputName,
-                                DataType::kFLOAT,
-                                {4, {-1, channels, rows, cols}});
+        inputFeature = network->addInput(
+            inputName,
+            DataType::kFLOAT,
+            {4, {-1, channels, rows, cols}});
     } else {
-        inputFeature
-            = network->addInput(inputName,
-                                DataType::kHALF,
-                                {4, {-1, channels, rows, cols}});
+        inputFeature = network->addInput(
+            inputName,
+            DataType::kHALF,
+            {4, {-1, channels, rows, cols}});
     }
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
 
     if (cfg_execute_context == execute_t::SINGLE) {
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kMIN,
-                               Dims4(1, channels, rows, cols));
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kOPT,
-                               Dims4(batch_size, channels, rows, cols));
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kMAX,
-                               Dims4(batch_size, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kMIN,
+            Dims4(1, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kOPT,
+            Dims4(batch_size, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kMAX,
+            Dims4(batch_size, channels, rows, cols));
     } else {
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kMIN,
-                               Dims4(1, channels, rows, cols));
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kOPT,
-                               Dims4(1, channels, rows, cols));
-        profile->setDimensions(inputName,
-                               OptProfileSelector::kMAX,
-                               Dims4(1, channels, rows, cols));
-        profile_n->setDimensions(inputName,
-                                 OptProfileSelector::kMIN,
-                                 Dims4(batch_size, channels, rows, cols));
-        profile_n->setDimensions(inputName,
-                                 OptProfileSelector::kOPT,
-                                 Dims4(batch_size, channels, rows, cols));
-        profile_n->setDimensions(inputName,
-                                 OptProfileSelector::kMAX,
-                                 Dims4(batch_size, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kMIN,
+            Dims4(1, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kOPT,
+            Dims4(1, channels, rows, cols));
+        profile->setDimensions(
+            inputName,
+            OptProfileSelector::kMAX,
+            Dims4(1, channels, rows, cols));
+        profile_n->setDimensions(
+            inputName,
+            OptProfileSelector::kMIN,
+            Dims4(batch_size, channels, rows, cols));
+        profile_n->setDimensions(
+            inputName,
+            OptProfileSelector::kOPT,
+            Dims4(batch_size, channels, rows, cols));
+        profile_n->setDimensions(
+            inputName,
+            OptProfileSelector::kMAX,
+            Dims4(batch_size, channels, rows, cols));
     }
     return inputFeature;
 }
@@ -801,9 +828,11 @@ void BackendTRT<net_t>::push_weights(
     // When TensorRT chooses a precision for a layer,
     // it automatically converts weights as necessary to run the layer
     void *host_mem;
-    checkCUDA(cudaHostAlloc((void **)&host_mem,
-                            weights.size() * sizeof(float),
-                            cudaHostAllocMapped));
+    checkCUDA(cudaHostAlloc(
+        (void **)&host_mem,
+        weights.size() * sizeof(float),
+        cudaHostAllocMapped)
+    );
     memcpy(host_mem, (float *)&weights[0], weights.size() * sizeof(float));
     this->m_layers.back().weights.emplace_back(host_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
@@ -834,9 +863,11 @@ void BackendTRT<net_t>::push_weights_col_major(
         }
     }
     void *host_mem;
-    checkCUDA(cudaHostAlloc((void **)&host_mem,
-                            weightSize,
-                            cudaHostAllocMapped));
+    checkCUDA(cudaHostAlloc(
+        (void **)&host_mem,
+        weightSize,
+        cudaHostAllocMapped)
+    );
     memcpy(host_mem, (float*)&transposed_weights[0], weightSize);
     this->m_layers.back().weights.emplace_back(host_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
@@ -941,11 +972,13 @@ void BackendTRT<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
-    const std::vector<float>& weights) {
+    const std::vector<float>& weights,
+    const std::vector<float>& biases) {
 
     size_t layer = get_layer_count();
 
     push_weights(layer, weights);
+    push_weights(layer, biases);
     this->m_layers[layer].outputs = outputs;
     this->m_layers[layer].channels = channels;
     this->m_layers[layer].filter_size = filter_size;
@@ -972,14 +1005,22 @@ void BackendTRT<net_t>::forward_activations(
     const int tid,
     const int batch_size) {
 
-    const auto inSize = batch_size * sizeof(net_t) * this->m_layers[0].channels * NUM_INTERSECTIONS;
+    const auto inSize =
+        batch_size *
+        sizeof(net_t) *
+        this->m_layers[0].channels *
+        NUM_INTERSECTIONS;
 
     size_t pol_elements;
     size_t val_elements;
-    pol_elements
-        = batch_size * this->m_layers[this->m_layers.size() - 2].outputs * NUM_INTERSECTIONS;
-    val_elements
-        = batch_size * this->m_layers.back().outputs * NUM_INTERSECTIONS;
+    pol_elements =
+        batch_size *
+        this->m_layers[this->m_layers.size() - 2].outputs *
+        NUM_INTERSECTIONS;
+    val_elements =
+        batch_size *
+        this->m_layers.back().outputs *
+        NUM_INTERSECTIONS;
     std::vector<net_t> pol_net_t = std::vector<net_t>(pol_elements);
     std::vector<net_t> val_net_t = std::vector<net_t>(val_elements);
     auto search = cudnn_context.mBuffers.find("InputFeature");
@@ -990,31 +1031,71 @@ void BackendTRT<net_t>::forward_activations(
             (net_t*)&input[0],
             inSize,
             cudaMemcpyHostToDevice,
-            this->m_streams[tid]));
+            this->m_streams[tid])
+        );
     } else {
-        auto input_net_t = std::vector<net_t>(batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
+        auto input_net_t =
+            std::vector<net_t>(
+                batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());
-        cudaMemcpyAsync(
+        checkCUDA(cudaMemcpyAsync(
             search->second,
             (net_t*)&input_net_t[0],
             inSize,
             cudaMemcpyHostToDevice,
-            this->m_streams[tid]);
+            this->m_streams[tid])
+        );
     }
     if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-        cudnn_context.mContext->setInputShape("InputFeature",
-            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+        cudnn_context.mContext->setInputShape(
+            "InputFeature",
+            Dims4(
+                batch_size,
+                this->m_layers[0].channels,
+                BOARD_SIZE,
+                BOARD_SIZE)
+        );
     } else {
-        cudnn_context.mContext_n->setInputShape("InputFeature",
-            Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+        cudnn_context.mContext_n->setInputShape(
+            "InputFeature",
+            Dims4(
+                batch_size,
+                this->m_layers[0].channels,
+                BOARD_SIZE,
+                BOARD_SIZE)
+        );
     }
     if (this->m_net_type == NetworkType::MINIGO_SE) {
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            cudnn_context.mContext->setInputShape("BatchSize",
-                Dims({4, {(unsigned int)batch_size, this->m_layers[1].channels, 1, 1}}));
+            cudnn_context.mContext->setInputShape(
+                "BatchSize",
+                Dims(
+                    {
+                        4,
+                        {
+                            (unsigned int)batch_size,
+                            this->m_layers[1].channels,
+                            1,
+                            1
+                        }
+                    }
+                )
+            );
         } else {
-            cudnn_context.mContext_n->setInputShape("BatchSize",
-                Dims({4, {(unsigned int)batch_size, this->m_layers[1].channels, 1, 1}}));
+            cudnn_context.mContext_n->setInputShape(
+                "BatchSize",
+                Dims(
+                    {
+                        4,
+                        {
+                            (unsigned int)batch_size,
+                            this->m_layers[1].channels,
+                            1,
+                            1
+                        }
+                    }
+                )
+            );
         }
     }
     if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
@@ -1024,18 +1105,22 @@ void BackendTRT<net_t>::forward_activations(
     }
     search = cudnn_context.mBuffers.find("OutputPolicy");
     assert(search != cudnn_context.mBuffers.end());
-    checkCUDA(cudaMemcpyAsync(&output_pol[0],
-                              search->second,
-                              pol_elements * sizeof(float),
-                              cudaMemcpyDeviceToHost,
-                              this->m_streams[tid]));
+    checkCUDA(cudaMemcpyAsync(
+        &output_pol[0],
+        search->second,
+        pol_elements * sizeof(float),
+        cudaMemcpyDeviceToHost,
+        this->m_streams[tid])
+    );
     search = cudnn_context.mBuffers.find("OutputValue");
     assert(search != cudnn_context.mBuffers.end());
-    checkCUDA(cudaMemcpyAsync(&output_val[0],
-                              search->second,
-                              val_elements * sizeof(float),
-                              cudaMemcpyDeviceToHost,
-                              this->m_streams[tid]));
+    checkCUDA(cudaMemcpyAsync(
+        &output_val[0],
+        search->second,
+        val_elements * sizeof(float),
+        cudaMemcpyDeviceToHost,
+        this->m_streams[tid])
+    );
     // Asynchronously enqueue the inference work
     cudaStreamSynchronize(this->m_streams[tid]);
 }

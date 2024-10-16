@@ -77,7 +77,8 @@ public:
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
-        const std::vector<float>& weightss
+        const std::vector<float>& weights,
+        const std::vector<float>& biases
     ) override;
 
 private:
@@ -110,14 +111,6 @@ private:
         cudnnHandle_t handle,
         const int channels,
         const int outputs,
-        const int batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> convolve_head_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
         const int batch_size = 1
     );
 
