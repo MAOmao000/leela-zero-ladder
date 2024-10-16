@@ -336,15 +336,13 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             continue;
         }
         auto winrate = fpu_eval;
-        auto child_visits = 0;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
         } else {
-            child_visits = child.get_visits();
-            if (child_visits > 0) {
+            if (child.get_visits() > 0) {
                 winrate = child.get_eval(color);
             }
         }
@@ -352,10 +350,10 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (cfg_use_stdev_uct) {
             // See
             // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            if (child_visits > 1) {
+            if (child.get_visits() > 1) {
                 auto variance = child.get_eval_variance(1.0f);
                 auto stddev = std::sqrt(variance);
-                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child_visits);
+                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
                 k = std::max(0.5, (double)k);
                 k = std::min(1.4, (double)k);
                 auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
@@ -364,7 +362,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         }
         auto cpuct = cfg_puct * stdev;
         const auto psa = child.get_policy();
-        const auto denom = 1.0f + child_visits;
+        const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
@@ -410,15 +408,13 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
             continue;
         }
         auto winrate = fpu_eval;
-        auto child_visits = 0;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
         } else {
-            child_visits = child.get_visits();
-            if (child_visits > 0) {
+            if (child.get_visits() > 0) {
                 winrate = child.get_eval(color);
             }
         }
@@ -426,12 +422,12 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
         if (cfg_use_stdev_uct) {
             // See
             // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            if (child_visits < 2) {
+            if (child.get_visits() < 2) {
                 stdev = 1.0f;
             } else {
                 auto variance = child.get_eval_variance(1.0f);
                 auto stddev = std::sqrt(variance);
-                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child_visits);
+                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
                 k = std::max(0.5, (double)k);
                 k = std::min(1.4, (double)k);
                 auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
@@ -442,7 +438,7 @@ UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
                    + cfg_puct_log * std::log((1.0f + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
         cpuct *= stdev;
         const auto psa = child.get_policy();
-        const auto denom = 1.0f + child_visits;
+        const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
         const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
