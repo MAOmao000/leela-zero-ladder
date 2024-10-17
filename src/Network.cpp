@@ -994,6 +994,21 @@ Network::Netresult Network::get_output(
     if (read_cache) {
         // See if we already have this in the cache.
         if (probe_cache(state, result)) {
+            char ladder_map[NUM_INTERSECTIONS] = {};
+            if (cfg_use_ray_ladder
+                && (cfg_ladder_defense || cfg_ladder_offense)
+                && cfg_ladder_check) {
+                LadderExtension(state, ladder_map);
+            } else if (!cfg_use_ray_ladder
+                && (cfg_ladder_defense || cfg_ladder_offense)
+                && cfg_ladder_check) {
+                LadderDetection(state, ladder_map);
+            }
+            for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
+                if (ladder_map[idx]) {
+                    result.policy[idx] = -1.0f;
+                }
+            }
             return result;
         }
     }
