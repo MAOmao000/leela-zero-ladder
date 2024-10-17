@@ -60,8 +60,8 @@ using namespace Utils;
 // Configuration flags
 bool cfg_gtp_mode;
 bool cfg_allow_pondering;
-unsigned int cfg_num_threads;
-unsigned int cfg_batch_size;
+size_t cfg_num_threads;
+size_t cfg_batch_size;
 int cfg_max_playouts;
 int cfg_max_visits;
 int cfg_min_visits;
@@ -391,8 +391,8 @@ void GTP::setup_default_parameters() {
     cfg_puct = 0.8f;               // --puct
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
-    cfg_puct_init = 1.25f;         // --puct_init
-    cfg_puct_base = 19652.0f;      // --puct_base
+    cfg_puct_init = 1.07f;         // --puct_init
+    cfg_puct_base = 36465.0f;      // --puct_base
     cfg_puct_log = 1.0f;           // --puct_log 0.45f;
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
     cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
@@ -400,7 +400,7 @@ void GTP::setup_default_parameters() {
     cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
     cfg_softmax_temp = 1.0f;       // --softmax_temp
     cfg_fpu_reduction = 0.25f;     // --fpu_reduction
-    cfg_cut_policy = 0.0f;         // --cut_policy
+    cfg_cut_policy = 0.0001f;      // --cut_policy
     // see UCTSearch::should_resign
     cfg_resignpct = -1;            // -r, --resignpct
     cfg_noise = false;             // --noise
