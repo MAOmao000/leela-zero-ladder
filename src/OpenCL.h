@@ -186,7 +186,7 @@ public:
     void forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
-                 OpenCLContext& opencl_context, int batch_size = 1);
+                 OpenCLContext& opencl_context, const size_t batch_size = 1);
 
 private:
     using weight_slice_t = std::vector<cl::Buffer>::const_iterator;
@@ -203,7 +203,7 @@ private:
                    cl::Buffer& bufferM, weight_slice_t weights,
                    cl::Buffer* bufferResidual,
                    weight_slice_t bn_weights, bool skip_in_transform,
-                   bool fuse_in_transform, bool store_inout, bool relu, int batch_size);
+                   bool fuse_in_transform, bool store_inout, bool relu, const size_t batch_size);
 
     void squeeze_excitation(OpenCLContext & opencl_context,
         int channels,
@@ -213,7 +213,7 @@ private:
         cl::Buffer& bufferTemp2,
         weight_slice_t weights,
         cl::Buffer& bufferResidual,
-        int batch_size);
+        const size_t batch_size);
 
     void innerproduct(OpenCLContext & opencl_context,
         const cl::Buffer& input,
@@ -222,13 +222,13 @@ private:
         cl::Buffer& output,
         int inputs, int outputs,
         bool relu,
-        int batch_size);
+        const size_t batch_size);
 
     void convolve1(OpenCLContext& opencl_context, int channels, int outputs,
                    cl::Buffer& bufferInput,
                    cl::Buffer& bufferOutput,
                    cl::Buffer& bufferMerge,
-                   weight_slice_t weights, int batch_size);
+                   weight_slice_t weights, const size_t batch_size);
 
     OpenCL<net_t>& m_opencl;
 
@@ -248,7 +248,7 @@ class OpenCL {
 public:
     OpenCL(int gpu, bool silent = false);
 
-    void initialize(int channels, size_t batch_size, NetworkType net_type);
+    void initialize(int channels, const size_t batch_size, NetworkType net_type);
     void ensure_context_initialized(OpenCLContext& opencl_context);
     std::string get_device_name();
     bool has_fp16_compute();

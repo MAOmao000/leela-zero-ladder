@@ -121,7 +121,7 @@ namespace fe = cudnn_frontend;
 void global_average_pooling_float(
     const float *input,
     float *output,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -130,7 +130,7 @@ void global_average_pooling_float(
 void global_average_pooling_float_NHWC(
     const float *input,
     float *output,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -139,7 +139,7 @@ void global_average_pooling_float_NHWC(
 void global_average_pooling_half(
     const __half *input,
     __half *output,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -148,7 +148,7 @@ void global_average_pooling_half(
 void global_average_pooling_half_NHWC(
     const __half *input,
     __half *output,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -157,7 +157,7 @@ void global_average_pooling_half_NHWC(
 void add_bias_float(
     float *buf,
     const float *biases,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const bool relu,
     cudaStream_t stream
@@ -166,7 +166,7 @@ void add_bias_float(
 void add_bias_half(
     __half *buf,
     const __half *biases,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const bool relu,
     cudaStream_t stream
@@ -177,7 +177,7 @@ void se_scale_float(
     const float *buf,
     const float *biases,
     const float *bufferIn,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -188,7 +188,7 @@ void se_scale_float_NHWC(
     const float *buf,
     const float *biases,
     const float *bufferIn,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -199,7 +199,7 @@ void se_scale_half(
     const __half *buf,
     const __half *biases,
     const __half *bufferIn,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -210,7 +210,7 @@ void se_scale_half_NHWC(
     const __half *buf,
     const __half *biases,
     const __half *bufferIn,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     cudaStream_t stream
@@ -352,7 +352,7 @@ void squeeze_excitation_float(
     const void *fc2_biases,
     void *bufferOut,
     void *bufferPool,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     const bool isNCHW,
@@ -371,7 +371,7 @@ void squeeze_excitation_half(
     const void *fc2_biases,
     void *bufferOut,
     void *bufferPool,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     const bool isNCHW,
@@ -403,7 +403,7 @@ public:
 
     void initialize(
         const int channels,
-        const int batch_size,
+        const size_t batch_size,
         const NetworkType net_type,
         const size_t num_worker_threads,
         const std::string &model_hash = ""
@@ -462,7 +462,7 @@ public:
         std::vector<float>& output_val,
         BackendContext& cudnn_context,
         const int tid,
-        const int batch_size = 1
+        const size_t batch_size = 1
     ) = 0;
 
     void forward(
@@ -470,7 +470,7 @@ public:
         std::vector<float>& output_pol,
         std::vector<float>& output_val,
         const int tid,
-        const int batch_size = 1
+        const size_t batch_size = 1
     );
 
     virtual size_t get_layer_count() const {

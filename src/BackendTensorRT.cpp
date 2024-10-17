@@ -42,7 +42,7 @@ using namespace nvinfer1;
 template <typename net_t>
 bool BackendTRT<net_t>::build(
     const int num_worker_threads,
-    const int batch_size) {
+    const size_t batch_size) {
 
     // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
     mTuneDesc = strprintf(
@@ -384,7 +384,7 @@ void BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
     IOptimizationProfile* profile,
     IOptimizationProfile* profile_n,
-    const int batch_size) {
+    const size_t batch_size) {
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
@@ -672,7 +672,7 @@ ITensor* BackendTRT<net_t>::initInputs(
     const int channels,
     const int rows,
     const int cols,
-    const int batch_size) {
+    const size_t batch_size) {
 
     ITensor* inputFeature;
 
@@ -1003,7 +1003,7 @@ void BackendTRT<net_t>::forward_activations(
     std::vector<float>& output_val,
     BackendContext& cudnn_context,
     const int tid,
-    const int batch_size) {
+    const size_t batch_size) {
 
     const auto inSize =
         batch_size *

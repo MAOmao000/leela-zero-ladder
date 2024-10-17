@@ -1,6 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2024 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -148,7 +149,7 @@ static void calculate_thread_count_gpu(
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
-            "Number of threads = %d must be no smaller than batch size = %d\n",
+            "Number of threads = %zd must be no smaller than batch size = %zd\n",
             cfg_num_threads, cfg_batch_size);
         exit(EXIT_FAILURE);
     }

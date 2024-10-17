@@ -139,7 +139,7 @@ private:
         std::vector<float>& output_val,
         BackendContext& cudnn_context,
         const int tid,
-        const int batch_size = 1
+        const size_t batch_size = 1
     ) override;
 
     void push_weights(
@@ -158,7 +158,7 @@ private:
     // Builds the network engine
     bool build(
         const int num_worker_threads,
-        const int batch_size //,
+        const size_t batch_size
     );
 
     // Create full model using the TensorRT network definition API and build the engine.
@@ -166,7 +166,7 @@ private:
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         nvinfer1::IOptimizationProfile* profile,
         nvinfer1::IOptimizationProfile* profile_n,
-        const int batch_size
+        const size_t batch_size
     );
 
     nvinfer1::ITensor* initInputs(
@@ -177,7 +177,7 @@ private:
         const int channels,
         const int rows,
         const int cols,
-        const int batch_size
+        const size_t batch_size
     );
 
     nvinfer1::ILayer* buildConvLayer(

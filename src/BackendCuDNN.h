@@ -88,7 +88,7 @@ private:
         std::vector<float>& output_val,
         BackendContext& cudnn_context,
         const int tid,
-        const int batch_size = 1
+        const size_t batch_size = 1
     ) override;
 
     void convolveActivation(
@@ -122,7 +122,7 @@ private:
         const int channels,
         const int outputs,
         const int filter_size,
-        const int batch_size = 1
+        const size_t batch_size = 1
     );
 
     void push_weights(

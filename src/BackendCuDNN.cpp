@@ -125,7 +125,7 @@ std::shared_ptr<conv_descriptor> BackendCuDNN<net_t>::convolve_init(
     const int channels,
     const int outputs,
     const int filter_size,
-    const int batch_size) {
+    const size_t batch_size) {
 
     cudnnDataType_t data_type;
     cudnnDataType_t compute_type;
@@ -559,7 +559,7 @@ void BackendCuDNN<net_t>::forward_activations(
     std::vector<float>& output_val,
     BackendContext& cudnn_context,
     const int tid,
-    const int batch_size) {
+    const size_t batch_size) {
 
     const auto inSize =
         batch_size *

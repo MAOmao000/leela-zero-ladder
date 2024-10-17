@@ -92,7 +92,7 @@ __global__ void global_average_pooling_kernel_float(
 void global_average_pooling_float(
     const float* input,
     float* output,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -136,7 +136,7 @@ __global__ void global_average_pooling_kernel_float_NHWC(
 void global_average_pooling_float_NHWC(
     const float* input,
     float* output,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -195,7 +195,7 @@ __global__ void global_average_pooling_kernel_half(
 void global_average_pooling_half(
     const __half* input,
     __half* output,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -239,7 +239,7 @@ __global__ void global_average_pooling_kernel_half_NHWC(
 void global_average_pooling_half_NHWC(
     const __half* input,
     __half* output,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -252,7 +252,7 @@ void global_average_pooling_half_NHWC(
 __global__ void add_bias_kernel_float(
     float* buf,
     const float* biases,
-    const int N,
+    const size_t N,
     const int C,
     const bool relu) {
 
@@ -270,7 +270,7 @@ __global__ void add_bias_kernel_float(
 void add_bias_float(
     float* buf,
     const float* biases,
-    const int N,
+    const size_t N,
     const int C,
     const bool is_relu,
     cudaStream_t stream) {
@@ -290,7 +290,7 @@ void add_bias_float(
 __global__ void add_bias_kernel_half(
     __half* buf,
     const __half* biases,
-    const int N,
+    const size_t N,
     const int C,
     const bool relu) {
 
@@ -312,7 +312,7 @@ __global__ void add_bias_kernel_half(
 void add_bias_half(
     __half* buf,
     const __half* biases,
-    const int N,
+    const size_t N,
     const int C,
     const bool is_relu,
     cudaStream_t stream) {
@@ -334,7 +334,7 @@ __global__ void se_scale_kernel_float(
     const float* input,
     const float* biases,
     const float* residual,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial) {
 
@@ -367,7 +367,7 @@ void se_scale_float(
     const float* buf,
     const float* biases,
     const float* bufferIn,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -384,7 +384,7 @@ __global__ void se_scale_kernel_float_NHWC(
     const float* input,
     const float* biases,
     const float* residual,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial) {
 
@@ -417,7 +417,7 @@ void se_scale_float_NHWC(
     const float* buf,
     const float* biases,
     const float* bufferIn,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -435,7 +435,7 @@ __global__ void se_scale_kernel_half(
     const __half* input,
     const __half* biases,
     const __half* residual,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial) {
 
@@ -468,7 +468,7 @@ void se_scale_half(
     const __half* buf,
     const __half* biases,
     const __half* bufferIn,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {
@@ -485,7 +485,7 @@ __global__ void se_scale_kernel_half_NHWC(
     const __half* input,
     const __half* biases,
     const __half* residual,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial) {
 
@@ -518,7 +518,7 @@ void se_scale_half_NHWC(
     const __half* buf,
     const __half* biases,
     const __half* bufferIn,
-    const int N,
+    const size_t N,
     const int C,
     const int spatial,
     cudaStream_t stream) {

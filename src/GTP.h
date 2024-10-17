@@ -129,8 +129,8 @@ private:
 
 extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
-extern unsigned int cfg_num_threads;
-extern unsigned int cfg_batch_size;
+extern size_t cfg_num_threads;
+extern size_t cfg_batch_size;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern int cfg_min_visits;

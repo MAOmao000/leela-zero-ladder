@@ -38,7 +38,7 @@ void BE::squeeze_excitation_float(
     const void *fc2_biases,
     void *bufferOut,
     void *bufferPool,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     const bool isNCHW,
@@ -261,7 +261,7 @@ void BE::squeeze_excitation_half(
     const void *fc2_biases,
     void *bufferOut,
     void *bufferPool,
-    const int batch_size,
+    const size_t batch_size,
     const int channels,
     const int spatial,
     const bool isNCHW,
@@ -535,7 +535,7 @@ Backend<net_t>::Backend(
 template <typename net_t>
 void Backend<net_t>::initialize(
     const int channels,
-    const int batch_size,
+    const size_t batch_size,
     const NetworkType net_type,
     const size_t num_worker_threads,
     const std::string &model_hash) {
@@ -590,7 +590,7 @@ void Backend<net_t>::forward(
     std::vector<float>& output_pol,
     std::vector<float>& output_val,
     const int tid,
-    const int batch_size) {
+    const size_t batch_size) {
 
     forward_activations(input, output_pol, output_val, *m_context[tid], tid, batch_size);
 }

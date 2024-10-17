@@ -94,7 +94,7 @@ static void sgemmBatched_ref(const std::vector<net_t>& a,
                              const std::vector<net_t>& b,
                              std::vector<net_t>& c,
                              const int m, const int n, const int k,
-                             const int batch_size) {
+                             const size_t batch_size) {
     std::vector<float> ar(a.size());
     std::vector<float> br(b.size());
     std::vector<float> cr(c.size());
@@ -262,7 +262,7 @@ static size_t next_power_of_two(const size_t x) {
 
 template <typename net_t>
 static void sgemm_generate_data(std::vector<net_t>& x, const int m, const int n,
-                                const int batch_size, const int m_ceil,
+                                const size_t batch_size, const int m_ceil,
                                 const int n_ceil) {
     for (auto batch = 0; batch < batch_size; batch++) {
         for (auto i = 0; i < n_ceil; i++) {
@@ -285,7 +285,7 @@ static void sgemm_generate_data(std::vector<net_t>& x, const int m, const int n,
 
 template <typename net_t>
 static float compare_ref(std::vector<net_t>& x, std::vector<net_t>& ref,
-                         const int m, const int n, const int batch_size,
+                         const int m, const int n, const size_t batch_size,
                          const int m_ceil, const int n_ceil) {
     auto sum = 0.0f;
     for (auto batch = 0; batch < batch_size; batch++) {
@@ -409,7 +409,7 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
 
 template <typename net_t>
 std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
-                                     const int batch_size, const int runs) {
+                                     const size_t batch_size, const int runs) {
     // This needs to be at minimum the maximum (MNK/WG) values above.
     auto m_max = std::max(256, m);
     auto n_max = std::max(256, n);
@@ -596,7 +596,7 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
 
 template <typename net_t>
 void Tuner<net_t>::store_sgemm_tuners(const int m, const int n, const int k,
-                                      const int batch_size,
+                                      const size_t batch_size,
                                       std::string tuners) {
     auto tuner_file = leelaz_file(TUNER_FILE_LOCAL);
     auto file_contents = std::vector<std::string>();
@@ -642,7 +642,7 @@ void Tuner<net_t>::store_sgemm_tuners(const int m, const int n, const int k,
 template <typename net_t>
 std::string Tuner<net_t>::sgemm_tuners_from_line(std::string line, const int m,
                                                  const int n, const int k,
-                                                 const int batch_size) {
+                                                 const size_t batch_size) {
     auto s = std::vector<std::string>{};
     auto ss = std::stringstream{line};
     auto item = std::string{};
@@ -688,7 +688,7 @@ std::string Tuner<net_t>::sgemm_tuners_from_line(std::string line, const int m,
 
 template <typename net_t>
 std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
-                                            const int k, const int batch_size) {
+                                            const int k, const size_t batch_size) {
     auto tuner_file = leelaz_file(TUNER_FILE_LOCAL);
     auto file = std::ifstream{tuner_file};
 

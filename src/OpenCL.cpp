@@ -164,7 +164,7 @@ void OpenCL_Network<net_t>::forward(const std::vector<float>& input,
                                     std::vector<float>& output_pol,
                                     std::vector<float>& output_val,
                                     OpenCLContext& opencl_context,
-                                    const int batch_size) {
+                                    const size_t batch_size) {
     constexpr auto tiles = WINOGRAD_P;
     constexpr auto one_plane = NUM_INTERSECTIONS * sizeof(net_t);
     const auto finalSize_pol =
@@ -419,7 +419,7 @@ void OpenCL_Network<net_t>::squeeze_excitation(
     cl::Buffer& bufferTemp2,
     weight_slice_t weights,
     cl::Buffer& bufferResidual,
-    int batch_size) {
+    const size_t batch_size) {
 
     cl::Kernel & pooling_kernel = opencl_context.m_global_avg_pooling_kernel;
     cl::Kernel & apply_se_kernel = opencl_context.m_apply_se_kernel;
@@ -473,7 +473,7 @@ void OpenCL_Network<net_t>::innerproduct(
     cl::Buffer& output,
     int inputs, int outputs,
     bool relu,
-    int batch_size) {
+    const size_t batch_size) {
 
     //assert(batch_size == 1);
 
@@ -527,7 +527,7 @@ void OpenCL_Network<net_t>::convolve3(OpenCLContext& opencl_context,
                                       const bool fuse_in_transform,
                                       const bool store_inout,
                                       const bool relu,
-                                      const int batch_size) {
+                                      const size_t batch_size) {
 
     cl::Kernel& in_transform_kernel = opencl_context.m_in_transform_kernel;
     cl::Kernel& sgemm_kernel = opencl_context.m_sgemm_kernel;
@@ -689,7 +689,7 @@ void OpenCL_Network<net_t>::convolve1(OpenCLContext& opencl_context,
                                       cl::Buffer& bufferOutput,
                                       cl::Buffer& bufferMerge,
                                       const weight_slice_t weights,
-                                      const int batch_size) {
+                                      const size_t batch_size) {
     // The size of the board is defined at compile time
     constexpr int width = BOARD_SIZE;
     constexpr int boardsize = NUM_INTERSECTIONS;

@@ -41,7 +41,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_init(
     const int channels,
     const int outputs,
     const int filter_size,
-    const int batch_size) {
+    const size_t batch_size) {
 
     int64_t n = batch_size;
     int64_t c = channels;
@@ -129,7 +129,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_no_relu_init(
     const int channels,
     const int outputs,
     const int filter_size,
-    const int batch_size) {
+    const size_t batch_size) {
 
     int64_t n = batch_size;
     int64_t c = channels;
@@ -213,7 +213,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_add_relu_init(
     cudnnHandle_t handle,
     const int channels,
     const int outputs,
-    const int batch_size) {
+    const size_t batch_size) {
 
     int64_t n = batch_size;
     int64_t c = channels;
@@ -629,7 +629,7 @@ void BackendGraph<net_t>::forward_activations(
     std::vector<float>& output_val,
     BackendContext& cudnn_context,
     const int tid,
-    const int batch_size) {
+    const size_t batch_size) {
 
     const auto inSize =
         batch_size *
