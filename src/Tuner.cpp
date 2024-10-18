@@ -102,7 +102,7 @@ static void sgemmBatched_ref(const std::vector<net_t>& a,
     std::copy(begin(a), end(a), begin(ar));
     std::copy(begin(b), end(b), begin(br));
 
-    for (auto batch = 0; batch < batch_size; batch++) {
+    for (auto batch = size_t{0}; batch < batch_size; batch++) {
         auto offset_u = batch * m * k;
         auto offset_v = batch * n * k;
         auto offset_m = batch * m * n;
@@ -264,7 +264,7 @@ template <typename net_t>
 static void sgemm_generate_data(std::vector<net_t>& x, const int m, const int n,
                                 const size_t batch_size, const int m_ceil,
                                 const int n_ceil) {
-    for (auto batch = 0; batch < batch_size; batch++) {
+    for (auto batch = size_t{0}; batch < batch_size; batch++) {
         for (auto i = 0; i < n_ceil; i++) {
             if (i < n) {
                 for (auto j = 0; j < m; j++) {
@@ -288,7 +288,7 @@ static float compare_ref(std::vector<net_t>& x, std::vector<net_t>& ref,
                          const int m, const int n, const size_t batch_size,
                          const int m_ceil, const int n_ceil) {
     auto sum = 0.0f;
-    for (auto batch = 0; batch < batch_size; batch++) {
+    for (auto batch = size_t{0}; batch < batch_size; batch++) {
         for (auto j = 0; j < m; j++) {
             for (auto i = 0; i < n; i++) {
                 auto r = ref[batch * n * m + j * n + i];
