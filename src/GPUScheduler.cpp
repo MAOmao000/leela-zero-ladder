@@ -452,7 +452,9 @@ void GPUScheduler<net_t>::batch_worker(
     const size_t gnum,
     const size_t tid)
 {
+#if !defined(USE_CUDNN) && !defined(USE_TENSOR_RT)
     (void) tid;
+#endif
     constexpr auto in_size = Network::INPUT_CHANNELS * NUM_INTERSECTIONS;
     OpenCLContext context;
     // batch scheduling heuristic.
@@ -540,7 +542,6 @@ void GPUScheduler<net_t>::batch_worker(
         batch_output_val.resize(m_out_val_size * count);
         auto index = size_t{0};
         for (auto& x : inputs) {
-            std::unique_lock<std::mutex> lk(x->mutex);
             std::copy(
                 begin(x->in),
                 end(x->in),
