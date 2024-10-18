@@ -72,9 +72,7 @@ bool BackendTRT<net_t>::build(
         usingFP16 = true;
     }
 
-    const auto explicitBatchFlag =
-        1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(explicitBatchFlag));
+    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(1U));
     if (!network) {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;
