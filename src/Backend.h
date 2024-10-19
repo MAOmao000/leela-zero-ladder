@@ -45,12 +45,12 @@
 #include <filesystem>
 #include <stdarg.h>
 
+#define CUDA_API_PER_THREAD_DEFAULT_STREAM
 #include <cudnn.h>
 #include <cublas_v2.h>
 #include <cudnn_frontend.h>
 
 #if defined(USE_TENSOR_RT)
-#define CUDA_API_PER_THREAD_DEFAULT_STREAM
 #include <cuda_runtime_api.h>
 #include "NvInfer.h"
 #include "NvInferRuntimeBase.h"
