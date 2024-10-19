@@ -109,7 +109,7 @@ bool BackendTRT<net_t>::build(
     }
     // So that there are no concurrent kernel executions probably from other parts of code while profiling
     // See CUDA Runtime API document for more details related to NULL stream and synchronization behaviors
-    config->setProfileStream(cudaStreamLegacy);
+    config->setProfileStream(cudaStreamPerThread);
     // Typical runtime allocation is much less than the 1 GiB specified below
     config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
 
@@ -364,11 +364,11 @@ bool BackendTRT<net_t>::build(
                 }
             }
         }
-        context->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
+        context->mContext->setOptimizationProfileAsync(0, this->m_streams[i]);
         if (cfg_execute_context == execute_t::DOUBLE) {
-            context->mContext_n->setOptimizationProfileAsync(1, cudaStreamPerThread);
+            context->mContext_n->setOptimizationProfileAsync(1, this->m_streams[i]);
         }
-        cudaStreamSynchronize(cudaStreamPerThread);
+        cudaStreamSynchronize(this->m_streams[i]);
         context->m_buffers_allocated = true;
         mRuntime.emplace_back(std::move(runtime));
         mEngine.emplace_back(std::move(engine));
@@ -825,14 +825,16 @@ void BackendTRT<net_t>::push_weights(
     }
     // When TensorRT chooses a precision for a layer,
     // it automatically converts weights as necessary to run the layer
-    void *host_mem;
-    checkCUDA(cudaHostAlloc(
-        (void **)&host_mem,
-        weights.size() * sizeof(float),
-        cudaHostAllocMapped)
+    void *device_mem;
+    checkCUDA(cudaMalloc(
+        (void **)&device_mem,
+        weights.size() * sizeof(float))
     );
-    memcpy(host_mem, (float *)&weights[0], weights.size() * sizeof(float));
-    this->m_layers.back().weights.emplace_back(host_mem);
+    checkCUDA(cudaMemcpy(device_mem,
+                         (float *)&weights[0],
+                         weights.size() * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    this->m_layers.back().weights.emplace_back(device_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
@@ -850,7 +852,6 @@ void BackendTRT<net_t>::push_weights_col_major(
     // When TensorRT chooses a precision for a layer,
     // it automatically converts weights as necessary to run the layer
     // Transpose from model's CK to TensorRT's KC
-    auto weightSize = weights.size() * sizeof(float);
     auto transposed_weights = std::vector<float>(weights.size());
     for (int ch = 0; ch < channels; ch++) {
         for (int i = 0; i < column; i++) {
@@ -860,14 +861,16 @@ void BackendTRT<net_t>::push_weights_col_major(
             }
         }
     }
-    void *host_mem;
-    checkCUDA(cudaHostAlloc(
-        (void **)&host_mem,
-        weightSize,
-        cudaHostAllocMapped)
+    void *device_mem;
+    checkCUDA(cudaMalloc(
+        (void **)&device_mem,
+        weights.size() * sizeof(float))
     );
-    memcpy(host_mem, (float*)&transposed_weights[0], weightSize);
-    this->m_layers.back().weights.emplace_back(host_mem);
+    checkCUDA(cudaMemcpy(device_mem,
+                         (float *)&transposed_weights[0],
+                         weights.size() * sizeof(float),
+                         cudaMemcpyHostToDevice));
+    this->m_layers.back().weights.emplace_back(device_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
 
@@ -1067,40 +1070,36 @@ void BackendTRT<net_t>::forward_activations(
         if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
             cudnn_context.mContext->setInputShape(
                 "BatchSize",
-                Dims(
-                    {
-                        4,
-                        {
-                            (unsigned int)batch_size,
-                            this->m_layers[1].channels,
-                            1,
-                            1
-                        }
-                    }
-                )
+                Dims4(
+                    batch_size,
+                    this->m_layers[1].channels,
+                    1,
+                    1)
             );
         } else {
             cudnn_context.mContext_n->setInputShape(
                 "BatchSize",
-                Dims(
-                    {
-                        4,
-                        {
-                            (unsigned int)batch_size,
-                            this->m_layers[1].channels,
-                            1,
-                            1
-                        }
-                    }
-                )
+                Dims4(
+                    batch_size,
+                    this->m_layers[1].channels,
+                    1,
+                    1)
             );
         }
     }
+//auto now = std::chrono::system_clock::now();
+//auto duration = now.time_since_epoch();
+//auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+//myprintf_error("enqueueV3 start tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
     if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
         ASSERT(cudnn_context.mContext->enqueueV3(this->m_streams[tid]));
     } else {
         ASSERT(cudnn_context.mContext_n->enqueueV3(this->m_streams[tid]));
     }
+//now = std::chrono::system_clock::now();
+//duration = now.time_since_epoch();
+//millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+//myprintf_error("enqueueV3   end tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
     search = cudnn_context.mBuffers.find("OutputPolicy");
     assert(search != cudnn_context.mBuffers.end());
     checkCUDA(cudaMemcpyAsync(
@@ -1121,6 +1120,10 @@ void BackendTRT<net_t>::forward_activations(
     );
     // Asynchronously enqueue the inference work
     cudaStreamSynchronize(this->m_streams[tid]);
+//now = std::chrono::system_clock::now();
+//duration = now.time_since_epoch();
+//millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+//myprintf_error("forward_activat tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
 }
 
 template class BackendTRT<float>;
