@@ -562,8 +562,8 @@ void Backend<net_t>::initialize(
     for (auto i = 0; i < m_num_worker_threads; i++) {
         cudaStream_t stream;
         checkCUDA(cudaStreamCreate(&stream));
+        m_streams.emplace_back(stream);
         if (cfg_backend == backend_t::TENSORRT) {
-            m_streams.emplace_back(stream);
             continue;
         }
         cudnnHandle_t cudnn;
@@ -578,7 +578,6 @@ void Backend<net_t>::initialize(
                 checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
             }
             checkCUBLAS(cublasSetStream(cublas, stream));
-            m_streams.emplace_back(stream);
             m_cublas_handles.emplace_back(cublas);
         }
     }
