@@ -425,8 +425,7 @@ void GPUScheduler<net_t>::forward(
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
         if (m_single_eval_in_progress.load()) {
-            if (cfg_backend == backend_t::TENSORRT
-                && cfg_execute_context == execute_t::SINGLE) {
+            if (cfg_backend == backend_t::TENSORRT) {
                 m_waittime += 1;
             } else {
                 m_waittime += 2;
@@ -496,8 +495,7 @@ void GPUScheduler<net_t>::batch_worker(
             if (!m_forward_queue.empty()) {
                 if (timeout
                     && m_single_eval_in_progress.exchange(true) == false) {
-                    if (cfg_backend == backend_t::TENSORRT
-                        && cfg_execute_context == execute_t::SINGLE) {
+                    if (cfg_backend == backend_t::TENSORRT) {
                         count = m_forward_queue.size();
                         m_waittime = 10;
                     } else {
@@ -520,9 +518,9 @@ void GPUScheduler<net_t>::batch_worker(
         m_forward_queue.erase(begin(m_forward_queue), end);
         return inputs;
     };
-    auto batch_input = std::vector<float>();
-    auto batch_output_pol = std::vector<float>();
-    auto batch_output_val = std::vector<float>();
+    auto batch_input = std::vector<float>(in_size * cfg_batch_size);
+    auto batch_output_pol = std::vector<float>(in_size * cfg_batch_size);
+    auto batch_output_val = std::vector<float>(in_size * cfg_batch_size);
     while (true) {
         auto inputs = pickup_task();
         auto count = inputs.size();
@@ -536,10 +534,12 @@ void GPUScheduler<net_t>::batch_worker(
             batch_stats.batch_evals++;
         }
 #endif
-        // prepare input for forward() call
-        batch_input.resize(in_size * count);
-        batch_output_pol.resize(m_out_pol_size * count);
-        batch_output_val.resize(m_out_val_size * count);
+        if (cfg_backend == backend_t::OPENCL) {
+            // prepare input for forward() call
+            batch_input.resize(in_size * count);
+            batch_output_pol.resize(m_out_pol_size * count);
+            batch_output_val.resize(m_out_val_size * count);
+        }
         auto index = size_t{0};
         for (auto& x : inputs) {
             std::copy(
@@ -566,7 +566,7 @@ void GPUScheduler<net_t>::batch_worker(
                     batch_output_pol,
                     batch_output_val,
                     tid,
-                    (const int)count
+                    (const int)cfg_batch_size
                 );
 #endif
             }
