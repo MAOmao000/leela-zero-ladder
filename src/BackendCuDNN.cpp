@@ -667,7 +667,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 (__half*)&alpha_16,
                 sizeof(alpha_16),
                 cudaMemcpyHostToDevice,
-                this->m_streams[tid])
+                cudaStreamPerThread)
             );
             void *d_m_alpha_32;
             checkCUDA(cudaMalloc(
@@ -679,7 +679,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 (float*)&alpha_32,
                 sizeof(alpha_32),
                 cudaMemcpyHostToDevice,
-                this->m_streams[tid])
+                cudaStreamPerThread)
             );
             void *d_m_beta_16;
             checkCUDA(cudaMalloc(
@@ -691,7 +691,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 (__half*)&beta_16,
                 sizeof(beta_16),
                 cudaMemcpyHostToDevice,
-                this->m_streams[tid])
+                cudaStreamPerThread)
             );
             void *d_m_beta_32;
             checkCUDA(cudaMalloc(
@@ -703,9 +703,9 @@ void BackendCuDNN<net_t>::forward_activations(
                 (float*)&beta_32,
                 sizeof(beta_32),
                 cudaMemcpyHostToDevice,
-                this->m_streams[tid])
+                cudaStreamPerThread)
             );
-            cudaStreamSynchronize(this->m_streams[tid]);
+            cudaStreamSynchronize(cudaStreamPerThread);
             cudnn_context.m_alpha_32 = d_m_alpha_32;
             cudnn_context.m_alpha_16 = d_m_alpha_16;
             cudnn_context.m_beta_32 = d_m_beta_32;
@@ -721,21 +721,23 @@ void BackendCuDNN<net_t>::forward_activations(
     auto TempBuffer = cudnn_context.m_TempBuffer;
 
     if (typeid(net_t) == typeid(float) && cfg_NCHW) {
-        checkCUDA(cudaMemcpy(
+        checkCUDA(cudaMemcpyAsync(
             InBuffer,
             (net_t*)&input[0],
             inSize,
-            cudaMemcpyHostToDevice)
+            cudaMemcpyHostToDevice,
+            cudaStreamPerThread)
         );
     } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
         auto input_net_t =
             std::vector<net_t>(batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());
-        checkCUDA(cudaMemcpy(
+        checkCUDA(cudaMemcpyAsync(
             InBuffer,
             (net_t*)&input_net_t[0],
             inSize,
-            cudaMemcpyHostToDevice)
+            cudaMemcpyHostToDevice,
+            cudaStreamPerThread)
         );
     } else {
         auto input_net_t =
@@ -746,11 +748,12 @@ void BackendCuDNN<net_t>::forward_activations(
             BOARD_SIZE,
             BOARD_SIZE,
             this->m_layers[0].channels);
-        checkCUDA(cudaMemcpy(
+        checkCUDA(cudaMemcpyAsync(
             InBuffer,
             (net_t*)&input_net_t[0],
             inSize,
-            cudaMemcpyHostToDevice)
+            cudaMemcpyHostToDevice,
+            cudaStreamPerThread)
         );
     }
 
@@ -979,26 +982,30 @@ void BackendCuDNN<net_t>::forward_activations(
             }
             if (niter == std::end(this->m_layers)) {
                 // Value input: InBuffer
-                checkCUDA(cudaMemcpy(
+                checkCUDA(cudaMemcpyAsync(
                     &val_net_t[0],
                     InBuffer,
                     val_elements * sizeof(net_t),
-                    cudaMemcpyDeviceToHost)
+                    cudaMemcpyDeviceToHost,
+                    cudaStreamPerThread)
                 );
                 // output: val_net_t
             } else {
                 // Policy input: InBuffer
-                checkCUDA(cudaMemcpy(
+                checkCUDA(cudaMemcpyAsync(
                     &pol_net_t[0],
                     InBuffer,
                     pol_elements * sizeof(net_t),
-                    cudaMemcpyDeviceToHost)
+                    cudaMemcpyDeviceToHost,
+                    cudaStreamPerThread)
                 );
                 // output: pol_net_t
             }
         }
     }
 
+    // Asynchronously cudaMemcpyAsync
+    cudaStreamSynchronize(cudaStreamPerThread);
     // input: val_net_t(net_t), pol_net_t(net_t)
     if (cfg_NCHW) {
         std::copy(val_net_t.begin(), val_net_t.end(), output_val.begin()); 
