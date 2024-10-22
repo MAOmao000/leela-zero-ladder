@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+//#define OUT_ELAPSED_TIME
+
 #if defined(USE_TENSOR_RT)
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
@@ -26,6 +28,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <inttypes.h>
 
 #include "GTP.h"
 #include "Utils.h"
@@ -34,25 +37,21 @@
 using namespace Utils;
 using namespace nvinfer1;
 
-// Define TRT entrypoints
-#define DEFINE_TRT_ENTRYPOINTS 1
-#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
 #include "NvInferRuntime.h"
 
 template <typename net_t>
 bool BackendTRT<net_t>::build(
     const int num_worker_threads,
-    const size_t batch_size) {
+    const int64_t batch_size) {
 
     // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
-    mTuneDesc = strprintf(
-        R"|("salt"(%s%s)"model %s"(%s,%d,%d,%d))|",
+    std::string tune_desc = strprintf(
+        R"|("salt"(%s%s)"model %s"(%s,%d,%d))|",
         PROGRAM_VERSION_MAJOR,
         PROGRAM_VERSION_MINOR,
         typeid(net_t) == typeid(float) ? "single" : "half",
-        "1.0",                    // modelVersion,
-        Network::INPUT_CHANNELS,  // numInputChannels,
-        cfg_execute_context,
+        "1.0",                    // model version
+        Network::INPUT_CHANNELS,  // number of input channels
         batch_size
     );
     auto builder
@@ -72,7 +71,7 @@ bool BackendTRT<net_t>::build(
         usingFP16 = true;
     }
 
-    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(1U));
+    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(0U));
     if (!network) {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;
@@ -83,35 +82,15 @@ bool BackendTRT<net_t>::build(
     std::string weightsfile = filename.substr(0, ext_i);
     network->setName(weightsfile.c_str());
 
-    auto profile = builder->createOptimizationProfile();
-    if (!profile) {
-        std::cerr << "TensorRT backend: failed to create optimization profile" << std::endl;
-        return false;
-    }
-    if (cfg_execute_context == execute_t::SINGLE) {
-        constructNetwork(network, profile, nullptr, batch_size);
-        config->addOptimizationProfile(profile);
-    } else {
-        auto profile_n = builder->createOptimizationProfile();
-        if (!profile_n) {
-            std::cerr << "TensorRT backend: failed to create optimization profile" << std::endl;
-            return false;
-        }
-        constructNetwork(network, profile, profile_n, batch_size);
-        config->addOptimizationProfile(profile);
-        config->addOptimizationProfile(profile_n);
-    }
+    constructNetwork(network, tune_desc, batch_size);
 
     if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
         config->setBuilderOptimizationLevel(2);
     }
-    // So that there are no concurrent kernel executions probably from other parts of code while profiling
-    // See CUDA Runtime API document for more details related to NULL stream and synchronization behaviors
-    config->setProfileStream(cudaStreamPerThread);
-    // Typical runtime allocation is much less than the 1 GiB specified below
-    config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
+    // Typical runtime allocation is much less than the 2 GiB specified below
+    //config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 31);
 
     std::string plan;
     {
@@ -136,7 +115,7 @@ bool BackendTRT<net_t>::build(
         std::string sep_char{std::filesystem::path::preferred_separator};
 
         uint8_t tuneHash[32];
-        SHA2::get256(mTuneDesc.c_str(), tuneHash);
+        SHA2::get256(tune_desc.c_str(), tuneHash);
         // Truncated to 6 bytes
         char tuneIdent[6 * 2 + 1];
         for(int i = 0; i < 6; i++) {
@@ -146,7 +125,7 @@ bool BackendTRT<net_t>::build(
 
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_%d_batch%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_batch%" PRId64 "_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -157,20 +136,18 @@ bool BackendTRT<net_t>::build(
                 PROGRAM_VERSION_MINOR,
                 BOARD_SIZE,
                 BOARD_SIZE,
-                cfg_execute_context,
                 batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
             std::string paramStr = strprintf(
-                "_%d_%s_%s%s_%d_%d_%d_%d_%d_%s",
+                "_%d_%s_%s%s_%d_%d_%" PRId64 "_%d_%s",
                 getInferLibVersion(),
                 deviceIdent,
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
                 BOARD_SIZE,
                 BOARD_SIZE,
-                cfg_execute_context,
                 batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
@@ -180,7 +157,6 @@ bool BackendTRT<net_t>::build(
             } catch (std::exception const& e) {
                 (void) e;
             };
-
             if (plan.size() > 0) {
                 if (plan.size() < 64 + paramStr.size()) {
                     std::cout << "Could not parse plan, unexpected size in " + planCacheFile << std::endl;
@@ -199,7 +175,6 @@ bool BackendTRT<net_t>::build(
                     }
                 }
             }
-
             if (plan.size() <= 0) {
                 std::cout << "Creating new plan cache" << std::endl;
                 auto planBuffer = std::unique_ptr<IHostMemory>(
@@ -240,7 +215,7 @@ bool BackendTRT<net_t>::build(
             }
         } else {
             auto timingCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_%d_batch%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_batch%" PRId64 "_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -248,12 +223,10 @@ bool BackendTRT<net_t>::build(
                 tuneIdent,
                 BOARD_SIZE,
                 BOARD_SIZE,
-                cfg_execute_context,
                 batch_size,
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
-
             std::string timingCacheBlob;
             try {
                 timingCacheBlob = readFileBinary(timingCacheFile);
@@ -274,7 +247,6 @@ bool BackendTRT<net_t>::build(
                 timingCache.reset(config->createTimingCache(nullptr, 0));
                 config->setTimingCache(*timingCache, false);
             }
-
             std::unique_ptr<IHostMemory> planBuffer;
             if (invalidTimingCache || !timingCacheBlob.size()) {
                 planBuffer.reset(builder->buildSerializedNetwork(*network, *config));
@@ -304,7 +276,6 @@ bool BackendTRT<net_t>::build(
                 static_cast<char*>(planBuffer->data()) + planBuffer->size());
         }
     }
-
     for (auto i = 0; i < num_worker_threads; i++) {
         std::unique_ptr<IRuntime> runtime
             = std::unique_ptr<IRuntime>(createInferRuntime(cfg_logger.getTRTLogger()));
@@ -321,18 +292,14 @@ bool BackendTRT<net_t>::build(
         }
         std::unique_ptr<BackendContext> context = std::make_unique<BackendContext>();
         context->mContext.reset(engine->createExecutionContext());
-        if (cfg_execute_context == execute_t::DOUBLE) {
-            context->mContext_n.reset(engine->createExecutionContext());
-        }
+        context->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
         for (auto j = 0; j < engine->getNbIOTensors(); j++) {
             void* buffer = nullptr;
             auto name = engine->getIOTensorName(j);
             auto dims = engine->getTensorShape(name);
             std::string_view name_str{name};
             size_t size_byte;
-            if (name_str == "BatchSize") {
-                size_byte = sizeof(int32_t);
-            } else if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
+            if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
                 size_byte = sizeof(float);
             } else {
                 size_byte = sizeof(net_t);
@@ -343,32 +310,13 @@ bool BackendTRT<net_t>::build(
                 batch_size * size_byte,
                 std::multiplies<size_t>());
             checkCUDA(cudaMalloc(&buffer, bytes));
-            if (name_str == "BatchSize") {
-                auto input_batch = std::vector<int32_t>(batch_size * this->m_layers[1].channels, 0);
-                checkCUDA(cudaMemcpy(
-                    buffer,
-                    (int32_t*)&input_batch[0],
-                    bytes,
-                    cudaMemcpyHostToDevice));
-            }
             context->mBuffers.emplace(std::make_pair(name, buffer));
             if (engine->getTensorIOMode(name) == TensorIOMode::kINPUT) {
                 context->mContext->setInputTensorAddress(name, buffer);
-                if (cfg_execute_context == execute_t::DOUBLE) {
-                    context->mContext_n->setInputTensorAddress(name, buffer);
-                }
             } else {
                 context->mContext->setOutputTensorAddress(name, buffer);
-                if (cfg_execute_context == execute_t::DOUBLE) {
-                    context->mContext_n->setOutputTensorAddress(name, buffer);
-                }
             }
         }
-        context->mContext->setOptimizationProfileAsync(0, this->m_streams[i]);
-        if (cfg_execute_context == execute_t::DOUBLE) {
-            context->mContext_n->setOptimizationProfileAsync(1, this->m_streams[i]);
-        }
-        cudaStreamSynchronize(this->m_streams[i]);
         context->m_buffers_allocated = true;
         mRuntime.emplace_back(std::move(runtime));
         mEngine.emplace_back(std::move(engine));
@@ -380,37 +328,13 @@ bool BackendTRT<net_t>::build(
 template <typename net_t>
 void BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
-    IOptimizationProfile* profile,
-    IOptimizationProfile* profile_n,
-    const size_t batch_size) {
+    std::string& tune_desc,
+    const int64_t batch_size) {
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
     ILayer* outPolicyLayer = nullptr;
     ILayer* outValueLayer = nullptr;
-    ILayer* shapeLayer = nullptr;
-    IShapeLayer* inShapeLayer = nullptr;
-    ICastLayer* castLayer = nullptr;
-
-    if (this->m_net_type == NetworkType::MINIGO_SE) {
-        auto batchSizeTensor = initInputs(
-            "BatchSize",
-            network,
-            profile,
-            profile_n,
-            this->m_layers[1].channels,
-            1,
-            1,
-            batch_size);
-
-        // See. https://github.com/NVIDIA/TensorRT/issues/2282
-        inShapeLayer = network->addShape(*batchSizeTensor);
-        castLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
-
-        shapeLayer = network->addUnary(
-            *castLayer->getOutput(0),
-            UnaryOperation::kABS);
-    }
 
     for (auto iter = std::begin(this->m_layers);
          iter != std::end(this->m_layers); iter++) {
@@ -420,8 +344,6 @@ void BackendTRT<net_t>::constructNetwork(
             inputFeature = initInputs(
                 "InputFeature",
                 network,
-                profile,
-                profile_n,
                 layer.channels,
                 BOARD_SIZE,
                 BOARD_SIZE,
@@ -436,11 +358,13 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv",
                 layer.outputs);
             auto outputConvLayer = buildActivationLayer(
                 initialConvLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation",
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
@@ -457,11 +381,13 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv1_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.first",
                 layer.outputs);
             auto firstActivationConvLayer = buildActivationLayer(
                 firstConvLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.first",
                 ActivationType::kRELU);
             auto secondConvLayer = buildConvLayer(
@@ -472,14 +398,15 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[3],
                 conv2_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.second",
                 layer.outputs);
             auto mergeLayer = network->addElementWise(
                 *outputConv, *secondConvLayer->getOutput(0), ElementWiseOperation::kSUM);
-            mergeLayer->setName((layer.name + ".merge").c_str());
             auto outputConvLayer = buildActivationLayer(
                 mergeLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.final",
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
@@ -500,11 +427,13 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv1_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.first",
                 layer.outputs);
             auto firstActivationConvLayer = buildActivationLayer(
                 firstConvLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.first",
                 ActivationType::kRELU);
             auto secondConvLayer = buildConvLayer(
@@ -515,13 +444,13 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[3],
                 conv2_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.second",
                 layer.outputs);
             // pool = tf.layers.average_pooling2d(residual, pool_size=go.N, strides=1, padding='valid')
             auto gpoolLayer = applyGPoolLayer(
                 secondConvLayer->getOutput(0),
-                network,
-                layer.name + ".gpool");
+                network);
             // fc1 = tf.layers.dense(pool, units=channels // 2)
             auto thirdMatMulLayer = buildConvLayer(
                 gpoolLayer->getOutput(0),
@@ -531,12 +460,14 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[5],
                 fc1_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.third",
                 layer.outputs / 2);
             // squeeze = tf.nn.relu(fc1)
             auto thirdActivationMatLayer = buildActivationLayer(
                 thirdMatMulLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.third",
                 ActivationType::kRELU);
             // fc2 = tf.layers.dense(squeeze, units=2*channels)
@@ -548,33 +479,30 @@ void BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[7],
                 fc2_biases[0],
                 network,
+                tune_desc,
                 layer.name + ".conv.fourth",
                 layer.outputs * 2);
             // gamma, bias = tf.split(fc2, 2, axis=3)
             auto gammaLayer = network->addSlice(
                 *fourthMatMulLayer->getOutput(0),
                 {4 ,{0, 0, 0, 0}},
-                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{batch_size, layer.channels, 1, 1}},
                 {4 ,{1, 1, 1, 1}}
             );
-            gammaLayer->setInput(2, *shapeLayer->getOutput(0));
-            gammaLayer->setName((layer.name + ".gamma").c_str());
             // gamma, bias = tf.split(fc2, 2, axis=3)
             auto biasLayer = network->addSlice(
                 *fourthMatMulLayer->getOutput(0),
                 {4 ,{0, layer.channels, 0, 0}},
-                {4 ,{0, layer.channels, 1, 1}},
+                {4 ,{batch_size, layer.channels, 1, 1}},
                 {4 ,{1, 1, 1, 1}}
             );
-            biasLayer->setInput(2, *shapeLayer->getOutput(0));
-            biasLayer->setName((layer.name + ".bias").c_str());
             // sig = tf.nn.sigmoid(gamma)
             auto sigLayer = buildActivationLayer(
                 gammaLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.sig",
                 ActivationType::kSIGMOID);
-            sigLayer->setName((layer.name + ".sig").c_str());
             // scale = tf.reshape(sig, [-1, 1, 1, channels])
             // excitation = tf.multiply(scale, residual) + bias
             auto scaleLayer = network->addElementWise(
@@ -582,24 +510,22 @@ void BackendTRT<net_t>::constructNetwork(
                 *secondConvLayer->getOutput(0),
                 ElementWiseOperation::kPROD
             );
-            scaleLayer->setName((layer.name + ".scale").c_str());
             // excitation = tf.multiply(scale, residual) + bias
             auto excitationLayer = network->addElementWise(
                 *scaleLayer->getOutput(0),
                 *biasLayer->getOutput(0),
                 ElementWiseOperation::kSUM
             );
-            excitationLayer->setName((layer.name + ".excitation").c_str());
             // (inputs + excitation)
             auto mergeLayer = network->addElementWise(
                 *outputConv,
                 *excitationLayer->getOutput(0),
                 ElementWiseOperation::kSUM);
-            mergeLayer->setName((layer.name + ".merge").c_str());
             // shared_output = tf.nn.relu(inputs + excitation)
             auto outputConvLayer = buildActivationLayer(
                 mergeLayer->getOutput(0),
                 network,
+                tune_desc,
                 layer.name + ".activation.final",
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
@@ -617,12 +543,14 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[1],
                     biases[0],
                     network,
+                    tune_desc,
                     layer.name + ".conv",
                     layer.outputs);
                 // value_conv = tf.nn.relu(value_conv)
                 outValueLayer = buildActivationLayer(
                     valueConvLayer->getOutput(0),
                     network,
+                    tune_desc,
                     layer.name + ".act",
                     ActivationType::kRELU);
             } else {
@@ -635,12 +563,14 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[1],
                     biases[0],
                     network,
+                    tune_desc,
                     layer.name + ".conv",
                     layer.outputs);
                 // policy_conv = tf.nn.relu(policy_conv)
                 outPolicyLayer = buildActivationLayer(
                     policyConvLayer->getOutput(0),
                     network,
+                    tune_desc,
                     layer.name + ".act",
                     ActivationType::kRELU);
             }
@@ -665,74 +595,27 @@ template <typename net_t>
 ITensor* BackendTRT<net_t>::initInputs(
     char const *inputName,
     TrtUniquePtr<INetworkDefinition>& network,
-    IOptimizationProfile* profile,
-    IOptimizationProfile* profile_n,
     const int channels,
     const int rows,
     const int cols,
-    const size_t batch_size) {
+    const int64_t batch_size) {
 
     ITensor* inputFeature;
 
     std::string_view name_str{inputName};
-    if (name_str == "BatchSize") {
-        inputFeature = network->addInput(
-            inputName,
-            DataType::kINT32,
-            {4, {-1, channels, rows, cols}});
-    } else if (typeid(net_t) == typeid(float)) {
+    if (typeid(net_t) == typeid(float)) {
         inputFeature = network->addInput(
             inputName,
             DataType::kFLOAT,
-            {4, {-1, channels, rows, cols}});
+            {4, {batch_size, channels, rows, cols}});
     } else {
         inputFeature = network->addInput(
             inputName,
             DataType::kHALF,
-            {4, {-1, channels, rows, cols}});
+            {4, {batch_size, channels, rows, cols}});
     }
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
-
-    if (cfg_execute_context == execute_t::SINGLE) {
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kMIN,
-            Dims4(1, channels, rows, cols));
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kOPT,
-            Dims4(batch_size, channels, rows, cols));
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kMAX,
-            Dims4(batch_size, channels, rows, cols));
-    } else {
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kMIN,
-            Dims4(1, channels, rows, cols));
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kOPT,
-            Dims4(1, channels, rows, cols));
-        profile->setDimensions(
-            inputName,
-            OptProfileSelector::kMAX,
-            Dims4(1, channels, rows, cols));
-        profile_n->setDimensions(
-            inputName,
-            OptProfileSelector::kMIN,
-            Dims4(batch_size, channels, rows, cols));
-        profile_n->setDimensions(
-            inputName,
-            OptProfileSelector::kOPT,
-            Dims4(batch_size, channels, rows, cols));
-        profile_n->setDimensions(
-            inputName,
-            OptProfileSelector::kMAX,
-            Dims4(batch_size, channels, rows, cols));
-    }
     return inputFeature;
 }
 
@@ -745,10 +628,11 @@ ILayer* BackendTRT<net_t>::buildConvLayer(
     int64_t biases_size,
     void* biases,
     TrtUniquePtr<INetworkDefinition>& network,
+    std::string& tune_desc,
     std::string op_name,
     unsigned int outputs) {
 
-    mTuneDesc += strprintf(
+    tune_desc += strprintf(
         R"|("%s"(%d,%d,%d))|",
         op_name.c_str(),
         filter_size,
@@ -773,7 +657,6 @@ ILayer* BackendTRT<net_t>::buildConvLayer(
             biases_size
         }
     );
-    convLayer->setName(op_name.c_str());
     if (filter_size == 1) {
         return convLayer;
     }
@@ -786,32 +669,29 @@ template <typename net_t>
 ILayer* BackendTRT<net_t>::buildActivationLayer(
     ITensor* input,
     TrtUniquePtr<INetworkDefinition>& network,
+    std::string& tune_desc,
     std::string op_name,
     ActivationType act_type) {
 
-    mTuneDesc += strprintf(
+    tune_desc += strprintf(
         R"|("%s"(%d))|",
         op_name.c_str(),
         (int)act_type);
 
     auto activationLayer = network->addActivation(*input, act_type);
-    activationLayer->setName(op_name.c_str());
     return activationLayer;
 }
 
 template <typename net_t>
 ILayer* BackendTRT<net_t>::applyGPoolLayer(
     ITensor* input,
-    TrtUniquePtr<INetworkDefinition>& network,
-    std::string op_name) {
+    TrtUniquePtr<INetworkDefinition>& network) {
 
     IPoolingLayer* gpoolMeanLayer
         = network->addPoolingNd(
             *input,
             PoolingType::kAVERAGE,
             DimsHW{BOARD_SIZE, BOARD_SIZE});
-    auto gpoolMeanLayerName = op_name + "/gpmean";
-    gpoolMeanLayer->setName(gpoolMeanLayerName.c_str());
     return gpoolMeanLayer;
 }
 
@@ -881,7 +761,7 @@ void BackendTRT<net_t>::push_input_convolution(
     const unsigned int outputs,
     const std::vector<float>& weights,
     const std::vector<float>& biases,
-    const float scale) {               // Dummy arguments for inheritance usage
+    const float scale) {  // Dummy arguments for inheritance usage
 
     (void)scale;
 
@@ -1006,6 +886,8 @@ void BackendTRT<net_t>::forward_activations(
     const int tid,
     const size_t batch_size) {
 
+    (void) tid;
+
     const auto inSize =
         batch_size *
         sizeof(net_t) *
@@ -1032,7 +914,7 @@ void BackendTRT<net_t>::forward_activations(
             (net_t*)&input[0],
             inSize,
             cudaMemcpyHostToDevice,
-            this->m_streams[tid])
+            cudaStreamPerThread)
         );
     } else {
         auto input_net_t =
@@ -1044,62 +926,24 @@ void BackendTRT<net_t>::forward_activations(
             (net_t*)&input_net_t[0],
             inSize,
             cudaMemcpyHostToDevice,
-            this->m_streams[tid])
+            cudaStreamPerThread)
         );
     }
-    if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-        cudnn_context.mContext->setInputShape(
-            "InputFeature",
-            Dims4(
-                batch_size,
-                this->m_layers[0].channels,
-                BOARD_SIZE,
-                BOARD_SIZE)
-        );
-    } else {
-        cudnn_context.mContext_n->setInputShape(
-            "InputFeature",
-            Dims4(
-                batch_size,
-                this->m_layers[0].channels,
-                BOARD_SIZE,
-                BOARD_SIZE)
-        );
-    }
-    if (this->m_net_type == NetworkType::MINIGO_SE) {
-        if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-            cudnn_context.mContext->setInputShape(
-                "BatchSize",
-                Dims4(
-                    batch_size,
-                    this->m_layers[1].channels,
-                    1,
-                    1)
-            );
-        } else {
-            cudnn_context.mContext_n->setInputShape(
-                "BatchSize",
-                Dims4(
-                    batch_size,
-                    this->m_layers[1].channels,
-                    1,
-                    1)
-            );
-        }
-    }
-//auto now = std::chrono::system_clock::now();
-//auto duration = now.time_since_epoch();
-//auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-//myprintf_error("enqueueV3 start tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
-    if (cfg_execute_context == execute_t::SINGLE || batch_size == 1) {
-        ASSERT(cudnn_context.mContext->enqueueV3(this->m_streams[tid]));
-    } else {
-        ASSERT(cudnn_context.mContext_n->enqueueV3(this->m_streams[tid]));
-    }
-//now = std::chrono::system_clock::now();
-//duration = now.time_since_epoch();
-//millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-//myprintf_error("enqueueV3   end tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
+#if defined(OUT_ELAPSED_TIME)
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    auto millis0 = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    myprintf_error("enqueueV3 start tid:%d, batch_size:%02zd, millis:%zd\n",
+        std::this_thread::get_id(), batch_size, millis0);
+#endif
+
+    ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
+
+    //now = std::chrono::system_clock::now();
+    //duration = now.time_since_epoch();
+    //millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    //myprintf_error("enqueueV3   end tid:%d, batch_size:%02zd, millis:%zd\n",
+    //    std::this_thread::get_id(), batch_size, millis);
     search = cudnn_context.mBuffers.find("OutputPolicy");
     assert(search != cudnn_context.mBuffers.end());
     checkCUDA(cudaMemcpyAsync(
@@ -1107,7 +951,7 @@ void BackendTRT<net_t>::forward_activations(
         search->second,
         pol_elements * sizeof(float),
         cudaMemcpyDeviceToHost,
-        this->m_streams[tid])
+        cudaStreamPerThread)
     );
     search = cudnn_context.mBuffers.find("OutputValue");
     assert(search != cudnn_context.mBuffers.end());
@@ -1116,14 +960,17 @@ void BackendTRT<net_t>::forward_activations(
         search->second,
         val_elements * sizeof(float),
         cudaMemcpyDeviceToHost,
-        this->m_streams[tid])
+        cudaStreamPerThread)
     );
     // Asynchronously enqueue the inference work
-    cudaStreamSynchronize(this->m_streams[tid]);
-//now = std::chrono::system_clock::now();
-//duration = now.time_since_epoch();
-//millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-//myprintf_error("forward_activat tid:%d, batch_size:%02zd, millis:%zd\n", tid, batch_size, millis);
+    cudaStreamSynchronize(cudaStreamPerThread);
+#if defined(OUT_ELAPSED_TIME)
+    now = std::chrono::system_clock::now();
+    duration = now.time_since_epoch();
+    auto millis1 = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    myprintf_error("forward_activat tid:%d, batch_size:%02zd, millis:%zd, elapse:%zd\n",
+        std::this_thread::get_id(), batch_size, millis1, millis1 - millis0);
+#endif
 }
 
 template class BackendTRT<float>;

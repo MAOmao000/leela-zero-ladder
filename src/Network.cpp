@@ -994,21 +994,6 @@ Network::Netresult Network::get_output(
     if (read_cache) {
         // See if we already have this in the cache.
         if (probe_cache(state, result)) {
-            char ladder_map[NUM_INTERSECTIONS] = {};
-            if (cfg_use_ray_ladder
-                && (cfg_ladder_defense || cfg_ladder_offense)
-                && cfg_ladder_check) {
-                LadderExtension(state, ladder_map);
-            } else if (!cfg_use_ray_ladder
-                && (cfg_ladder_defense || cfg_ladder_offense)
-                && cfg_ladder_check) {
-                LadderDetection(state, ladder_map);
-            }
-            for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-                if (ladder_map[idx]) {
-                    result.policy[idx] = -1.0f;
-                }
-            }
             return result;
         }
     }
@@ -1069,6 +1054,7 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
                                                 bool selfcheck) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
+    Netresult result;
     const auto input_data = gather_features(state, symmetry);
     size_t policy_data_size;
     size_t value_data_size;
@@ -1115,8 +1101,8 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
             winrate_data, m_ip2_val_w, m_ip2_val_b);
     // Map TanH output range [-1..1] to [0..1] range
     const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
+    result.winrate = winrate;
 
-    Netresult result;
     char ladder_map[NUM_INTERSECTIONS] = {};
     if (cfg_use_ray_ladder
         && (cfg_ladder_defense || cfg_ladder_offense)
@@ -1131,12 +1117,16 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         if (ladder_map[sym_idx]) {
             result.policy[sym_idx] = -1.0f;
+            if (result.winrate == winrate) {
+                // Winning rate in the ladder situation
+                //   = winning rate of the network * ladder_penalty.
+                result.winrate *= cfg_ladder_penalty;
+            }
         } else {
             result.policy[sym_idx] = outputs[idx];
         }
     }
     result.policy_pass = outputs[NUM_INTERSECTIONS];
-    result.winrate = winrate;
     return result;
 }
 

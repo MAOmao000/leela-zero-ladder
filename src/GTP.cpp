@@ -88,7 +88,6 @@ bool cfg_tune_only;
 trtLog::Logger cfg_logger{};
 #endif
 bool cfg_cache_plan;
-execute_t cfg_execute_context;
 #ifdef USE_HALF
 precision_t cfg_precision;
 #endif
@@ -126,6 +125,7 @@ int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
+float cfg_ladder_penalty;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -378,7 +378,6 @@ void GTP::setup_default_parameters() {
     cfg_backend = backend_t::OPENCL;     // --backend
 #endif
 #endif
-    cfg_execute_context = execute_t::SINGLE; // --execute-context
     cfg_NCHW = false;                        // --channel-first
 
 #ifdef USE_HALF
@@ -393,7 +392,7 @@ void GTP::setup_default_parameters() {
     cfg_logconst = 1.7f;           // --logconst
     cfg_puct_init = 1.07f;         // --puct_init
     cfg_puct_base = 36465.0f;      // --puct_base
-    cfg_puct_log = 1.0f;           // --puct_log 0.45f;
+    cfg_puct_log = 1.0f;           // --puct_log;
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
     cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
     cfg_stdev_scale = 0.85f;       // --puct_stdev_scale
@@ -429,6 +428,7 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones
     cfg_ladder_depth = 200;     // --ladder_depth
+    cfg_ladder_penalty = 0.95f; // --ladder_penalty
 
     cfg_analyze_tags = AnalyzeTags{};
 

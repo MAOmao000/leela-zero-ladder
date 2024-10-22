@@ -156,10 +156,6 @@ extern bool cfg_NCHW;
 extern std::vector<int> cfg_gpus;
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
-enum class execute_t {
-    NONE, SINGLE, DOUBLE
-};
-extern execute_t cfg_execute_context;
 #ifdef USE_TENSOR_RT
 extern trtLog::Logger cfg_logger;
 #endif
@@ -204,6 +200,7 @@ extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
+extern float cfg_ladder_penalty;
 
 extern AnalyzeTags cfg_analyze_tags;
 

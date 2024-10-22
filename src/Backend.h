@@ -233,7 +233,6 @@ public:
 #if defined(USE_TENSOR_RT)
     // Only TENSORRT backend are used.
     std::unique_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
-    std::unique_ptr<nvinfer1::IExecutionContext> mContext_n{nullptr};
     std::map<std::string, void*> mBuffers;
 #endif
 };

@@ -158,26 +158,23 @@ private:
     // Builds the network engine
     bool build(
         const int num_worker_threads,
-        const size_t batch_size
+        const int64_t batch_size
     );
 
     // Create full model using the TensorRT network definition API and build the engine.
     void constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        nvinfer1::IOptimizationProfile* profile,
-        nvinfer1::IOptimizationProfile* profile_n,
-        const size_t batch_size
+        std::string& tune_desc,
+        const int64_t batch_size
     );
 
     nvinfer1::ITensor* initInputs(
         char const *inputName,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        nvinfer1::IOptimizationProfile* profile,
-        nvinfer1::IOptimizationProfile* profile_n,
         const int channels,
         const int rows,
         const int cols,
-        const size_t batch_size
+        const int64_t batch_size
     );
 
     nvinfer1::ILayer* buildConvLayer(
@@ -188,6 +185,7 @@ private:
         int64_t biases_size,
         void* biases,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string& tune_desc,
         std::string op_name,
         unsigned int outputs
     );
@@ -195,14 +193,14 @@ private:
     nvinfer1::ILayer* buildActivationLayer(
         nvinfer1::ITensor* input,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
+        std::string& tune_desc,
         std::string op_name,
         nvinfer1::ActivationType act_type
     );
 
     nvinfer1::ILayer* applyGPoolLayer(
         nvinfer1::ITensor* input,
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string op_name
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network
     );
 
     size_t get_layer_count() const override {
@@ -211,7 +209,5 @@ private:
 
     std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
     std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
-    std::string mTuneDesc; // Serves as a hash of the network architecture specific to tuning
-    std::map<std::string, nvinfer1::Weights> mWeightMap;
 };
 #endif

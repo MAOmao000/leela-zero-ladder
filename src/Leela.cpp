@@ -213,8 +213,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                     "] Which backend engine to use.")
 #ifdef USE_TENSOR_RT
         ("cache-plan", "Use TensorRT cache plan.")
-        ("execute-context", po::value<std::string>()->default_value("single"),
-                            "[single|double] Number of engine units to start.")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -232,6 +230,9 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
+        ("ladder_penalty", po::value<float>()->default_value(cfg_ladder_penalty),
+                      "Winning rate in the ladder situation:\n"
+                      "winning rate of the network * ladder_penalty")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -491,17 +492,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (vm.count("cache-plan")) {
             cfg_cache_plan = true;
         }
-        if (vm.count("execute-context")) {
-            auto execute_context = vm["execute-context"].as<std::string>();
-            if ("single" == execute_context) {
-                cfg_execute_context = execute_t::SINGLE;
-            } else if ("double" == execute_context) {
-                cfg_execute_context = execute_t::DOUBLE;
-            } else {
-                printf("Unexpected option for --execute-context, expecting single/double\n");
-                exit(EXIT_FAILURE);
-            }
-        }
         calculate_thread_count_gpu(vm);
         myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
     } else if (cfg_backend == backend_t::CUDNNGRAPH) {
@@ -692,6 +682,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_depth")) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
+    }
+
+    if (vm.count("ladder_penalty")) {
+        cfg_ladder_penalty = vm["ladder_penalty"].as<float>();
     }
 
     auto out = std::stringstream{};
