@@ -330,13 +330,13 @@ void BackendCuDNN<net_t>::push_input_convolution(
     this->m_layers[layer].scale_3 = 1.0f;
 
     for (auto i = 0; i < this->m_num_worker_threads; i++) {
-        auto conv_desc_multi = convolve_init(
+        auto conv_desc = convolve_init(
             this->m_handle[i],
             channels,
             outputs,
             filter_size,
             cfg_batch_size);
-        this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+        this->m_layers[layer].conv_desc.emplace_back(conv_desc);
     }
 }
 
@@ -389,13 +389,13 @@ void BackendCuDNN<net_t>::push_residual(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desk_multi = convolve_init(
+            auto conv_desk = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desk_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desk);
         }
     }
 }
@@ -462,13 +462,13 @@ void BackendCuDNN<net_t>::push_residual_se(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
         }
     }
 }
@@ -502,24 +502,24 @@ void BackendCuDNN<net_t>::push_convolve(
     if (outputs == Network::OUTPUTS_VALUE) {
         this->m_layers[layer].is_value = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
         }
     } else {
         this->m_layers[layer].is_policy = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
         }
     }
 }
@@ -562,7 +562,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 if (!layer.is_residual_block || layer_i == 1) {
                     max_wsize = std::max(
                         max_wsize,
-                        layer.conv_desc_multi[i]->workspace_size);
+                        layer.conv_desc[i]->workspace_size);
                     max_channels = std::max(
                         max_channels,
                         std::max(layer.channels, layer.outputs));
@@ -725,7 +725,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 nullptr,
                 conv_biases[0],
                 workspace,
-                layer.conv_desc_multi[tid],
+                layer.conv_desc[tid],
                 layer.scale_1,
                 1.0f);
             // output: OutBuffer
@@ -745,7 +745,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 nullptr,
                 conv1_biases[0],
                 workspace,
-                this->m_layers[1].conv_desc_multi[tid],
+                this->m_layers[1].conv_desc[tid],
                 layer.scale_1,
                 1.0f);
             convolveActivation(
@@ -756,7 +756,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 OutBuffer,          // *residualBuffer: first input
                 conv2_biases[0],
                 workspace,
-                this->m_layers[1].conv_desc_multi[tid],
+                this->m_layers[1].conv_desc[tid],
                 layer.scale_2,
                 layer.scale_3);
             // output: OutBuffer
@@ -780,7 +780,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 nullptr,
                 conv1_biases[0],
                 workspace,
-                this->m_layers[1].conv_desc_multi[tid],
+                this->m_layers[1].conv_desc[tid],
                 layer.scale_1,
                 1.0f);
             convolveIdentityActivation(
@@ -791,7 +791,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 nullptr,
                 conv2_biases[0],
                 workspace,
-                this->m_layers[1].conv_desc_multi[tid],
+                this->m_layers[1].conv_desc[tid],
                 layer.scale_2,
                 layer.scale_3);
             if (typeid(net_t) == typeid(float)) {
@@ -847,7 +847,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 nullptr,
                 conv_biases[0],
                 workspace,
-                layer.conv_desc_multi[tid],
+                layer.conv_desc[tid],
                 layer.scale_1,
                 1.0f);
             if (niter == std::end(this->m_layers)) {

@@ -34,6 +34,160 @@
 using namespace Utils;
 namespace fe = cudnn_frontend;
 
+#ifndef _WIN32
+// Y = Convolve(X, W)
+template <typename net_t>
+std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_value_init(
+    cudnnHandle_t handle,
+    const int channels,
+    const int outputs,
+    const int filter_size,
+    const size_t batch_size) {
+
+    int64_t n = batch_size;
+    int64_t c = channels;
+    int64_t h = BOARD_SIZE;
+    int64_t w = BOARD_SIZE;
+    int64_t k = outputs;
+    int64_t r = filter_size;
+    int64_t s = filter_size;
+    fe::DataType_t data_type;
+    fe::DataType_t compute_type;
+    fe::DataType_t conv_compute_type;
+    fe::DataType_t intermediate_type;
+    std::shared_ptr<conv_descriptor> conv_desc = std::make_shared<conv_descriptor>();
+
+    if (typeid(net_t) == typeid(float)) {
+        data_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::FLOAT;
+        intermediate_type = fe::DataType_t::FLOAT;
+    } else {
+        data_type = fe::DataType_t::HALF;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::HALF;
+        intermediate_type = fe::DataType_t::HALF;
+    }
+    auto pad_size = filter_size / 2;
+    auto build_new_graph = [=](cudnnHandle_t handle) {
+        auto graph = fe::graph::Graph();
+        graph.set_io_data_type(data_type)
+              .set_intermediate_data_type(intermediate_type)
+              .set_compute_data_type(compute_type);
+        std::shared_ptr<fe::graph::Tensor_attributes> X;
+        std::shared_ptr<fe::graph::Tensor_attributes> W;
+        std::shared_ptr<fe::graph::Tensor_attributes> Y;
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        W = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("filter")
+            .set_dim({ k, c, r, s })
+            .set_stride({ c * r * s, 1, c * s, c }));
+        auto conv_options = fe::graph::Conv_fprop_attributes()
+                            .set_compute_data_type(conv_compute_type)
+                            .set_padding({ pad_size, pad_size })
+                            .set_stride({ 1, 1 })
+                            .set_dilation({ 1, 1 });
+        Y = graph.conv_fprop(X, W, conv_options);
+        Y->set_output(true);
+
+        checkCUDNNFE(graph.validate());
+        checkCUDNNFE(graph.build_operation_graph(handle));
+        checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
+        checkCUDNNFE(graph.check_support(handle));
+        checkCUDNNFE(graph.build_plans(handle));
+        return std::make_tuple(graph, X, W, Y);
+    };
+
+    auto [graph, X, W, Y] = build_new_graph(handle);
+    conv_desc->graph = graph;
+    conv_desc->X = X;
+    conv_desc->W = W;
+    conv_desc->Y = Y;
+    conv_desc->workspace_size = graph.get_workspace_size();
+    return conv_desc;
+}
+
+// Y = ReLU(X + B)
+template <typename net_t>
+std::shared_ptr<conv_descriptor> BackendGraph<net_t>::bias_value_init(
+    cudnnHandle_t handle,
+    const int channels,
+    const int outputs,
+    const int filter_size,
+    const size_t batch_size) {
+
+    int64_t n = batch_size;
+    int64_t c = channels;
+    int64_t h = BOARD_SIZE;
+    int64_t w = BOARD_SIZE;
+    int64_t k = outputs;
+    int64_t r = filter_size;
+    int64_t s = filter_size;
+    fe::DataType_t data_type;
+    fe::DataType_t compute_type;
+    fe::DataType_t conv_compute_type;
+    fe::DataType_t intermediate_type;
+    std::shared_ptr<conv_descriptor> conv_desc = std::make_shared<conv_descriptor>();
+
+    if (typeid(net_t) == typeid(float)) {
+        data_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::FLOAT;
+        intermediate_type = fe::DataType_t::FLOAT;
+    } else {
+        data_type = fe::DataType_t::HALF;
+        compute_type = fe::DataType_t::FLOAT;
+        conv_compute_type = fe::DataType_t::HALF;
+        intermediate_type = fe::DataType_t::HALF;
+    }
+    auto pad_size = filter_size / 2;
+    auto build_new_graph = [=](cudnnHandle_t handle) {
+        auto graph = fe::graph::Graph();
+        graph.set_io_data_type(data_type)
+              .set_intermediate_data_type(intermediate_type)
+              .set_compute_data_type(compute_type);
+        std::shared_ptr<fe::graph::Tensor_attributes> X;
+        std::shared_ptr<fe::graph::Tensor_attributes> W;
+        std::shared_ptr<fe::graph::Tensor_attributes> Y;
+
+        X = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("image")
+            .set_dim({ n, c, h, w })
+            .set_stride({ c * h * w, 1, c * w, c }));
+        B = graph.tensor(fe::graph::Tensor_attributes()
+            .set_name("bias")
+            .set_dim({ 1, k, 1, 1 })
+            .set_stride({ k, 1, 1, 1 }));
+        auto bias_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::ADD);
+        auto bias_output = graph.pointwise(X, B, bias_options);
+        auto relu_options = fe::graph::Pointwise_attributes()
+                            .set_mode(fe::PointwiseMode_t::RELU_FWD);
+        Y = graph.pointwise(bias_output, relu_options);
+        Y->set_output(true);
+
+        checkCUDNNFE(graph.validate());
+        checkCUDNNFE(graph.build_operation_graph(handle));
+        checkCUDNNFE(graph.create_execution_plans({ fe::HeurMode_t::A }));
+        checkCUDNNFE(graph.check_support(handle));
+        checkCUDNNFE(graph.build_plans(handle));
+        return std::make_tuple(graph, X, B, Y);
+    };
+
+    auto [graph, X, B, Y] = build_new_graph(handle);
+    conv_desc->graph = graph;
+    conv_desc->X = X;
+    conv_desc->B = B;
+    conv_desc->Y = Y;
+    conv_desc->workspace_size = graph.get_workspace_size();
+    return conv_desc;
+}
+#endif
+
 // Y = ReLU(Convolve(X, W) + B)
 template <typename net_t>
 std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_init(
@@ -363,13 +517,13 @@ void BackendGraph<net_t>::push_input_convolution(
     this->m_layers[layer].scale_3 = 1.0f;
 
     for (auto i = 0; i < this->m_num_worker_threads; i++) {
-        auto conv_desc_multi = convolve_init(
+        auto conv_desc = convolve_init(
             this->m_handle[i],
             channels,
             outputs,
             filter_size,
             cfg_batch_size);
-        this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+        this->m_layers[layer].conv_desc.emplace_back(conv_desc);
     }
 }
 
@@ -422,26 +576,26 @@ void BackendGraph<net_t>::push_residual(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
-            auto conv_desc_no_relu_multi = convolve_no_relu_init(
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
+            auto conv_desc_no_relu = convolve_no_relu_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_no_relu_desc_multi.emplace_back(conv_desc_no_relu_multi);
-            auto conv_desc_add_relu_multi = convolve_add_relu_init(
+            this->m_layers[layer].conv_no_relu_desc.emplace_back(conv_desc_no_relu);
+            auto conv_desc_add_relu = convolve_add_relu_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 cfg_batch_size);
-            this->m_layers[layer].conv_add_relu_desc_multi.emplace_back(conv_desc_add_relu_multi);
+            this->m_layers[layer].conv_add_relu_desc.emplace_back(conv_desc_add_relu);
         }
     }
 }
@@ -508,20 +662,20 @@ void BackendGraph<net_t>::push_residual_se(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
-            auto conv_desc_no_relu_multi = convolve_no_relu_init(
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
+            auto conv_desc_no_relu = convolve_no_relu_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_no_relu_desc_multi.emplace_back(conv_desc_no_relu_multi);
+            this->m_layers[layer].conv_no_relu_desc.emplace_back(conv_desc_no_relu);
         }
     }
 }
@@ -555,24 +709,41 @@ void BackendGraph<net_t>::push_convolve(
     if (outputs == Network::OUTPUTS_VALUE) {
         this->m_layers[layer].is_value = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+#ifdef _WIN32
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
+#else
+            auto conv_desc = convolve_value_init(
+                this->m_handle[i],
+                channels,
+                outputs,
+                filter_size,
+                cfg_batch_size);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
+            auto bias_desc = bias_value_init(
+                this->m_handle[i],
+                channels,
+                outputs,
+                filter_size,
+                cfg_batch_size);
+            this->m_layers[layer].bias_desc.emplace_back(bias_desc);
+#endif
         }
     } else {
         this->m_layers[layer].is_policy = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_multi = convolve_init(
+            auto conv_desc = convolve_init(
                 this->m_handle[i],
                 channels,
                 outputs,
                 filter_size,
                 cfg_batch_size);
-            this->m_layers[layer].conv_desc_multi.emplace_back(conv_desc_multi);
+            this->m_layers[layer].conv_desc.emplace_back(conv_desc);
         }
     }
 }
@@ -614,17 +785,24 @@ void BackendGraph<net_t>::forward_activations(
                 if (!layer.is_residual_block || layer_i == 1) {
                     max_wsize = std::max(
                         max_wsize,
-                        layer.conv_desc_multi[i]->workspace_size);
-                    if (layer.conv_no_relu_desc_multi.size() > 0) {
+                        layer.conv_desc[i]->workspace_size);
+                    if (layer.conv_no_relu_desc.size() > 0) {
                         max_wsize = std::max(
                             max_wsize,
-                            layer.conv_no_relu_desc_multi[i]->workspace_size);
+                            layer.conv_no_relu_desc[i]->workspace_size);
                     }
-                    if (layer.conv_add_relu_desc_multi.size() > 0) {
+                    if (layer.conv_add_relu_desc.size() > 0) {
                         max_wsize = std::max(
                             max_wsize,
-                            layer.conv_add_relu_desc_multi[i]->workspace_size);
+                            layer.conv_add_relu_desc[i]->workspace_size);
                     }
+#ifndef _WIN32
+                    if (layer.bias_desc.size() > 0) {
+                        max_wsize = std::max(
+                            max_wsize,
+                            layer.bias_desc[i]->workspace_size);
+                    }
+#endif
                     max_channels = std::max(
                         max_channels,
                         std::max(layer.channels, layer.outputs));
@@ -768,12 +946,12 @@ void BackendGraph<net_t>::forward_activations(
             // Y = ReLU(Convolve(X, W) + B)
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack = {
-                    {layer.conv_desc_multi[tid]->X, InBuffer},
-                    {layer.conv_desc_multi[tid]->W, conv_weights[0]},
-                    {layer.conv_desc_multi[tid]->B, conv_biases[0]},
-                    {layer.conv_desc_multi[tid]->Y, OutBuffer} };
+                    {layer.conv_desc[tid]->X, InBuffer},
+                    {layer.conv_desc[tid]->W, conv_weights[0]},
+                    {layer.conv_desc[tid]->B, conv_biases[0]},
+                    {layer.conv_desc[tid]->Y, OutBuffer} };
             checkCUDNNFE(
-                layer.conv_desc_multi[tid]->graph.execute(
+                layer.conv_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack,
                     workspace)
@@ -790,12 +968,12 @@ void BackendGraph<net_t>::forward_activations(
             // Y = ReLU(Convolve(X, W) + B)
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack1 = {
-                    {this->m_layers[1].conv_desc_multi[tid]->X, OutBuffer},
-                    {this->m_layers[1].conv_desc_multi[tid]->W, conv1_weights[0]},
-                    {this->m_layers[1].conv_desc_multi[tid]->B, conv1_biases[0]},
-                    {this->m_layers[1].conv_desc_multi[tid]->Y, InBuffer} };
+                    {this->m_layers[1].conv_desc[tid]->X, OutBuffer},
+                    {this->m_layers[1].conv_desc[tid]->W, conv1_weights[0]},
+                    {this->m_layers[1].conv_desc[tid]->B, conv1_biases[0]},
+                    {this->m_layers[1].conv_desc[tid]->Y, InBuffer} };
             checkCUDNNFE(
-                this->m_layers[1].conv_desc_multi[tid]->graph.execute(
+                this->m_layers[1].conv_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack1,
                     workspace)
@@ -803,12 +981,12 @@ void BackendGraph<net_t>::forward_activations(
             // Y = Convolve(X, W) + B
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack2 = {
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->X, InBuffer},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->W, conv2_weights[0]},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->B, conv2_biases[0]},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->Y, TempBuffer} };
+                    {this->m_layers[1].conv_no_relu_desc[tid]->X, InBuffer},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->W, conv2_weights[0]},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->B, conv2_biases[0]},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->Y, TempBuffer} };
             checkCUDNNFE(
-                this->m_layers[1].conv_no_relu_desc_multi[tid]->graph.execute(
+                this->m_layers[1].conv_no_relu_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack2,
                     workspace)
@@ -816,11 +994,11 @@ void BackendGraph<net_t>::forward_activations(
             // Y = ReLU(X + Z)
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack3 = {
-                    {this->m_layers[1].conv_add_relu_desc_multi[tid]->X, TempBuffer},
-                    {this->m_layers[1].conv_add_relu_desc_multi[tid]->Z, OutBuffer},
-                    {this->m_layers[1].conv_add_relu_desc_multi[tid]->Y, InBuffer} };
+                    {this->m_layers[1].conv_add_relu_desc[tid]->X, TempBuffer},
+                    {this->m_layers[1].conv_add_relu_desc[tid]->Z, OutBuffer},
+                    {this->m_layers[1].conv_add_relu_desc[tid]->Y, InBuffer} };
             checkCUDNNFE(
-                this->m_layers[1].conv_add_relu_desc_multi[tid]->graph.execute(
+                this->m_layers[1].conv_add_relu_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack3,
                     workspace)
@@ -842,12 +1020,12 @@ void BackendGraph<net_t>::forward_activations(
             // Y = ReLU(Convolve(X, W) + B)
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack1 = {
-                    {this->m_layers[1].conv_desc_multi[tid]->X, OutBuffer},
-                    {this->m_layers[1].conv_desc_multi[tid]->W, conv1_weights[0]},
-                    {this->m_layers[1].conv_desc_multi[tid]->B, conv1_biases[0]},
-                    {this->m_layers[1].conv_desc_multi[tid]->Y, InBuffer} };
+                    {this->m_layers[1].conv_desc[tid]->X, OutBuffer},
+                    {this->m_layers[1].conv_desc[tid]->W, conv1_weights[0]},
+                    {this->m_layers[1].conv_desc[tid]->B, conv1_biases[0]},
+                    {this->m_layers[1].conv_desc[tid]->Y, InBuffer} };
             checkCUDNNFE(
-                this->m_layers[1].conv_desc_multi[tid]->graph.execute(
+                this->m_layers[1].conv_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack1,
                     workspace)
@@ -855,12 +1033,12 @@ void BackendGraph<net_t>::forward_activations(
             // Y = Convolve(X, W) + B
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack2 = {
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->X, InBuffer},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->W, conv2_weights[0]},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->B, conv2_biases[0]},
-                    {this->m_layers[1].conv_no_relu_desc_multi[tid]->Y, TempBuffer} };
+                    {this->m_layers[1].conv_no_relu_desc[tid]->X, InBuffer},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->W, conv2_weights[0]},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->B, conv2_biases[0]},
+                    {this->m_layers[1].conv_no_relu_desc[tid]->Y, TempBuffer} };
             checkCUDNNFE(
-                this->m_layers[1].conv_no_relu_desc_multi[tid]->graph.execute(
+                this->m_layers[1].conv_no_relu_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack2,
                     workspace)
@@ -911,20 +1089,64 @@ void BackendGraph<net_t>::forward_activations(
             // input: OutBuffer(net_t is float or __half)
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
+#ifdef _WIN32
             // Y = ReLU(Convolve(X, W) + B)
             std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                 variant_pack = {
-                    {layer.conv_desc_multi[tid]->X, OutBuffer},
-                    {layer.conv_desc_multi[tid]->W, conv_weights[0]},
-                    {layer.conv_desc_multi[tid]->B, conv_biases[0]},
-                    {layer.conv_desc_multi[tid]->Y, InBuffer} };
+                    {layer.conv_desc[tid]->X, OutBuffer},
+                    {layer.conv_desc[tid]->W, conv_weights[0]},
+                    {layer.conv_desc[tid]->B, conv_biases[0]},
+                    {layer.conv_desc[tid]->Y, InBuffer} };
             checkCUDNNFE(
-                layer.conv_desc_multi[tid]->graph.execute(
+                layer.conv_desc[tid]->graph.execute(
                     this->m_handle[tid],
                     variant_pack,
                     workspace)
             );
-            if (niter == std::end(this->m_layers)) {
+#else
+layer.is_value
+            if (layer.is_value) {
+                // Y = Convolve(X, W)
+                std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
+                    variant_pack1 = {
+                        {layer.conv_desc[tid]->X, OutBuffer},
+                        {layer.conv_desc[tid]->W, conv_weights[0]},
+                        {layer.conv_desc[tid]->Y, InBuffer} };
+                checkCUDNNFE(
+                    layer.conv_desc[tid]->graph.execute(
+                        this->m_handle[tid],
+                        variant_pack1,
+                        workspace)
+                );
+                // Y = ReLU(X + B)
+                std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
+                    variant_pack2 = {
+                        {layer.bias_desc[tid]->X, OutBuffer},
+                        {layer.bias_desc[tid]->B, conv_biases[0]},
+                        {layer.bias_desc[tid]->Y, InBuffer} };
+                checkCUDNNFE(
+                    layer.bias_desc[tid]->graph.execute(
+                        this->m_handle[tid],
+                        variant_pack2,
+                        workspace)
+                );
+            } else {
+                // Y = ReLU(Convolve(X, W) + B)
+                std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
+                    variant_pack = {
+                        {layer.conv_desc[tid]->X, OutBuffer},
+                        {layer.conv_desc[tid]->W, conv_weights[0]},
+                        {layer.conv_desc[tid]->B, conv_biases[0]},
+                        {layer.conv_desc[tid]->Y, InBuffer} };
+                checkCUDNNFE(
+                    layer.conv_desc[tid]->graph.execute(
+                        this->m_handle[tid],
+                        variant_pack,
+                        workspace)
+                );
+            }
+#endif
+            if (layer.is_value) {
                 // Value input: InBuffer
                 checkCUDA(cudaMemcpyAsync(
                     &val_net_t[0],

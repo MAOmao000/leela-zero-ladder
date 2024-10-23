@@ -269,9 +269,12 @@ public:
     bool is_value{false};
     bool is_policy{false};
     // Only CUDNN and CUDNNGRAPH backend are used.
-    std::vector<std::shared_ptr<conv_descriptor>> conv_desc_multi;
-    std::vector<std::shared_ptr<conv_descriptor>> conv_no_relu_desc_multi;
-    std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc_multi;
+    std::vector<std::shared_ptr<conv_descriptor>> conv_desc;
+    std::vector<std::shared_ptr<conv_descriptor>> conv_no_relu_desc;
+    std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc;
+#ifndef _WIN32
+    std::vector<std::shared_ptr<conv_descriptor>> bias_desc;
+#endif
     float scale_1{1.0f};
     float scale_2{1.0f};
     float scale_3{1.0f};
