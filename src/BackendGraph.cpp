@@ -754,6 +754,8 @@ void BackendGraph<net_t>::forward_activations(
             cudaStreamPerThread)
         );
     }
+    // Asynchronously cudaMemcpyAsync
+    cudaStreamSynchronize(cudaStreamPerThread);
     for (auto iter = std::begin(this->m_layers); iter != std::end(this->m_layers); iter++) {
         const auto& layer = *iter;
         const auto niter = std::next(iter);
