@@ -269,11 +269,8 @@ public:
     bool is_value{false};
     bool is_policy{false};
     // Only CUDNN and CUDNNGRAPH backend are used.
-    std::vector<std::shared_ptr<conv_descriptor>> conv_desc_single;
     std::vector<std::shared_ptr<conv_descriptor>> conv_desc_multi;
-    std::vector<std::shared_ptr<conv_descriptor>> conv_no_relu_desc_single;
     std::vector<std::shared_ptr<conv_descriptor>> conv_no_relu_desc_multi;
-    std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc_single;
     std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc_multi;
     float scale_1{1.0f};
     float scale_2{1.0f};
@@ -493,7 +490,6 @@ protected:
     int m_num_worker_threads{1};
     cudaDeviceProp m_device_prop;
     std::vector<cudnnHandle_t> m_handle;
-    std::vector<cudaStream_t> m_streams;
     std::vector<cublasHandle_t> m_cublas_handles;
     std::string m_model_hash{""};
     NetworkType m_net_type{NetworkType::LEELA_ZERO};

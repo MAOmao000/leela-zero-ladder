@@ -92,7 +92,7 @@ private:
     ) override;
 
     void convolveActivation(
-        const int tid,
+        cudnnHandle_t cudnn_handle,
         const void *bufferIn,
         void *bufferOut,
         const void *weights,
@@ -105,7 +105,7 @@ private:
     );
 
     void convolveIdentityActivation(
-        const int tid,
+        cudnnHandle_t cudnn_handle,
         const void *bufferIn,
         void *bufferOut,
         const void *weights,

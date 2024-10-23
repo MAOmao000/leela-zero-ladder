@@ -410,6 +410,10 @@ void GPUScheduler<net_t>::push_weights(
         Network::OUTPUTS_VALUE,
         weights
     );
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+    // Asynchronously cudaMemcpyAsync
+    cudaStreamSynchronize(cudaStreamPerThread);
+#endif
 }
 
 template <typename net_t>

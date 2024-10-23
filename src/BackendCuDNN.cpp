@@ -35,7 +35,7 @@ using namespace Utils;
 
 template <typename net_t>
 void BackendCuDNN<net_t>::convolveActivation(
-    const int tid,
+    cudnnHandle_t cudnn_handle,
     const void *bufferIn,
     void *bufferOut,
     const void *weights,
@@ -54,7 +54,7 @@ void BackendCuDNN<net_t>::convolveActivation(
     }
     // y = act (alpha1 * conv(x) + alpha2 * z + bias)
     checkCUDNN(cudnnConvolutionBiasActivationForward(
-        /* handle         */this->m_handle[tid],
+        /* handle         */cudnn_handle,
         /* *alpha1        */&alpha1,
         /* xDesc          */conv_desc->input_descriptor,
         /* *x             */bufferIn,
@@ -77,7 +77,7 @@ void BackendCuDNN<net_t>::convolveActivation(
 
 template <typename net_t>
 void BackendCuDNN<net_t>::convolveIdentityActivation(
-    const int tid,
+    cudnnHandle_t cudnn_handle,
     const void *bufferIn,
     void *bufferOut,
     const void *weights,
@@ -98,7 +98,7 @@ void BackendCuDNN<net_t>::convolveIdentityActivation(
 
     // y = act (alpha1 * conv(x) + alpha2 * z + bias)
     checkCUDNN(cudnnConvolutionBiasActivationForward(
-        /* handle         */this->m_handle[tid],
+        /* handle         */cudnn_handle,
         /* *alpha1        */&alpha1,
         /* xDesc          */conv_desc->input_descriptor,
         /* *x             */bufferIn,
@@ -255,11 +255,12 @@ void BackendCuDNN<net_t>::push_weights(
     std::copy(weights.begin(), weights.end(), weights_net_t.begin());
     void *device_mem;
     checkCUDA(cudaMalloc((void**)&device_mem, weights.size() * sizeof(net_t)));
-    checkCUDA(cudaMemcpy(
+    checkCUDA(cudaMemcpyAsync(
         device_mem,
         (net_t *)&weights_net_t[0],
         weights.size() * sizeof(net_t),
-        cudaMemcpyHostToDevice)
+        cudaMemcpyHostToDevice,
+        cudaStreamPerThread)
     );
     this->m_layers.back().weights.emplace_back(device_mem);
 }
@@ -285,11 +286,12 @@ void BackendCuDNN<net_t>::push_weights_col_major(
     }
     void *device_mem;
     checkCUDA(cudaMalloc((void**)&device_mem, weightSize));
-    checkCUDA(cudaMemcpy(
+    checkCUDA(cudaMemcpyAsync(
         device_mem,
         (net_t *)&transposed_weights[0],
         weightSize,
-        cudaMemcpyHostToDevice)
+        cudaMemcpyHostToDevice,
+        cudaStreamPerThread)
     );
     this->m_layers.back().weights.emplace_back(device_mem);
 }
@@ -328,12 +330,6 @@ void BackendCuDNN<net_t>::push_input_convolution(
     this->m_layers[layer].scale_3 = 1.0f;
 
     for (auto i = 0; i < this->m_num_worker_threads; i++) {
-        auto conv_desc_single = convolve_init(
-            this->m_handle[i],
-            channels,
-            outputs,
-            filter_size);
-        this->m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
         auto conv_desc_multi = convolve_init(
             this->m_handle[i],
             channels,
@@ -393,12 +389,6 @@ void BackendCuDNN<net_t>::push_residual(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_single = convolve_init(
-                this->m_handle[i],
-                channels,
-                outputs,
-                filter_size);
-            this->m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
             auto conv_desk_multi = convolve_init(
                 this->m_handle[i],
                 channels,
@@ -472,12 +462,6 @@ void BackendCuDNN<net_t>::push_residual_se(
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_single = convolve_init(
-                this->m_handle[i],
-                channels,
-                outputs,
-                filter_size);
-            this->m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
             auto conv_desc_multi = convolve_init(
                 this->m_handle[i],
                 channels,
@@ -518,12 +502,6 @@ void BackendCuDNN<net_t>::push_convolve(
     if (outputs == Network::OUTPUTS_VALUE) {
         this->m_layers[layer].is_value = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_single = convolve_init(
-                this->m_handle[i],
-                channels,
-                outputs,
-                filter_size);
-            this->m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
             auto conv_desc_multi = convolve_init(
                 this->m_handle[i],
                 channels,
@@ -535,12 +513,6 @@ void BackendCuDNN<net_t>::push_convolve(
     } else {
         this->m_layers[layer].is_policy = true;
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
-            auto conv_desc_single = convolve_init(
-                this->m_handle[i],
-                channels,
-                outputs,
-                filter_size);
-            this->m_layers[layer].conv_desc_single.emplace_back(conv_desc_single);
             auto conv_desc_multi = convolve_init(
                 this->m_handle[i],
                 channels,
@@ -590,28 +562,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 if (!layer.is_residual_block || layer_i == 1) {
                     max_wsize = std::max(
                         max_wsize,
-                        layer.conv_desc_single[i]->workspace_size);
-                    max_wsize = std::max(
-                        max_wsize,
                         layer.conv_desc_multi[i]->workspace_size);
-                    if (cfg_backend == backend_t::CUDNNGRAPH) {
-                        if (layer.conv_no_relu_desc_single.size() > 0) {
-                            max_wsize = std::max(
-                                max_wsize,
-                                layer.conv_no_relu_desc_single[i]->workspace_size);
-                            max_wsize = std::max(
-                                max_wsize,
-                                layer.conv_no_relu_desc_multi[i]->workspace_size);
-                        }
-                        if (layer.conv_add_relu_desc_single.size() > 0) {
-                            max_wsize = std::max(
-                                max_wsize,
-                                layer.conv_add_relu_desc_single[i]->workspace_size);
-                            max_wsize = std::max(
-                                max_wsize,
-                                layer.conv_add_relu_desc_multi[i]->workspace_size);
-                        }
-                    }
                     max_channels = std::max(
                         max_channels,
                         std::max(layer.channels, layer.outputs));
@@ -766,32 +717,17 @@ void BackendCuDNN<net_t>::forward_activations(
             assert(niter != std::end(this->m_layers));
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
-
-            if (batch_size == 1) {
-                convolveActivation(
-                    tid,
-                    InBuffer,
-                    OutBuffer,
-                    conv_weights[0],
-                    nullptr,
-                    conv_biases[0],
-                    workspace,
-                    layer.conv_desc_single[tid],
-                    layer.scale_1,
-                    1.0f);
-            } else {
-                convolveActivation(
-                    tid,
-                    InBuffer,
-                    OutBuffer,
-                    conv_weights[0],
-                    nullptr,
-                    conv_biases[0],
-                    workspace,
-                    layer.conv_desc_multi[tid],
-                    layer.scale_1,
-                    1.0f);
-            }
+            convolveActivation(
+                this->m_handle[tid],
+                InBuffer,
+                OutBuffer,
+                conv_weights[0],
+                nullptr,
+                conv_biases[0],
+                workspace,
+                layer.conv_desc_multi[tid],
+                layer.scale_1,
+                1.0f);
             // output: OutBuffer
         } else if (layer.is_residual_block && !layer.is_se_block) {
             // input: OutBuffer
@@ -801,54 +737,28 @@ void BackendCuDNN<net_t>::forward_activations(
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
             auto conv2_biases  = begin(layer.weights) + 3;
-
-            if (batch_size == 1) {
-                convolveActivation(
-                    tid,
-                    OutBuffer,
-                    InBuffer,
-                    conv1_weights[0],
-                    nullptr,
-                    conv1_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_single[tid],
-                    layer.scale_1,
-                    1.0f);
-                convolveActivation(
-                    tid,
-                    InBuffer,
-                    OutBuffer,
-                    conv2_weights[0],
-                    OutBuffer,          // *residualBuffer: first input
-                    conv2_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_single[tid],
-                    layer.scale_2,
-                    layer.scale_3);
-            } else {
-                convolveActivation(
-                    tid,
-                    OutBuffer,
-                    InBuffer,
-                    conv1_weights[0],
-                    nullptr,
-                    conv1_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_multi[tid],
-                    layer.scale_1,
-                    1.0f);
-                convolveActivation(
-                    tid,
-                    InBuffer,
-                    OutBuffer,
-                    conv2_weights[0],
-                    OutBuffer,          // *residualBuffer: first input
-                    conv2_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_multi[tid],
-                    layer.scale_2,
-                    layer.scale_3);
-            }
+            convolveActivation(
+                this->m_handle[tid],
+                OutBuffer,
+                InBuffer,
+                conv1_weights[0],
+                nullptr,
+                conv1_biases[0],
+                workspace,
+                this->m_layers[1].conv_desc_multi[tid],
+                layer.scale_1,
+                1.0f);
+            convolveActivation(
+                this->m_handle[tid],
+                InBuffer,
+                OutBuffer,
+                conv2_weights[0],
+                OutBuffer,          // *residualBuffer: first input
+                conv2_biases[0],
+                workspace,
+                this->m_layers[1].conv_desc_multi[tid],
+                layer.scale_2,
+                layer.scale_3);
             // output: OutBuffer
         } else if (layer.is_residual_block && layer.is_se_block) {
             // input: OutBuffer
@@ -862,58 +772,32 @@ void BackendCuDNN<net_t>::forward_activations(
             auto fc1_biases    = begin(layer.weights) + 5;
             auto fc2_weights   = begin(layer.weights) + 6;
             auto fc2_biases    = begin(layer.weights) + 7;
-
-            if (batch_size == 1) {
-                convolveActivation(
-                    tid,
-                    OutBuffer,        // *bufferIn
-                    InBuffer,         // *bufferOut
-                    conv1_weights[0],
-                    nullptr,
-                    conv1_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_single[tid],
-                    layer.scale_1,
-                    1.0f);
-                convolveIdentityActivation(
-                    tid,
-                    InBuffer,          // *bufferIn
-                    IdentityOutBuffer, // *bufferOut
-                    conv2_weights[0],
-                    nullptr,
-                    conv2_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_single[tid],
-                    layer.scale_2,
-                    layer.scale_3);
-            } else {
-                convolveActivation(
-                    tid,
-                    OutBuffer,        // *bufferIn
-                    InBuffer,         // *bufferOut
-                    conv1_weights[0],
-                    nullptr,
-                    conv1_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_multi[tid],
-                    layer.scale_1,
-                    1.0f);
-                convolveIdentityActivation(
-                    tid,
-                    InBuffer,          // *bufferIn
-                    IdentityOutBuffer, // *bufferOut
-                    conv2_weights[0],
-                    nullptr,
-                    conv2_biases[0],
-                    workspace,
-                    this->m_layers[1].conv_desc_multi[tid],
-                    layer.scale_2,
-                    layer.scale_3);
-            }
+            convolveActivation(
+                this->m_handle[tid],
+                OutBuffer,        // *bufferIn
+                InBuffer,         // *bufferOut
+                conv1_weights[0],
+                nullptr,
+                conv1_biases[0],
+                workspace,
+                this->m_layers[1].conv_desc_multi[tid],
+                layer.scale_1,
+                1.0f);
+            convolveIdentityActivation(
+                this->m_handle[tid],
+                InBuffer,          // *bufferIn
+                IdentityOutBuffer, // *bufferOut
+                conv2_weights[0],
+                nullptr,
+                conv2_biases[0],
+                workspace,
+                this->m_layers[1].conv_desc_multi[tid],
+                layer.scale_2,
+                layer.scale_3);
             if (typeid(net_t) == typeid(float)) {
                 BE::squeeze_excitation_float(
                     this->m_cublas_handles[tid],
-                    this->m_streams[tid],
+                    cudaStreamPerThread,
                     cudnn_context,
                     OutBuffer,         // *bufferIn1: first input
                     IdentityOutBuffer, // *bufferIn2: second output
@@ -932,7 +816,7 @@ void BackendCuDNN<net_t>::forward_activations(
             } else {
                 BE::squeeze_excitation_half(
                     this->m_cublas_handles[tid],
-                    this->m_streams[tid],
+                    cudaStreamPerThread,
                     cudnn_context,
                     OutBuffer,         // *bufferIn1: first input
                     IdentityOutBuffer, // *bufferIn2: second output
@@ -952,34 +836,20 @@ void BackendCuDNN<net_t>::forward_activations(
             std::swap(InBuffer, OutBuffer);
             // output: OutBuffer
         } else {
+            // input: OutBuffer(net_t is float or __half)
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
-            // input: OutBuffer(net_t is float or __half)
-            if (batch_size == 1) {
-                convolveActivation(
-                    tid,
-                    OutBuffer,        // *bufferIn
-                    InBuffer,         // *bufferOut
-                    conv_weights[0],
-                    nullptr,
-                    conv_biases[0],
-                    workspace,
-                    layer.conv_desc_single[tid],
-                    layer.scale_1,
-                    1.0f);
-            } else {
-                convolveActivation(
-                    tid,
-                    OutBuffer,        // *bufferIn
-                    InBuffer,         // *bufferOut
-                    conv_weights[0],
-                    nullptr,
-                    conv_biases[0],
-                    workspace,
-                    layer.conv_desc_multi[tid],
-                    layer.scale_1,
-                    1.0f);
-            }
+            convolveActivation(
+                this->m_handle[tid],
+                OutBuffer,        // *bufferIn
+                InBuffer,         // *bufferOut
+                conv_weights[0],
+                nullptr,
+                conv_biases[0],
+                workspace,
+                layer.conv_desc_multi[tid],
+                layer.scale_1,
+                1.0f);
             if (niter == std::end(this->m_layers)) {
                 // Value input: InBuffer
                 checkCUDA(cudaMemcpyAsync(
@@ -1003,7 +873,6 @@ void BackendCuDNN<net_t>::forward_activations(
             }
         }
     }
-
     // Asynchronously cudaMemcpyAsync
     cudaStreamSynchronize(cudaStreamPerThread);
     // input: val_net_t(net_t), pol_net_t(net_t)

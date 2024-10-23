@@ -710,10 +710,13 @@ void BackendTRT<net_t>::push_weights(
         (void **)&device_mem,
         weights.size() * sizeof(float))
     );
-    checkCUDA(cudaMemcpy(device_mem,
-                         (float *)&weights[0],
-                         weights.size() * sizeof(float),
-                         cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpyAsync(
+        device_mem,
+        (float *)&weights[0],
+        weights.size() * sizeof(float),
+        cudaMemcpyHostToDevice,
+        cudaStreamPerThread)
+    );
     this->m_layers.back().weights.emplace_back(device_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }
@@ -746,10 +749,13 @@ void BackendTRT<net_t>::push_weights_col_major(
         (void **)&device_mem,
         weights.size() * sizeof(float))
     );
-    checkCUDA(cudaMemcpy(device_mem,
-                         (float *)&transposed_weights[0],
-                         weights.size() * sizeof(float),
-                         cudaMemcpyHostToDevice));
+    checkCUDA(cudaMemcpyAsync(
+        device_mem,
+        (float *)&transposed_weights[0],
+        weights.size() * sizeof(float),
+        cudaMemcpyHostToDevice,
+        cudaStreamPerThread)
+    );
     this->m_layers.back().weights.emplace_back(device_mem);
     this->m_layers.back().weights_size.emplace_back((int64_t)weights.size());
 }

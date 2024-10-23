@@ -399,7 +399,7 @@ void GTP::setup_default_parameters() {
     cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
     cfg_softmax_temp = 1.0f;       // --softmax_temp
     cfg_fpu_reduction = 0.25f;     // --fpu_reduction
-    cfg_cut_policy = 0.0001f;      // --cut_policy
+    cfg_cut_policy = 0.0f;         // --cut_policy
     // see UCTSearch::should_resign
     cfg_resignpct = -1;            // -r, --resignpct
     cfg_noise = false;             // --noise
@@ -428,7 +428,7 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones
     cfg_ladder_depth = 200;     // --ladder_depth
-    cfg_ladder_penalty = 0.95f; // --ladder_penalty
+    cfg_ladder_penalty = 1.0f;  // --ladder_penalty
 
     cfg_analyze_tags = AnalyzeTags{};
 

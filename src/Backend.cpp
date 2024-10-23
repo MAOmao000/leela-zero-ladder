@@ -560,15 +560,12 @@ void Backend<net_t>::initialize(
     m_model_hash = model_hash;
 
     for (auto i = 0; i < m_num_worker_threads; i++) {
-        cudaStream_t stream;
-        checkCUDA(cudaStreamCreate(&stream));
-        m_streams.emplace_back(stream);
         if (cfg_backend == backend_t::TENSORRT) {
             continue;
         }
         cudnnHandle_t cudnn;
         checkCUDNN(cudnnCreate(&cudnn));
-        checkCUDNN(cudnnSetStream(cudnn, stream));
+        checkCUDNN(cudnnSetStream(cudnn, cudaStreamPerThread));
         m_handle.emplace_back(cudnn);
         if (net_type == NetworkType::MINIGO_SE) {
             cublasHandle_t cublas;
@@ -577,7 +574,7 @@ void Backend<net_t>::initialize(
             if (m_tensorcore) {
                 checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
             }
-            checkCUBLAS(cublasSetStream(cublas, stream));
+            checkCUBLAS(cublasSetStream(cublas, cudaStreamPerThread));
             m_cublas_handles.emplace_back(cublas);
         }
     }
