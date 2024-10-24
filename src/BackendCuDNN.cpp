@@ -710,11 +710,9 @@ void BackendCuDNN<net_t>::forward_activations(
 
     for (auto iter = std::begin(this->m_layers); iter != std::end(this->m_layers); iter++) {
         const auto& layer = *iter;
-        const auto niter = std::next(iter);
 
         if (layer.is_input_convolution) {
             // input: InBuffer
-            assert(niter != std::end(this->m_layers));
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             convolveActivation(
@@ -732,7 +730,6 @@ void BackendCuDNN<net_t>::forward_activations(
         } else if (layer.is_residual_block && !layer.is_se_block) {
             // input: OutBuffer
             assert(layer.channels == layer.outputs);
-            assert(niter != std::end(this->m_layers));
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -763,7 +760,6 @@ void BackendCuDNN<net_t>::forward_activations(
         } else if (layer.is_residual_block && layer.is_se_block) {
             // input: OutBuffer
             assert(layer.channels == layer.outputs);
-            assert(niter != std::end(this->m_layers));
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -850,7 +846,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 layer.conv_desc[tid],
                 layer.scale_1,
                 1.0f);
-            if (niter == std::end(this->m_layers)) {
+            if (layer.is_value) {
                 // Value input: InBuffer
                 checkCUDA(cudaMemcpyAsync(
                     &val_net_t[0],

@@ -530,10 +530,9 @@ void BackendTRT<net_t>::constructNetwork(
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else {
-            const auto niter = std::next(iter);
             auto weights = begin(layer.weights);
             auto biases = begin(layer.weights) + 1;
-            if (niter == std::end(this->m_layers)) {
+            if (layer.is_value) {
                 //outValueLayer = buildConvLayer(
                 auto valueConvLayer = buildConvLayer(
                     outputConv,

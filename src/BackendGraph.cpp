@@ -931,7 +931,6 @@ void BackendGraph<net_t>::forward_activations(
 
         if (layer.is_input_convolution) {
             // input: InBuffer
-            assert(niter != std::end(this->m_layers));
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             // Y = ReLU(Convolve(X, W) + B)
@@ -951,7 +950,6 @@ void BackendGraph<net_t>::forward_activations(
         } else if (layer.is_residual_block && !layer.is_se_block) {
             // input: OutBuffer
             assert(layer.channels == layer.outputs);
-            assert(niter != std::end(this->m_layers));
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -999,7 +997,6 @@ void BackendGraph<net_t>::forward_activations(
         } else if (layer.is_residual_block && layer.is_se_block) {
             // input: OutBuffer
             assert(layer.channels == layer.outputs);
-            assert(niter != std::end(this->m_layers));
             auto conv1_weights = begin(layer.weights);
             auto conv1_biases  = begin(layer.weights) + 1;
             auto conv2_weights = begin(layer.weights) + 2;
@@ -1095,7 +1092,6 @@ void BackendGraph<net_t>::forward_activations(
                     workspace)
             );
 #else
-layer.is_value
             if (layer.is_value) {
                 // Y = Convolve(X, W)
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
