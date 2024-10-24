@@ -1115,7 +1115,7 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     }
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        if (ladder_map[sym_idx]) {
+        if (ladder_map[sym_idx] && outputs[idx] > 0.1f) {
             result.policy[sym_idx] = -1.0f;
             if (result.winrate == winrate) {
                 // Winning rate in the ladder situation
