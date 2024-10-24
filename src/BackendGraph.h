@@ -114,6 +114,23 @@ private:
         const size_t batch_size = 1
     );
 
+#ifndef _WIN32
+    std::shared_ptr<conv_descriptor> convolve_value_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const int filter_size,
+        const size_t batch_size = 1
+    );
+
+    std::shared_ptr<conv_descriptor> bias_value_init(
+        cudnnHandle_t handle,
+        const int channels,
+        const int outputs,
+        const size_t batch_size = 1
+    );
+#endif
+
     void push_weights(
         const size_t layer,
         const std::vector<float>& weights

@@ -22,7 +22,7 @@
 R"(
     __kernel void apply_se(
                   const int channels,
-                  const size_t batch_size,
+                  const int batch_size,
                   __global const net_t * restrict input,
                   __global net_t * restrict residual,
                   __constant const net_t * restrict fc_out) {

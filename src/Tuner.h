@@ -49,8 +49,8 @@ class Tuner {
     bool m_use_tensorcore = false;
 
 public:
-    std::string tune_sgemm(int m, int n, int k, const size_t batch_size, int runs = 4);
-    std::string load_sgemm_tuners(int m, int n, int k, const size_t batch_size);
+    std::string tune_sgemm(int m, int n, int k, const int batch_size, int runs = 4);
+    std::string load_sgemm_tuners(int m, int n, int k, const int batch_size);
 
     // list of device types that was tuned in this run.
     // This is to prevent the same device from being tuned multiple times.
@@ -66,7 +66,7 @@ public:
     void enable_tensorcore();
 
 private:
-    void store_sgemm_tuners(int m, int n, int k, const size_t batch_size,
+    void store_sgemm_tuners(int m, int n, int k, const int batch_size,
                             std::string tuners);
     bool valid_config_sgemm(Parameters p, bool exhaustive);
     std::string parameters_to_defines(const Parameters& p);
@@ -74,7 +74,7 @@ private:
     Parameters get_parameters_by_int(const std::vector<Configurations>& opts,
                                      int n);
     std::string sgemm_tuners_from_line(std::string line, int m, int n, int k,
-                                       const size_t batch_size);
+                                       const int batch_size);
     std::vector<Parameters> build_valid_params();
 };
 

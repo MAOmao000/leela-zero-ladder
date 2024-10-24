@@ -117,7 +117,6 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::bias_value_init(
     cudnnHandle_t handle,
     const int channels,
     const int outputs,
-    const int filter_size,
     const size_t batch_size) {
 
     int64_t n = batch_size;
@@ -125,33 +124,27 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::bias_value_init(
     int64_t h = BOARD_SIZE;
     int64_t w = BOARD_SIZE;
     int64_t k = outputs;
-    int64_t r = filter_size;
-    int64_t s = filter_size;
     fe::DataType_t data_type;
     fe::DataType_t compute_type;
-    fe::DataType_t conv_compute_type;
     fe::DataType_t intermediate_type;
     std::shared_ptr<conv_descriptor> conv_desc = std::make_shared<conv_descriptor>();
 
     if (typeid(net_t) == typeid(float)) {
         data_type = fe::DataType_t::FLOAT;
         compute_type = fe::DataType_t::FLOAT;
-        conv_compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::FLOAT;
     } else {
         data_type = fe::DataType_t::HALF;
         compute_type = fe::DataType_t::FLOAT;
-        conv_compute_type = fe::DataType_t::HALF;
         intermediate_type = fe::DataType_t::HALF;
     }
-    auto pad_size = filter_size / 2;
     auto build_new_graph = [=](cudnnHandle_t handle) {
         auto graph = fe::graph::Graph();
         graph.set_io_data_type(data_type)
               .set_intermediate_data_type(intermediate_type)
               .set_compute_data_type(compute_type);
         std::shared_ptr<fe::graph::Tensor_attributes> X;
-        std::shared_ptr<fe::graph::Tensor_attributes> W;
+        std::shared_ptr<fe::graph::Tensor_attributes> B;
         std::shared_ptr<fe::graph::Tensor_attributes> Y;
 
         X = graph.tensor(fe::graph::Tensor_attributes()
@@ -729,7 +722,6 @@ void BackendGraph<net_t>::push_convolve(
                 this->m_handle[i],
                 channels,
                 outputs,
-                filter_size,
                 cfg_batch_size);
             this->m_layers[layer].bias_desc.emplace_back(bias_desc);
 #endif
@@ -936,7 +928,6 @@ void BackendGraph<net_t>::forward_activations(
     cudaStreamSynchronize(cudaStreamPerThread);
     for (auto iter = std::begin(this->m_layers); iter != std::end(this->m_layers); iter++) {
         const auto& layer = *iter;
-        const auto niter = std::next(iter);
 
         if (layer.is_input_convolution) {
             // input: InBuffer
@@ -1111,7 +1102,7 @@ layer.is_value
                     variant_pack1 = {
                         {layer.conv_desc[tid]->X, OutBuffer},
                         {layer.conv_desc[tid]->W, conv_weights[0]},
-                        {layer.conv_desc[tid]->Y, InBuffer} };
+                        {layer.conv_desc[tid]->Y, TempBuffer} };
                 checkCUDNNFE(
                     layer.conv_desc[tid]->graph.execute(
                         this->m_handle[tid],
@@ -1121,7 +1112,7 @@ layer.is_value
                 // Y = ReLU(X + B)
                 std::unordered_map<std::shared_ptr<fe::graph::Tensor_attributes>, void*>
                     variant_pack2 = {
-                        {layer.bias_desc[tid]->X, OutBuffer},
+                        {layer.bias_desc[tid]->X, TempBuffer},
                         {layer.bias_desc[tid]->B, conv_biases[0]},
                         {layer.bias_desc[tid]->Y, InBuffer} };
                 checkCUDNNFE(

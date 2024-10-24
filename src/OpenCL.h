@@ -186,7 +186,7 @@ public:
     void forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
-                 OpenCLContext& opencl_context, const size_t batch_size = 1);
+                 OpenCLContext& opencl_context, const int batch_size = 1);
 
 private:
     using weight_slice_t = std::vector<cl::Buffer>::const_iterator;
@@ -203,7 +203,7 @@ private:
                    cl::Buffer& bufferM, weight_slice_t weights,
                    cl::Buffer* bufferResidual,
                    weight_slice_t bn_weights, bool skip_in_transform,
-                   bool fuse_in_transform, bool store_inout, bool relu, const size_t batch_size);
+                   bool fuse_in_transform, bool store_inout, bool relu, const int batch_size);
 
     void squeeze_excitation(OpenCLContext & opencl_context,
         int channels,
@@ -213,7 +213,7 @@ private:
         cl::Buffer& bufferTemp2,
         weight_slice_t weights,
         cl::Buffer& bufferResidual,
-        const size_t batch_size);
+        const int batch_size);
 
     void innerproduct(OpenCLContext & opencl_context,
         const cl::Buffer& input,
@@ -222,13 +222,13 @@ private:
         cl::Buffer& output,
         int inputs, int outputs,
         bool relu,
-        const size_t batch_size);
+        const int batch_size);
 
     void convolve1(OpenCLContext& opencl_context, int channels, int outputs,
                    cl::Buffer& bufferInput,
                    cl::Buffer& bufferOutput,
                    cl::Buffer& bufferMerge,
-                   weight_slice_t weights, const size_t batch_size);
+                   weight_slice_t weights, const int batch_size);
 
     OpenCL<net_t>& m_opencl;
 

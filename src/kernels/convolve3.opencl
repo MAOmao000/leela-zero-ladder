@@ -172,7 +172,7 @@ void __in_transform_eq(real x[WINOGRAD_ALPHA][WINOGRAD_ALPHA], __global net_t * 
 
 __kernel void in_transform(__global net_t * restrict in, __global net_t * restrict V,
                            const int C, const int Cpad,
-                           const int Ppad, const size_t batch_size) {
+                           const int Ppad, const int batch_size) {
     const int W = BOARD_SIZE;
     const int H = BOARD_SIZE;
     const int P = WTILES * WTILES;
@@ -220,7 +220,7 @@ void out_transform_fused_bn(__global const net_t * restrict M,
                                      __global net_t * restrict Y,
                                      const int K,
                                      const int Kpad, const int Ppad,
-                                     const size_t batch_size,
+                                     const int batch_size,
                                      __global const net_t * restrict residual,
                                      __constant const net_t * restrict means,
                                      __constant const net_t * restrict stddivs,
