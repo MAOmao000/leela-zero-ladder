@@ -61,7 +61,7 @@ if(GccSpecificFlags)
         -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy -Wno-inconsistent-missing-override")
   else()
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-maybe-uninitialized \
-        -Wno-mismatched-tags")
+        -Wno-mismatched-tags -Wno-deprecated-copy")
   endif()
   set(GCC_FLAGS "${GCC_COMPILE_FLAGS} ${GCC_DISABLED_WARNING_COMPILE_FLAGS}")
   set(CMAKE_CXX_FLAGS_DEBUG "${GCC_FLAGS} -g -Og")
