@@ -365,11 +365,11 @@ void GTP::setup_default_parameters() {
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
 #ifdef USE_OPENCL
-    cfg_gpus = {};                // --gpu
-    cfg_sgemm_exhaustive = false; // --full-tuner
-    cfg_tune_only = false;        // --tune-only
-    cfg_cache_plan = false;       // --cache-plan
+    cfg_gpus = {};                       // --gpu
+    cfg_sgemm_exhaustive = false;        // --full-tuner
+    cfg_tune_only = false;               // --tune-only
 #ifdef USE_TENSOR_RT
+    cfg_cache_plan = true;               // --trt-cache
     cfg_backend = backend_t::TENSORRT;   // --backend
 #else
 #ifdef USE_CUDNN
@@ -423,7 +423,7 @@ void GTP::setup_default_parameters() {
 
     cfg_use_ray_ladder = false; // --use_ray_ladder
     cfg_ladder_check = true;    // --no_ladder_check
-    cfg_ladder_defense = 10;    // --ladder_defense
+    cfg_ladder_defense = 20;    // --ladder_defense
     cfg_ladder_offense = 10;    // --ladder_offense
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones

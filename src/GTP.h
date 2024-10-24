@@ -158,8 +158,11 @@ extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
 #ifdef USE_TENSOR_RT
 extern trtLog::Logger cfg_logger;
-#endif
+enum class trtcache_t {
+    PLAN, TIMING
+};
 extern bool cfg_cache_plan;
+#endif
 #ifdef USE_HALF
 enum class precision_t {
     AUTO, SINGLE, HALF

@@ -130,16 +130,17 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            if (cfg_backend == backend_t::CUDNNGRAPH
-                || cfg_backend == backend_t::CUDNN) {
-                cfg_batch_size = cfg_num_threads * 5 / 3;
-            } else {
+            if (cfg_backend == backend_t::TENSORRT) {
                 cfg_batch_size = cfg_num_threads * 5 / 6;
+            } else {
+                cfg_batch_size = cfg_num_threads * 5 / 12;
+            }
+            if (cfg_batch_size == 0) {
+                cfg_batch_size = 1;
             }
         }
 
-        if (cfg_backend == backend_t::CUDNNGRAPH
-            || cfg_backend == backend_t::CUDNN) {
+        if (cfg_backend == backend_t::TENSORRT) {
             cfg_num_threads =
                 std::min(cfg_max_threads, cfg_batch_size * gpu_count * 1);
         } else {
@@ -212,7 +213,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #endif
                     "] Which backend engine to use.")
 #ifdef USE_TENSOR_RT
-        ("cache-plan", "Use TensorRT cache plan.")
+        ("trt-cache", po::value<std::string>()->default_value("plan"),
+            "Which to use: plan cache or timing cache? (plan/timing)")
 #endif
 #ifdef USE_CUDNN
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
@@ -489,9 +491,17 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             exit(EXIT_FAILURE);
         }
         cfg_NCHW = true;
-        if (vm.count("cache-plan")) {
+#ifdef USE_TENSOR_RT
+        auto trt_cache = vm["trt-cache"].as<std::string>();
+        if ("plan" == trt_cache) {
             cfg_cache_plan = true;
+        } else if ("timing" == trt_cache) {
+            cfg_cache_plan = false;
+        } else {
+            printf("Unexpected option for --trt-cache, expecting plan/timing.\n");
+            exit(EXIT_FAILURE);
         }
+#endif
         calculate_thread_count_gpu(vm);
         myprintf("Using TensorRT batch size of %d\n", cfg_batch_size);
     } else if (cfg_backend == backend_t::CUDNNGRAPH) {
