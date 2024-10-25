@@ -292,7 +292,6 @@ bool BackendTRT<net_t>::build(
         }
         std::unique_ptr<BackendContext> context = std::make_unique<BackendContext>();
         context->mContext.reset(engine->createExecutionContext());
-        context->mContext->setOptimizationProfileAsync(0, cudaStreamPerThread);
         for (auto j = 0; j < engine->getNbIOTensors(); j++) {
             void* buffer = nullptr;
             auto name = engine->getIOTensorName(j);
@@ -893,6 +892,8 @@ void BackendTRT<net_t>::forward_activations(
 
     (void) tid;
 
+cudaStream_t stream;
+cudaStreamCreate(&stream);
     const auto inSize =
         batch_size *
         sizeof(net_t) *

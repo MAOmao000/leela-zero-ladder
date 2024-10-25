@@ -429,11 +429,7 @@ void GPUScheduler<net_t>::forward(
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
         if (m_single_eval_in_progress.load()) {
-            if (cfg_backend == backend_t::OPENCL) {
-                m_waittime += 2;
-            } else {
-                m_waittime += 2;
-            }
+            m_waittime += 2;
         }
     }
     m_cv.notify_one();
@@ -503,7 +499,6 @@ void GPUScheduler<net_t>::batch_worker(
                         count = 1;
                     } else {
                         count = m_forward_queue.size();
-                        //m_waittime = 10;
                     }
                     // Waited long enough but couldn't form a batch.
                     // Check if there is any other single eval in progress,
