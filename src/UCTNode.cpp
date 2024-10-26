@@ -49,6 +49,10 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
+// RAY's ladder check
+#include "Ladder.h"
+// Leela's ladder check
+#include "LadderDetection.h"
 
 using namespace Utils;
 
@@ -100,12 +104,24 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     std::vector<Network::PolicyVertexPair> nodelist;
 
+    char ladder_map[NUM_INTERSECTIONS] = {};
+    if (cfg_use_ray_ladder
+        && (cfg_ladder_defense || cfg_ladder_offense)
+        && cfg_ladder_check) {
+        LadderExtension(&state, ladder_map);
+    } else if (!cfg_use_ray_ladder
+        && (cfg_ladder_defense || cfg_ladder_offense)
+        && cfg_ladder_check) {
+        LadderDetection(&state, ladder_map);
+    }
+
     auto legal_sum = 0.0f;
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
         if (state.is_move_legal(to_move, vertex)
+            && !ladder_map[i]
             && raw_netlist.policy[i] > cfg_cut_policy) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];

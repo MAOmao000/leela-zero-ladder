@@ -44,6 +44,10 @@
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
+// RAY's ladder check
+#include "Ladder.h"
+// Leela's ladder check
+#include "LadderDetection.h"
 
 /*
  * These functions belong to UCTNode but should only be called on the root node
@@ -222,6 +226,35 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // Remove illegal moves, so the root move list is correct.
     // This also removes a lot of special cases.
     kill_superkos(root_state);
+
+    char ladder_map[NUM_INTERSECTIONS] = {};
+    if (cfg_use_ray_ladder
+        && (cfg_ladder_defense || cfg_ladder_offense)
+        && cfg_ladder_check) {
+        LadderExtension(&root_state, ladder_map);
+    } else if (!cfg_use_ray_ladder
+        && (cfg_ladder_defense || cfg_ladder_offense)
+        && cfg_ladder_check) {
+        LadderDetection(&root_state, ladder_map);
+    }
+
+    for (auto& child : m_children) {
+        auto move = child->get_move();
+        if (move != FastBoard::PASS) {
+            auto xy = root_state.board.get_xy(move);
+            if (!root_state.is_move_legal(color, move) ||
+                ladder_map[xy.second * BOARD_SIZE + xy.first]) {
+                // Don't delete nodes for now, just mark them invalid.
+                child->invalidate();
+            }
+        }
+    }
+    // Now do the actual deletion.
+    m_children.erase(
+        std::remove_if(begin(m_children), end(m_children),
+                       [](const auto &child) { return !child->valid(); }),
+        end(m_children)
+    );
 
     if (cfg_noise) {
         // Adjust the Dirichlet noise's alpha constant to the board size

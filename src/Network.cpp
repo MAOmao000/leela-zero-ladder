@@ -77,10 +77,6 @@
 #include "ThreadPool.h"
 #include "Timing.h"
 #include "Utils.h"
-// RAY's ladder check
-#include "Ladder.h"
-// Leela's ladder check
-#include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
@@ -1102,29 +1098,9 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     // Map TanH output range [-1..1] to [0..1] range
     const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
     result.winrate = winrate;
-
-    char ladder_map[NUM_INTERSECTIONS] = {};
-    if (cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderExtension(state, ladder_map);
-    } else if (!cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderDetection(state, ladder_map);
-    }
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        if (ladder_map[sym_idx] && outputs[idx] > 0.1f) {
-            result.policy[sym_idx] = -1.0f;
-            if (result.winrate == winrate) {
-                // Winning rate in the ladder situation
-                //   = winning rate of the network * ladder_penalty.
-                result.winrate *= cfg_ladder_penalty;
-            }
-        } else {
-            result.policy[sym_idx] = outputs[idx];
-        }
+        result.policy[sym_idx] = outputs[idx];
     }
     result.policy_pass = outputs[NUM_INTERSECTIONS];
     return result;
