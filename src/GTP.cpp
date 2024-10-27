@@ -125,7 +125,6 @@ int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
-float cfg_ladder_penalty;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -428,7 +427,6 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones
     cfg_ladder_depth = 200;     // --ladder_depth
-    cfg_ladder_penalty = 1.0f;  // --ladder_penalty
 
     cfg_analyze_tags = AnalyzeTags{};
 
