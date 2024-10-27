@@ -111,12 +111,12 @@ static void calculate_thread_count_gpu(
         if (vm["batchsize"].as<unsigned int>() > 0) {
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
-            if (cfg_backend == backend_t::OPENCL) {
+            if (cfg_backend == backend_t::TENSORRT) {
                 cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 2) - 1) / (gpu_count * 2);
+                    (cfg_num_threads + (gpu_count * 2) - 1) / gpu_count;
             } else {
                 cfg_batch_size =
-                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 1);
+                    (cfg_num_threads + (gpu_count * 1) - 1) / (gpu_count * 2);
             }
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
@@ -129,17 +129,22 @@ static void calculate_thread_count_gpu(
             cfg_batch_size = vm["batchsize"].as<unsigned int>();
         } else {
             calculate_thread_count_cpu(vm);
-            if (cfg_backend == backend_t::OPENCL) {
-                cfg_batch_size = cfg_num_threads * 5 / 12;
-            } else {
+            if (cfg_backend == backend_t::TENSORRT) {
                 cfg_batch_size = cfg_num_threads * 5 / 6;
+            } else {
+                cfg_batch_size = cfg_num_threads * 5 / 12;
             }
             if (cfg_batch_size == 0) {
                 cfg_batch_size = 1;
             }
         }
-        cfg_num_threads =
-            std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        if (cfg_backend == backend_t::TENSORRT) {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count);
+        } else {
+            cfg_num_threads =
+                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+        }
     }
     if (cfg_num_threads < cfg_batch_size) {
         printf(
@@ -225,9 +230,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
-        ("ladder_penalty", po::value<float>()->default_value(cfg_ladder_penalty),
-                      "Winning rate in the ladder situation:\n"
-                      "winning rate of the network * ladder_penalty")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -685,10 +687,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_depth")) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
-    }
-
-    if (vm.count("ladder_penalty")) {
-        cfg_ladder_penalty = vm["ladder_penalty"].as<float>();
     }
 
     auto out = std::stringstream{};
