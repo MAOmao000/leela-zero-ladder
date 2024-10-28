@@ -44,9 +44,6 @@
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
-// RAY's ladder check
-#include "Ladder.h"
-// Leela's ladder check
 #include "LadderDetection.h"
 
 /*
@@ -228,15 +225,7 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     kill_superkos(root_state);
 
     char ladder_map[NUM_INTERSECTIONS] = {};
-    if (cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderExtension(&root_state, ladder_map);
-    } else if (!cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderDetection(&root_state, ladder_map);
-    }
+    LadderDetection(&root_state, ladder_map);
 
     for (auto& child : m_children) {
         auto move = child->get_move();
