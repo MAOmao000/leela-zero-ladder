@@ -892,8 +892,6 @@ void BackendTRT<net_t>::forward_activations(
 
     (void) tid;
 
-cudaStream_t stream;
-cudaStreamCreate(&stream);
     const auto inSize =
         batch_size *
         sizeof(net_t) *
