@@ -51,10 +51,6 @@
 #include "Utils.h"
 #include "Zobrist.h"
 
-// RAY's ladder check
-#include "GoBoard.h"
-#include "ZobristHash.h"
-
 using namespace Utils;
 
 static void license_blurb() {
@@ -218,7 +214,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("channel-first", "Use Channel first format (NCHW) for tensor format.")
 #endif
 #endif
-        ("use_ray_ladder", "Enable RAY's ladder check.")
         ("no_ladder_check", "Disable ladder check.")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
@@ -265,9 +260,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("puct", po::value<float>())
         ("logpuct", po::value<float>())
         ("logconst", po::value<float>())
-        ("puct_init", po::value<float>())
-        ("puct_base", po::value<float>())
-        ("puct_log", po::value<float>())
         ("dynamic_k_factor", po::value<float>())
         ("dynamic_k_base", po::value<float>())
         ("puct_stdev_scale", po::value<float>())
@@ -277,10 +269,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
-        ("cut_policy", po::value<float>())
-        ("uct_search", po::value<std::string>()->default_value("leela_zero"),
-                       "[alpha_zero|leela_zero] Select whether to use AlphaZero or LeelaZero for cpuct expression.")
-        ("use_stdev_uct", "Enable sample variance in UCT formula.");
+        ("no_use_stdev_uct", "Disable sample variance in UCT formula.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -359,15 +348,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("logconst")) {
         cfg_logconst = vm["logconst"].as<float>();
     }
-    if (vm.count("puct_init")) {
-        cfg_puct_init = vm["puct_init"].as<float>();
-    }
-    if (vm.count("puct_base")) {
-        cfg_puct_base = vm["puct_base"].as<float>();
-    }
-    if (vm.count("puct_log")) {
-        cfg_puct_log = vm["puct_log"].as<float>();
-    }
     if (vm.count("dynamic_k_factor")) {
         cfg_dynamic_k_factor = vm["dynamic_k_factor"].as<float>();
     }
@@ -395,22 +375,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("lcb_visits_ratio")) {
         cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
     }
-    if (vm.count("cut_policy")) {
-        cfg_cut_policy = vm["cut_policy"].as<float>();
-    }
-    if (vm.count("uct_search")) {
-        auto uct_search = vm["uct_search"].as<std::string>();
-        if ("alpha_zero" == uct_search) {
-            cfg_alpha_zero_search = true;
-        } else if ("leela_zero" == uct_search) {
-            cfg_alpha_zero_search = false;
-        } else {
-            printf("Unexpected option for --uct_search, expecting alpha_zero/leela_zero\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-    if (vm.count("use_stdev_uct")) {
-        cfg_use_stdev_uct = true;
+    if (vm.count("no_use_stdev_uct")) {
+        cfg_use_stdev_uct = false;
     }
 #endif
 
@@ -661,10 +627,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     // the best if we have introduced noise there exactly to explore more.
     cfg_fpu_root_reduction = cfg_noise ? 0.0f : cfg_fpu_reduction;
 
-    if (vm.count("use_ray_ladder")) {
-        cfg_use_ray_ladder = true;
-    }
-
     if (vm.count("no_ladder_check")) {
         cfg_ladder_check = false;
     }
@@ -757,15 +719,6 @@ int main(int argc, char* argv[]) {
     }
 
     init_global_objects();
-
-    if (cfg_use_ray_ladder &&
-        cfg_ladder_check &&
-        cfg_ladder_defense + cfg_ladder_offense) {
-
-        InitializeConst();
-        InitializeHash();
-        InitializeUctHash();
-    }
 
     auto maingame = std::make_unique<GameState>();
 
