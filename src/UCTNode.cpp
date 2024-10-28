@@ -49,9 +49,6 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
-// RAY's ladder check
-#include "Ladder.h"
-// Leela's ladder check
 #include "LadderDetection.h"
 
 using namespace Utils;
@@ -105,15 +102,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     std::vector<Network::PolicyVertexPair> nodelist;
 
     char ladder_map[NUM_INTERSECTIONS] = {};
-    if (cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderExtension(&state, ladder_map);
-    } else if (!cfg_use_ray_ladder
-        && (cfg_ladder_defense || cfg_ladder_offense)
-        && cfg_ladder_check) {
-        LadderDetection(&state, ladder_map);
-    }
+    LadderDetection(&state, ladder_map);
 
     auto legal_sum = 0.0f;
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
@@ -121,8 +110,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
         if (state.is_move_legal(to_move, vertex)
-            && !ladder_map[i]
-            && raw_netlist.policy[i] > cfg_cut_policy) {
+            && !ladder_map[i]) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
@@ -377,82 +365,6 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             }
         }
         auto cpuct = cfg_puct * stdev;
-        const auto psa = child.get_policy();
-        const auto denom = 1.0f + child.get_visits();
-        const auto puct = cpuct * psa * (numerator / denom);
-        const auto value = winrate + puct;
-        assert(value > std::numeric_limits<double>::lowest());
-
-        if (value > best_value) {
-            best_value = value;
-            best = &child;
-        }
-    }
-
-    assert(best != nullptr);
-    best->inflate();
-    return best->get();
-}
-
-// See https://github.com/tensorflow/minigo/blob/master/mcts.py
-UCTNode* UCTNode::minigo_uct_select_child(const int color, const bool is_root) {
-    wait_expanded();
-
-    // Count parentvisits manually to avoid issues with transpositions.
-    auto total_visited_policy = 0.0f;
-    auto parentvisits = size_t{0};
-    for (const auto& child : m_children) {
-        if (child.valid()) {
-            parentvisits += child.get_visits();
-            if (child.get_visits() > 0) {
-                total_visited_policy += child.get_policy();
-            }
-        }
-    }
-    const auto numerator = std::sqrt(double(parentvisits));
-    const auto fpu_reduction =
-        (is_root ? cfg_fpu_root_reduction : cfg_fpu_reduction)
-        * std::sqrt(total_visited_policy);
-    // Estimated eval for unknown nodes = parent (not NN) eval - reduction
-    const auto fpu_eval = get_raw_eval(color) - fpu_reduction;
-
-    auto best = static_cast<UCTNodePointer*>(nullptr);
-    auto best_value = std::numeric_limits<double>::lowest();
-
-    for (auto& child : m_children) {
-        if (!child.active()) {
-            continue;
-        }
-        auto winrate = fpu_eval;
-        if (child.is_inflated()
-            && child->m_expand_state.load() == ExpandState::EXPANDING) {
-            // Someone else is expanding this node, never select it
-            // if we can avoid so, because we'd block on it.
-            winrate = -1.0f - fpu_reduction;
-        } else {
-            if (child.get_visits() > 0) {
-                winrate = child.get_eval(color);
-            }
-        }
-        auto stdev = 1.0f;
-        if (cfg_use_stdev_uct) {
-            // See
-            // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            if (child.get_visits() < 2) {
-                stdev = 1.0f;
-            } else {
-                auto variance = child.get_eval_variance(1.0f);
-                auto stddev = std::sqrt(variance);
-                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
-                k = std::max(0.5, (double)k);
-                k = std::min(1.4, (double)k);
-                auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
-                stdev = alpha * k + (1.0f - alpha) * 1.0f;
-            }
-        }
-        auto cpuct = cfg_puct_init
-                   + cfg_puct_log * std::log((1.0f + double(parentvisits) + cfg_puct_base) / cfg_puct_base);
-        cpuct *= stdev;
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);

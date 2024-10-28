@@ -273,26 +273,14 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        if (m_network.get_network_type() == NetworkType::MINIGO_SE || cfg_alpha_zero_search) {
-            auto next = node->minigo_uct_select_child(color, node == m_root.get());
-            auto move = next->get_move();
+        auto next = node->uct_select_child(color, node == m_root.get());
+        auto move = next->get_move();
 
-            currstate.play_move(move);
-            if (move != FastBoard::PASS && currstate.superko()) {
-                next->invalidate();
-            } else {
-                result = play_simulation(currstate, next);
-            }
+        currstate.play_move(move);
+        if (move != FastBoard::PASS && currstate.superko()) {
+            next->invalidate();
         } else {
-            auto next = node->uct_select_child(color, node == m_root.get());
-            auto move = next->get_move();
-
-            currstate.play_move(move);
-            if (move != FastBoard::PASS && currstate.superko()) {
-                next->invalidate();
-            } else {
-                result = play_simulation(currstate, next);
-            }
+            result = play_simulation(currstate, next);
         }
     }
 
@@ -764,7 +752,6 @@ bool UCTSearch::stop_thinking(const int elapsed_centis,
                               const int time_for_move) const {
     return m_playouts >= m_maxplayouts || m_root->get_visits() >= m_maxvisits
            || (elapsed_centis >= time_for_move && m_root->get_visits() >= cfg_min_visits);
-//           || elapsed_centis >= time_for_move;
 }
 
 void UCTWorker::operator()() {

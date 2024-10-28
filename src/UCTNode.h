@@ -62,7 +62,6 @@ public:
     void sort_children(int color, float lcb_min_visits);
     UCTNode& get_best_root_child(int color) const;
     UCTNode* uct_select_child(int color, bool is_root);
-    UCTNode* minigo_uct_select_child(int color, bool is_root);
 
     size_t count_nodes_and_clear_expand_state();
     bool first_visit() const;
