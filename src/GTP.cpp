@@ -95,9 +95,6 @@ precision_t cfg_precision;
 float cfg_puct;
 float cfg_logpuct;
 float cfg_logconst;
-float cfg_puct_init;
-float cfg_puct_base;
-float cfg_puct_log;
 float cfg_stdev_scale;
 float cfg_stdev_prior;
 float cfg_dynamic_k_factor;
@@ -107,7 +104,6 @@ float cfg_fpu_reduction;
 float cfg_fpu_root_reduction;
 float cfg_ci_alpha;
 float cfg_lcb_min_visit_ratio;
-float cfg_cut_policy;
 std::string cfg_weightsfile;
 std::string cfg_logfile;
 FILE* cfg_logfile_handle;
@@ -115,10 +111,8 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
-bool cfg_alpha_zero_search;
 bool cfg_use_stdev_uct;
 
-bool cfg_use_ray_ladder;
 bool cfg_ladder_check;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
@@ -386,19 +380,15 @@ void GTP::setup_default_parameters() {
     cfg_backend = backend_t::NONE; // --backend
     cfg_NCHW = false;              // --channel-first
 #endif
-    cfg_puct = 0.8f;               // --puct
+    cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
-    cfg_puct_init = 1.07f;         // --puct_init
-    cfg_puct_base = 36465.0f;      // --puct_base
-    cfg_puct_log = 1.0f;           // --puct_log;
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
     cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
     cfg_stdev_scale = 0.85f;       // --puct_stdev_scale
     cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
     cfg_softmax_temp = 1.0f;       // --softmax_temp
     cfg_fpu_reduction = 0.25f;     // --fpu_reduction
-    cfg_cut_policy = 0.0f;         // --cut_policy
     // see UCTSearch::should_resign
     cfg_resignpct = -1;            // -r, --resignpct
     cfg_noise = false;             // --noise
@@ -417,10 +407,8 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false; // --cpu-only
 #endif
-    cfg_alpha_zero_search = false; // --uct_search
-    cfg_use_stdev_uct = false;     // --use_stdev_uct
+    cfg_use_stdev_uct = true;   // --no_use_stdev_uct
 
-    cfg_use_ray_ladder = false; // --use_ray_ladder
     cfg_ladder_check = true;    // --no_ladder_check
     cfg_ladder_defense = 10;    // --ladder_defense
     cfg_ladder_offense = 10;    // --ladder_offense
