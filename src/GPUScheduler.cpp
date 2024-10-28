@@ -437,9 +437,6 @@ void GPUScheduler<net_t>::forward(
     if (m_ep) {
         throw NetworkHaltException();
     }
-    if (m_draining) {
-        throw NetworkHaltException();
-    }
 }
 
 #ifndef NDEBUG
