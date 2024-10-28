@@ -1058,20 +1058,16 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
     std::vector<float> policy_data(policy_data_size);
     std::vector<float> value_data(value_data_size);
-    try {
 #ifdef USE_OPENCL_SELFCHECK
-        if (selfcheck) {
-            m_forward_cpu->forward(input_data, policy_data, value_data);
-        } else {
-            m_forward->forward(input_data, policy_data, value_data);
-        }
-#else
+    if (selfcheck) {
+        m_forward_cpu->forward(input_data, policy_data, value_data);
+    } else {
         m_forward->forward(input_data, policy_data, value_data);
-        (void)selfcheck;
-#endif
-    } catch(...) {
-        throw;
     }
+#else
+    m_forward->forward(input_data, policy_data, value_data);
+    (void)selfcheck;
+#endif
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         // Policy and value header Batch Normalization
         batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
