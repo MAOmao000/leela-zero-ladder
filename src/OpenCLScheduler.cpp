@@ -87,15 +87,16 @@ static std::vector<T> zeropad_U(
 }
 
 template <typename net_t>
-OpenCLScheduler<net_t>::OpenCLScheduler()
-{
+OpenCLScheduler<net_t>::OpenCLScheduler() {
     // multi-gpu?
     auto gpus = cfg_gpus;
+
     // An empty GPU list from the command line represents autodetect.
     // Put a minus one GPU index here.
     if (gpus.empty()) {
         gpus = {-1};
     }
+
     auto silent{false};
 
     this->m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
@@ -131,12 +132,14 @@ void OpenCLScheduler<net_t>::initialize(
         cfg_num_threads / cfg_batch_size / (gpus_size + 1) + 1;
     for (auto gnum = size_t{0}; gnum < gpus_size; gnum++) {
         m_opencl[gnum]->initialize(channels, cfg_batch_size, net_type);
+
         for (auto i = unsigned{0}; i < num_worker_threads; i++) {
             auto t =
                 std::thread(&GPUScheduler<net_t>::batch_worker, this, gnum, i);
             this->m_worker_threads.push_back(std::move(t));
         }
     }
+
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
     if (cfg_tune_only) {
@@ -145,8 +148,7 @@ void OpenCLScheduler<net_t>::initialize(
 }
 
 template <typename net_t>
-bool OpenCLScheduler<net_t>::needs_autodetect()
-{
+bool OpenCLScheduler<net_t>::needs_autodetect() {
     for (auto& opencl : m_opencl) {
         // If any card has no native fp16 compute, we'll have to benchmark.
         if (!opencl->has_fp16_compute() && !opencl->has_tensor_cores()) {
@@ -158,19 +160,21 @@ bool OpenCLScheduler<net_t>::needs_autodetect()
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::push_input_convolution(
-    const unsigned int filter_size,
-    const unsigned int channels,
+    const unsigned int filter_size, const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
-    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
-{
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights) {
+
     for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
+
         const auto mwg = tuners[0];
         const auto kwg = tuners[2];
         const auto vwm = tuners[3];
+
         const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
         const auto k_ceil = ceilMultiple(ceilMultiple(channels, kwg), vwm);
+
         const auto Upad = zeropad_U<net_t>(
             weights->m_conv_weights[weight_index],
             outputs,
@@ -191,16 +195,17 @@ void OpenCLScheduler<net_t>::push_input_convolution(
 
 template <typename net_t>
 void OpenCLScheduler<net_t>::push_residual(
-    const unsigned int filter_size,
-    const unsigned int channels,
+    const unsigned int filter_size, const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
     const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
 {
     for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
+
         const auto mwg = tuners[0];
         const auto vwm = tuners[3];
+
         const auto m_ceil = ceilMultiple(ceilMultiple(outputs, mwg), vwm);
         const auto Upad1 =
             zeropad_U<net_t>(weights->m_conv_weights[weight_index],
@@ -228,8 +233,7 @@ void OpenCLScheduler<net_t>::push_residual_se(
     const unsigned int channels,
     const unsigned int outputs,
     const size_t weight_index,
-    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
-{
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights) {
     for (const auto& opencl_net : this->m_networks) {
         const auto tuners = opencl_net->getOpenCL().get_sgemm_tuners();
         const auto mwg = tuners[0];
@@ -272,8 +276,7 @@ void OpenCLScheduler<net_t>::push_convolve(
     const unsigned int filter_size,
     const unsigned int channels,
     const unsigned int outputs,
-    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights)
-{
+    const std::shared_ptr<const ForwardPipe::ForwardPipeWeights> weights) {
     for (const auto& opencl_net : this->m_networks) {
         if (outputs == Network::OUTPUTS_POLICY) {
             opencl_net->push_convolve(

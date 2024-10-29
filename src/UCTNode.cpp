@@ -339,16 +339,15 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (!child.active()) {
             continue;
         }
+
         auto winrate = fpu_eval;
         if (child.is_inflated()
             && child->m_expand_state.load() == ExpandState::EXPANDING) {
             // Someone else is expanding this node, never select it
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
-        } else {
-            if (child.get_visits() > 0) {
-                winrate = child.get_eval(color);
-            }
+        } else if (child.get_visits() > 0) {
+            winrate = child.get_eval(color);
         }
         auto stdev = 1.0f;
         if (cfg_use_stdev_uct) {

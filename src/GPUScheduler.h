@@ -134,7 +134,6 @@ private:
     // set to true when single (non-batch) eval is in progress
     std::atomic<bool> m_single_eval_in_progress{false};
     std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
-    std::exception_ptr m_ep;
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
 #endif

@@ -434,9 +434,6 @@ void GPUScheduler<net_t>::forward(
     }
     m_cv.notify_one();
     entry->cv.wait(lk);
-    if (m_ep) {
-        throw NetworkHaltException();
-    }
 }
 
 #ifndef NDEBUG
@@ -524,7 +521,7 @@ void GPUScheduler<net_t>::batch_worker(
             return;
         }
 #ifndef NDEBUG
-        if (count == 1) {
+        if (count < cfg_batch_size) {
             batch_stats.single_evals++;
         } else {
             batch_stats.batch_evals++;
@@ -546,29 +543,24 @@ void GPUScheduler<net_t>::batch_worker(
             index++;
         }
         // run the NN evaluation
-        try {
-            if (cfg_backend == backend_t::OPENCL) {
-                m_networks[gnum]->forward(
-                    batch_input,
-                    batch_output_pol,
-                    batch_output_val,
-                    context,
-                    (const int)count
-                );
+        if (cfg_backend == backend_t::OPENCL) {
+            m_networks[gnum]->forward(
+                batch_input,
+                batch_output_pol,
+                batch_output_val,
+                context,
+                (const int)count
+            );
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
-            } else {
-                m_backend[gnum]->forward(
-                    batch_input,
-                    batch_output_pol,
-                    batch_output_val,
-                    tid,
-                    cfg_batch_size
-                );
+        } else {
+            m_backend[gnum]->forward(
+                batch_input,
+                batch_output_pol,
+                batch_output_val,
+                tid,
+                cfg_batch_size
+            );
 #endif
-            }
-        } catch(...) {
-            m_ep = std::current_exception();
-            m_running = false;
         }
         // Get output and copy back
         index = 0;
