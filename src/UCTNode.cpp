@@ -101,18 +101,47 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     std::vector<Network::PolicyVertexPair> nodelist;
 
-    char ladder_map[NUM_INTERSECTIONS] = {};
+    int ladder_map[NUM_INTERSECTIONS] = {};
     LadderDetection(&state, ladder_map);
 
+    auto eval_up = false;
     auto legal_sum = 0.0f;
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex)
-            && !ladder_map[i]) {
-            nodelist.emplace_back(raw_netlist.policy[i], vertex);
-            legal_sum += raw_netlist.policy[i];
+        if (state.is_move_legal(to_move, vertex)) {
+            if ((ladder_map[i] > -1 * cfg_ladder_offense
+                && ladder_map[i] < cfg_ladder_defense)) {
+                nodelist.emplace_back(raw_netlist.policy[i], vertex);
+                legal_sum += raw_netlist.policy[i];
+            //} else {
+                //if (!eval_up && raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
+                    //m_net_eval *= cfg_ladder_penalty_winrate;
+                    // policy winrate
+                    // 0.25f  0.25f  : 70%
+                    // 0.25f  0.50f  : 50%
+                    //m_net_eval *= 1.0f - raw_netlist.policy[i];
+                    // 0.10f  -      : 80%
+                    // 0.20f  -      : 70%
+                    // 0.25f  -      : 58%
+                    // 0.30f  -      : 70%
+                    // 0.50f  -      :100%
+                //if (!eval_up && raw_netlist.policy[i] >= cfg_ladder_penalty_policy
+                //    && m_net_eval > 0.5f) {
+                //    m_net_eval *= cfg_ladder_penalty_winrate;
+                    // 0.25f  0.50f  : 80%
+                //    eval = m_net_eval;
+                //    eval_up = true;
+                //}
+            }
+            if  (!eval_up && ladder_map[i] >= cfg_ladder_defense / 2.0f
+                && raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
+                    // 0.25f  0.50f  : 80%
+                    m_net_eval *= cfg_ladder_penalty_winrate;
+                    eval = m_net_eval;
+                    eval_up = true;
+            }
         }
     }
 

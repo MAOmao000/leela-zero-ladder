@@ -225,6 +225,11 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
+        ("ladder_penalty_policy", po::value<float>()->default_value(cfg_ladder_penalty_policy),
+                      "When ladder move is greater than this value,"
+                      " lower the winning rate of that board.")
+        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
+                      "The rate at which the ladder reduces the winning rate of the board.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -649,6 +654,14 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_depth")) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
+    }
+
+    if (vm.count("ladder_penalty_policy")) {
+        cfg_ladder_penalty_policy = vm["ladder_penalty_policy"].as<float>();
+    }
+
+    if (vm.count("ladder_penalty_winrate")) {
+        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
     }
 
     auto out = std::stringstream{};

@@ -3,10 +3,7 @@
 
 #include "GameState.h"
 
-#define LADDER      1
-#define LADDER_LIKE 2
-
 // 
-void LadderDetection(const GameState* const state, char *ladder_pos);
+void LadderDetection(const GameState* const state, int *ladder_pos);
 // 
 #endif

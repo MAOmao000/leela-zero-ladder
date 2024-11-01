@@ -18,7 +18,7 @@ static bool IsLadderCaptured(int &depth, std::unique_ptr<GameState> &state, cons
 ////////////////////////////////
 //                            //
 ////////////////////////////////
-void LadderDetection(const GameState* const state, char *ladder_pos)
+void LadderDetection(const GameState* const state, int *ladder_pos)
 {
     auto state_copy = std::make_unique<GameState>(state);
     const auto turn_color = state_copy->board.get_to_move();
@@ -60,7 +60,7 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
                 if (IsLadderCaptured(depth, state_copy, vertex, turn_color, liberty_pos) == DEAD) {
                     if (depth >= cfg_ladder_defense) {
                         auto xy = state_copy->board.get_xy(liberty_pos);
-                        ladder_pos[xy.first + xy.second * BOARD_SIZE] = LADDER;
+                        ladder_pos[xy.first + xy.second * BOARD_SIZE] = depth;
                     }
                 }
             }
@@ -95,11 +95,9 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
                     if (state_copy->board.get_next_stone(liberty_pos[0]) == liberty_pos[0]) {
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
-                            if (depth >= cfg_ladder_offense) {
-                                ladder_pos[ladder_idx] = LADDER_LIKE;
-                            }
+                            ladder_pos[ladder_idx] = -1 * depth;
                         } else {
-                            if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                            if (ladder_pos[ladder_idx] < 0) {
                                 ladder_pos[ladder_idx] = 0;
                             }
                         }
@@ -115,11 +113,9 @@ void LadderDetection(const GameState* const state, char *ladder_pos)
                     if (state_copy->board.get_next_stone(liberty_pos[1]) == liberty_pos[1]) {
                         depth = 0;
                         if (IsLadderCaptured(depth, state_copy, vertex, opponent) == ALIVE) {
-                            if (depth >= cfg_ladder_offense) {
-                                ladder_pos[ladder_idx] = LADDER_LIKE;
-                            }
+                            ladder_pos[ladder_idx] = -1 * depth;
                         } else {
-                            if (ladder_pos[ladder_idx] == LADDER_LIKE) {
+                            if (ladder_pos[ladder_idx] < 0) {
                                 ladder_pos[ladder_idx] = 0;
                             }
                         }

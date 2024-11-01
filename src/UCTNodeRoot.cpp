@@ -224,15 +224,18 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // This also removes a lot of special cases.
     kill_superkos(root_state);
 
-    char ladder_map[NUM_INTERSECTIONS] = {};
+    int ladder_map[NUM_INTERSECTIONS] = {};
     LadderDetection(&root_state, ladder_map);
 
     for (auto& child : m_children) {
         auto move = child->get_move();
         if (move != FastBoard::PASS) {
             auto xy = root_state.board.get_xy(move);
-            if (!root_state.is_move_legal(color, move) ||
-                ladder_map[xy.second * BOARD_SIZE + xy.first]) {
+            if (!root_state.is_move_legal(color, move)
+                || ladder_map[xy.second * BOARD_SIZE + xy.first]
+                <= -1 * cfg_ladder_offense
+                || ladder_map[xy.second * BOARD_SIZE + xy.first]
+                >= cfg_ladder_defense) {
                 // Don't delete nodes for now, just mark them invalid.
                 child->invalidate();
             }

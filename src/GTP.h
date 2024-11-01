@@ -197,6 +197,8 @@ extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
+extern float cfg_ladder_penalty_policy;
+extern float cfg_ladder_penalty_winrate;
 
 extern AnalyzeTags cfg_analyze_tags;
 
