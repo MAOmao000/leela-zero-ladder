@@ -417,8 +417,8 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones
     cfg_ladder_depth = 200;     // --ladder_depth
-    cfg_ladder_penalty_policy = 0.25f;  // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 0.5f;  // --ladder_penalty_winrate
+    cfg_ladder_penalty_policy = 0.05f;  // --ladder_penalty_policy
+    cfg_ladder_penalty_winrate = 0.1f;  // --ladder_penalty_winrate
 
     cfg_analyze_tags = AnalyzeTags{};
 

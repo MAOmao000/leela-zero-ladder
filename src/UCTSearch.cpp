@@ -259,7 +259,9 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             // Careful: create_children() can throw a NetworkHaltException when
             // another thread requests draining the search.
             const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
+                m_network, m_nodes, currstate, eval,
+                m_rootstate.get_to_move(),
+                get_min_psa_ratio());
             if (!had_children && success) {
                 result = SearchResult::from_eval(eval);
                 new_node = true;
