@@ -50,7 +50,7 @@
 
 Utils::ThreadPool thread_pool;
 
-//auto constexpr z_entries = 5000;
+//auto constexpr z_entries = 1000;
 //std::array<float, z_entries> z_lookup;
 std::vector<float> z_lookup;
 
