@@ -434,6 +434,10 @@ void GPUScheduler<net_t>::forward(
     }
     m_cv.notify_one();
     entry->cv.wait(lk);
+
+    if (m_draining) {
+        throw NetworkHaltException();
+    }
 }
 
 #ifndef NDEBUG
