@@ -119,6 +119,7 @@ public:
     void increment_playouts();
     std::string explain_last_think() const;
     SearchResult play_simulation(GameState& currstate, UCTNode* node);
+    void stop_run();
 
 private:
     float get_min_psa_ratio() const;

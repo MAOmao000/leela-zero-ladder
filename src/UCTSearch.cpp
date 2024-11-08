@@ -241,6 +241,10 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     auto result = SearchResult{};
     auto new_node = false;
 
+    if (!is_running()) {
+        throw NetworkHaltException();
+    }
+
     node->virtual_loss();
 
     // This will undo virtual loss even if something throws an exception.
@@ -761,8 +765,12 @@ void UCTWorker::operator()() {
             }
         } while (m_search->is_running());
     } catch (NetworkHaltException&) {
-        // intentionally empty
+        m_search->stop_run();
     }
+}
+
+void UCTSearch::stop_run() {
+    m_run.store(false);
 }
 
 void UCTSearch::increment_playouts() {
@@ -830,9 +838,13 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     // Stop the search.
     m_run = false;
-    m_network.drain_evals();
-    tg.wait_all();
-    m_network.resume_evals();
+    if (cfg_use_drain_resume) {
+        m_network.drain_evals();
+        tg.wait_all();
+        m_network.resume_evals();
+    } else {
+        tg.wait_all();
+    }
 
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
@@ -925,9 +937,13 @@ void UCTSearch::ponder() {
 
     // Stop the search.
     m_run = false;
-    m_network.drain_evals();
-    tg.wait_all();
-    m_network.resume_evals();
+    if (cfg_use_drain_resume) {
+        m_network.drain_evals();
+        tg.wait_all();
+        m_network.resume_evals();
+    } else {
+        tg.wait_all();
+    }
 
     // Display search info.
     myprintf("\n");

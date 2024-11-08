@@ -422,6 +422,10 @@ void GPUScheduler<net_t>::forward(
     std::vector<float>& output_pol,
     std::vector<float>& output_val)
 {
+    if (cfg_use_drain_resume && m_draining) {
+        throw NetworkHaltException();
+    }
+
     auto entry =
         std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
     std::unique_lock<std::mutex> lk(entry->mutex);
@@ -434,10 +438,6 @@ void GPUScheduler<net_t>::forward(
     }
     m_cv.notify_one();
     entry->cv.wait(lk);
-
-    if (m_draining) {
-        throw NetworkHaltException();
-    }
 }
 
 #ifndef NDEBUG

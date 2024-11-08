@@ -240,6 +240,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+        ("use_drain_resume", "Enable drain and formula."),
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
@@ -423,6 +424,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("cpu-only")) {
         cfg_cpu_only = true;
+    } else if (vm.count("use_drain_resume")) {
+        cfg_use_drain_resume = true;
     }
 #else
     cfg_cpu_only = true;

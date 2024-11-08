@@ -84,6 +84,7 @@ bool cfg_NCHW;
 std::vector<int> cfg_gpus;
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
+bool cfg_use_drain_resume;
 #ifdef USE_TENSOR_RT
 trtLog::Logger cfg_logger{};
 #endif
@@ -363,6 +364,7 @@ void GTP::setup_default_parameters() {
     cfg_gpus = {};                       // --gpu
     cfg_sgemm_exhaustive = false;        // --full-tuner
     cfg_tune_only = false;               // --tune-only
+    cfg_use_drain_resume = false;        // --use_drain_resume
 #ifdef USE_TENSOR_RT
     cfg_cache_plan = true;               // --trt-cache
     cfg_backend = backend_t::TENSORRT;   // --backend

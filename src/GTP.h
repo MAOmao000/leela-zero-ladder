@@ -156,6 +156,7 @@ extern bool cfg_NCHW;
 extern std::vector<int> cfg_gpus;
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
+extern bool cfg_use_drain_resume;
 #ifdef USE_TENSOR_RT
 extern trtLog::Logger cfg_logger;
 enum class trtcache_t {
