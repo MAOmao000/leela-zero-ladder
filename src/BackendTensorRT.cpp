@@ -87,10 +87,10 @@ bool BackendTRT<net_t>::build(
     if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
-        config->setBuilderOptimizationLevel(2);
+        config->setBuilderOptimizationLevel(5);
     }
-    // Typical runtime allocation is much less than the 2 GiB specified below
-    //config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 31);
+    // Typical runtime allocation is much less than the 1 GiB specified below
+    config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
 
     std::string plan;
     {
