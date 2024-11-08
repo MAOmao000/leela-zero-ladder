@@ -86,11 +86,11 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
             network.get_output(&state, Network::Ensemble::RANDOM_SYMMETRY);
     } catch (NetworkHaltException&) {
         expand_cancel();
-        throw;
+        throw NetworkHaltException();
     }
 
     // DCNN returns winrate as side to move
-    const auto stm_eval = raw_netlist.winrate;
+    auto stm_eval = raw_netlist.winrate;
     const auto to_move = state.board.get_to_move();
     // our search functions evaluate from black's point of view
     if (to_move == FastBoard::WHITE) {
@@ -105,7 +105,6 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     int ladder_map[NUM_INTERSECTIONS] = {};
     LadderDetection(&state, ladder_map);
 
-    auto eval_up = false;
     auto legal_sum = 0.0f;
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
         const auto x = i % BOARD_SIZE;
@@ -117,15 +116,13 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
                 nodelist.emplace_back(raw_netlist.policy[i], vertex);
                 legal_sum += raw_netlist.policy[i];
             } else {
-                if (!eval_up
-                    && raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
+                if (raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
                     if (root_color == FastBoard::WHITE) {
                         m_net_eval += (1.0f - m_net_eval) * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
                     } else {
                         m_net_eval -= m_net_eval * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
                     }
                     eval = m_net_eval;
-                    eval_up = true;
                 }
             }
         }
@@ -141,6 +138,11 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     // If we're clever, only try passing if we're winning on the
     // net score and on the board count.
+    if (to_move == FastBoard::WHITE) {
+        stm_eval = 1.0f - m_net_eval;
+    } else {
+        stm_eval = m_net_eval;
+    }
     if (!allow_pass && stm_eval > 0.8f) {
         const auto relative_score =
             (to_move == FastBoard::BLACK ? 1 : -1) * state.final_score();
