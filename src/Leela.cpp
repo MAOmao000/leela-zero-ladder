@@ -185,7 +185,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logfile,l", po::value<std::string>(),
                       "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
-        ("timemanage", po::value<std::string>()->default_value("auto"),
+        ("timemanage", po::value<std::string>()->default_value("off"),
                        "[auto|on|off|fast|no_pruning] Enable time management features.\n"
                        "auto = no_pruning when using -n, otherwise on.\n"
                        "on = Cut off search when the best move can't change"
@@ -240,7 +240,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-        ("use_drain_resume", "Enable drain and formula."),
+        ("use_drain_resume", "Enable drain and formula.")
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
