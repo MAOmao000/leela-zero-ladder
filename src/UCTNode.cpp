@@ -118,9 +118,9 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
             } else {
                 if (raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
                     if (root_color == FastBoard::WHITE) {
-                        m_net_eval += (1.0f - m_net_eval) * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
+                        m_net_eval += (1.0f - m_net_eval) * cfg_ladder_penalty_winrate;
                     } else {
-                        m_net_eval -= m_net_eval * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
+                        m_net_eval -= m_net_eval * cfg_ladder_penalty_winrate;
                     }
                     eval = m_net_eval;
                 }
