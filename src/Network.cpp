@@ -348,10 +348,12 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                         }
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip_pol_w));
+                        m_fwd_weights->m_ip_pol_w = std::move(weights);
                         break;
                     case 5:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip_pol_b));
+                        m_fwd_weights->m_ip_pol_b = std::move(weights);
                         break;
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
@@ -369,18 +371,22 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 10:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip1_val_w));
+                        m_fwd_weights->m_ip1_val_w = std::move(weights);
                         break;
                     case 11:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip1_val_b));
+                        m_fwd_weights->m_ip1_val_b = std::move(weights);
                         break;
                     case 12:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip2_val_w));
+                        m_fwd_weights->m_ip2_val_w = std::move(weights);
                         break;
                     case 13:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip2_val_b));
+                        m_fwd_weights->m_ip2_val_b = std::move(weights);
                         break;
                 }
             }
@@ -458,10 +464,12 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                         }
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip_pol_w));
+                        m_fwd_weights->m_ip_pol_w = std::move(weights);
                         break;
                     case 5:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip_pol_b));
+                        m_fwd_weights->m_ip_pol_b = std::move(weights);
                         break;
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
@@ -479,18 +487,22 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                     case 10:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip1_val_w));
+                        m_fwd_weights->m_ip1_val_w = std::move(weights);
                         break;
                     case 11:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip1_val_b));
+                        m_fwd_weights->m_ip1_val_b = std::move(weights);
                         break;
                     case 12:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip2_val_w));
+                        m_fwd_weights->m_ip2_val_w = std::move(weights);
                         break;
                     case 13:
                         std::copy(cbegin(weights), cend(weights),
                                   begin(m_ip2_val_b));
+                        m_fwd_weights->m_ip2_val_b = std::move(weights);
                         break;
                 }
             }
@@ -1054,8 +1066,13 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
     const auto input_data = gather_features(state, symmetry);
     size_t policy_data_size;
     size_t value_data_size;
-    policy_data_size = OUTPUTS_POLICY * NUM_INTERSECTIONS;
-    value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    if (cfg_backend == backend_t::TENSORRT) {
+        policy_data_size = POTENTIAL_MOVES;
+        value_data_size = 1;
+    } else {
+        policy_data_size = OUTPUTS_POLICY * NUM_INTERSECTIONS;
+        value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    }
     std::vector<float> policy_data(policy_data_size);
     std::vector<float> value_data(value_data_size);
 #ifdef USE_OPENCL_SELFCHECK
@@ -1079,26 +1096,38 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
                                      m_bn_val_w1.data(),
                                      m_bn_val_w2.data());
     }
-    // Get the moves
-    const auto policy_out =
-        innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
-            policy_data, m_ip_pol_w, m_ip_pol_b);
-    const auto outputs = softmax(policy_out, cfg_softmax_temp);
-    // Now get the value
-    const auto winrate_data =
-        innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
-            value_data, m_ip1_val_w, m_ip1_val_b);
-    const auto winrate_out =
-        innerproduct<VALUE_LAYER, 1, false>(
-            winrate_data, m_ip2_val_w, m_ip2_val_b);
-    // Map TanH output range [-1..1] to [0..1] range
-    const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
-    result.winrate = winrate;
-    for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-        const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        result.policy[sym_idx] = outputs[idx];
+    if (cfg_backend == backend_t::TENSORRT) {
+        // Get the moves
+        for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
+            const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
+            result.policy[sym_idx] = policy_data[idx];
+        }
+        result.policy_pass = policy_data[NUM_INTERSECTIONS];
+        // Now get the value
+        // Map TanH output range [-1..1] to [0..1] range
+        result.winrate = (1.0f + value_data[0]) / 2.0f;
+    } else {
+        // Get the moves
+        const auto policy_out =
+            innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
+                policy_data, m_ip_pol_w, m_ip_pol_b);
+        const auto outputs = softmax(policy_out, cfg_softmax_temp);
+        for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
+            const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
+            result.policy[sym_idx] = outputs[idx];
+        }
+        result.policy_pass = outputs[NUM_INTERSECTIONS];
+        // Now get the value
+        const auto winrate_data =
+            innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
+                value_data, m_ip1_val_w, m_ip1_val_b);
+        const auto winrate_out =
+            innerproduct<VALUE_LAYER, 1, false>(
+                winrate_data, m_ip2_val_w, m_ip2_val_b);
+        // Map TanH output range [-1..1] to [0..1] range
+        const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
+        result.winrate = winrate;
     }
-    result.policy_pass = outputs[NUM_INTERSECTIONS];
     return result;
 }
 
@@ -1258,6 +1287,8 @@ size_t Network::get_estimated_size() {
     result += m_fwd_weights->m_conv_pol_b.size() * sizeof(float);
     result += m_fwd_weights->m_bn_pol_w1.size() * sizeof(float);
     result += m_fwd_weights->m_bn_pol_w2.size() * sizeof(float);
+    result += m_fwd_weights->m_ip_pol_w.size() * sizeof(float);
+    result += m_fwd_weights->m_ip_pol_b.size() * sizeof(float);
     result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w1
     result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w2
     result += OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES
@@ -1269,6 +1300,10 @@ size_t Network::get_estimated_size() {
     result += m_fwd_weights->m_conv_val_b.size() * sizeof(float);
     result += m_fwd_weights->m_bn_val_w1.size() * sizeof(float);
     result += m_fwd_weights->m_bn_val_w2.size() * sizeof(float);
+    result += m_fwd_weights->m_ip1_val_w.size() * sizeof(float);
+    result += m_fwd_weights->m_ip1_val_b.size() * sizeof(float);
+    result += m_fwd_weights->m_ip2_val_w.size() * sizeof(float);
+    result += m_fwd_weights->m_ip2_val_b.size() * sizeof(float);
     result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w1
     result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w2
     result += OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER

@@ -129,7 +129,11 @@ public:
         const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& biases
+        const std::vector<float>& biases,
+        const std::vector<float>& ip1_w,
+        const std::vector<float>& ip1_b,
+        const std::vector<float>& ip2_w,
+        const std::vector<float>& ip2_b
     ) override;
 
 private:
@@ -144,7 +148,8 @@ private:
 
     void push_weights(
         const size_t layer,
-        const std::vector<float>& weights
+        const std::vector<float>& weights,
+        const bool host_mem = false
     );
 
     void push_weights_col_major(
@@ -152,7 +157,8 @@ private:
         const std::vector<float>& weights,
         const int row,
         const int column,
-        const int channels = 1
+        const int channels = 1,
+        const bool host_mem = false
     );
 
     // Builds the network engine

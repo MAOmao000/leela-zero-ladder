@@ -57,8 +57,13 @@ GPUScheduler<net_t>::GPUScheduler()
     if (gpus.empty()) {
         gpus = {-1};
     }
-    m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
-    m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    if (cfg_backend == backend_t::TENSORRT) {
+        m_out_pol_size = POTENTIAL_MOVES;
+        m_out_val_size = 1;
+    } else {
+        m_out_pol_size = Network::OUTPUTS_POLICY * NUM_INTERSECTIONS;
+        m_out_val_size = Network::OUTPUTS_VALUE * NUM_INTERSECTIONS;
+    }
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     auto silent{false};
     for (auto gpu : gpus) {
@@ -333,7 +338,11 @@ void GPUScheduler<net_t>::push_convolve(
                 channels,
                 outputs,
                 weights->m_conv_pol_w,
-                weights->m_bn_pol_w1
+                weights->m_bn_pol_w1,
+                weights->m_ip_pol_w, 
+                weights->m_ip_pol_b,
+                weights->m_ip_pol_w, 
+                weights->m_ip_pol_b
             );
         } else {
             backend->push_convolve(
@@ -341,7 +350,11 @@ void GPUScheduler<net_t>::push_convolve(
                 channels,
                 outputs,
                 weights->m_conv_val_w,
-                weights->m_bn_val_w1
+                weights->m_bn_val_w1,
+                weights->m_ip1_val_w,
+                weights->m_ip1_val_b,
+                weights->m_ip2_val_w,
+                weights->m_ip2_val_b
             );
         }
     }
@@ -516,8 +529,8 @@ void GPUScheduler<net_t>::batch_worker(
         return inputs;
     };
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
-    auto batch_output_pol = std::vector<float>(in_size * cfg_batch_size);
-    auto batch_output_val = std::vector<float>(in_size * cfg_batch_size);
+    auto batch_output_pol = std::vector<float>(m_out_pol_size * cfg_batch_size);
+    auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
     while (true) {
         auto inputs = pickup_task();
         auto count = inputs.size();
