@@ -375,10 +375,10 @@ void GTP::setup_default_parameters() {
     cfg_backend = backend_t::OPENCL;     // --backend
 #endif
 #endif
-    cfg_NCHW = false;                        // --channel-first
+    cfg_NCHW = false;                    // --channel-first
 
 #ifdef USE_HALF
-    cfg_precision = precision_t::AUTO; // --precision
+    cfg_precision = precision_t::AUTO;   // --precision
 #endif
 #else
     cfg_backend = backend_t::NONE; // --backend
@@ -394,8 +394,8 @@ void GTP::setup_default_parameters() {
     cfg_softmax_temp = 1.0f;       // --softmax_temp
     cfg_fpu_reduction = 0.25f;     // --fpu_reduction
     // see UCTSearch::should_resign
-    cfg_resignpct = -1;            // -r, --resignpct
-    cfg_noise = false;             // --noise
+    cfg_resignpct = -1;              // -r, --resignpct
+    cfg_noise = false;               // --noise
     cfg_fpu_root_reduction = cfg_fpu_reduction; // --noise
     cfg_ci_alpha = 1e-5f;            // --ci_alpha
     cfg_lcb_min_visit_ratio = 0.10f; // --lcb_visits_ratio
@@ -407,9 +407,9 @@ void GTP::setup_default_parameters() {
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
 #ifdef USE_CPU_ONLY
-    cfg_cpu_only = true;  // --cpu-only
+    cfg_cpu_only = true;        // --cpu-only
 #else
-    cfg_cpu_only = false; // --cpu-only
+    cfg_cpu_only = false;       // --cpu-only
 #endif
     cfg_use_stdev_uct = true;   // --no_use_stdev_uct
 
@@ -419,8 +419,8 @@ void GTP::setup_default_parameters() {
     cfg_defense_stones = 1;     // --defense_stones
     cfg_offense_stones = 3;     // --offense_stones
     cfg_ladder_depth = 200;     // --ladder_depth
-    cfg_ladder_penalty_policy = 0.5f;   // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 0.75f; // --ladder_penalty_winrate
+    cfg_ladder_penalty_policy = 0.05f; // --ladder_penalty_policy
+    cfg_ladder_penalty_winrate = 0.1f; // --ladder_penalty_winrate
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -631,6 +631,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
+        s_network->forward_wait_time_reset();
         Training::clear_training();
         game.reset_game();
         search = std::make_unique<UCTSearch>(game, *s_network);

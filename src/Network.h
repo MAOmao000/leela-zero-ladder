@@ -115,6 +115,10 @@ public:
         return m_net_type;
     }
 
+    void forward_wait_time_reset() {
+        m_forward->wait_time_reset();
+    }
+
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);

@@ -96,6 +96,9 @@ public:
         const size_t gnum,
         const size_t tid = -1
     );
+    void wait_time_reset() override {
+        m_waittime = 10;
+    }
 
 private:
     void drain() override;
