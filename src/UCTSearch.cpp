@@ -834,6 +834,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     // Stop the search.
     m_run = false;
+#ifdef USE_OPENCL
     if (cfg_use_drain_resume) {
         m_network.drain_evals();
         tg.wait_all();
@@ -841,6 +842,9 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     } else {
         tg.wait_all();
     }
+#else
+    tg.wait_all();
+#endif
 
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
@@ -933,6 +937,7 @@ void UCTSearch::ponder() {
 
     // Stop the search.
     m_run = false;
+#ifdef USE_OPENCL
     if (cfg_use_drain_resume) {
         m_network.drain_evals();
         tg.wait_all();
@@ -940,6 +945,9 @@ void UCTSearch::ponder() {
     } else {
         tg.wait_all();
     }
+#else
+    tg.wait_all();
+#endif
 
     // Display search info.
     myprintf("\n");
