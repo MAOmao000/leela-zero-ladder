@@ -241,10 +241,6 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     auto result = SearchResult{};
     auto new_node = false;
 
-    if (!is_running()) {
-        throw NetworkHaltException();
-    }
-
     node->virtual_loss();
 
     // This will undo virtual loss even if something throws an exception.
