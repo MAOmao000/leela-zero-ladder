@@ -129,7 +129,7 @@ void LadderDetection(const GameState* const state, int *ladder_pos)
 ////////////////////
 static bool IsLadderCaptured(int &depth, std::unique_ptr<GameState> &state, const int str_vtx, const int turn_color, int escape_pos)
 {
-    if (state->m_komove != FastBoard::NO_VERTEX) {
+    if (depth % 2 == 0 && state->m_komove != FastBoard::NO_VERTEX) {
         return ALIVE;
     } else if (depth >= cfg_ladder_depth) {
         return DEAD;
