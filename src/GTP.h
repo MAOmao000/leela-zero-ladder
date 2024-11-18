@@ -199,6 +199,9 @@ extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 extern float cfg_ladder_penalty_policy;
+#ifdef MINUS_POLICY
+extern float cfg_ladder_penalty_policy_minus;
+#endif
 extern float cfg_ladder_penalty_winrate;
 
 extern AnalyzeTags cfg_analyze_tags;

@@ -119,10 +119,23 @@ void UCTNode::dirichlet_noise(const float epsilon, const float alpha) {
 
     child_cnt = 0;
     for (auto& child : m_children) {
+#ifdef MINUS_POLICY
+        auto policy = child->get_policy();
+        if (policy < 0.0f) {
+            auto eta_a = dirichlet_vector[child_cnt++];
+            policy = std::abs(policy) * (1 - epsilon) + epsilon * eta_a;
+            child->set_policy(-1.0f * policy);
+        } else {
+            auto eta_a = dirichlet_vector[child_cnt++];
+            policy = policy * (1 - epsilon) + epsilon * eta_a;
+            child->set_policy(policy);
+        }
+#else
         auto policy = child->get_policy();
         auto eta_a = dirichlet_vector[child_cnt++];
         policy = policy * (1 - epsilon) + epsilon * eta_a;
         child->set_policy(policy);
+#endif
     }
 }
 

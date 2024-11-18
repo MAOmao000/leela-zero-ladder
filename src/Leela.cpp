@@ -228,6 +228,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ladder_penalty_policy", po::value<float>()->default_value(cfg_ladder_penalty_policy),
                       "When ladder move is greater than this value,"
                       " lower the winning rate of that board.")
+#ifdef MINUS_POLICY
+        ("ladder_penalty_policy_minus", po::value<float>()->default_value(cfg_ladder_penalty_policy_minus),
+                      "Ratio by which to multiply the ladder policy.")
+#endif
         ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
                       "The rate at which the ladder reduces the winning rate of the board.")
         ;
@@ -666,6 +670,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("ladder_penalty_winrate")) {
         cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
     }
+
+#ifdef MINUS_POLICY
+    if (vm.count("ladder_penalty_policy_minus")) {
+        cfg_ladder_penalty_policy_minus = vm["ladder_penalty_policy_minus"].as<float>();
+    }
+#endif
 
     auto out = std::stringstream{};
     for (auto i = 1; i < argc; i++) {
