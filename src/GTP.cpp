@@ -427,8 +427,8 @@ void GTP::setup_default_parameters() {
     cfg_ladder_penalty_winrate = 0.25f;  // --ladder_penalty_winrate
     cfg_ladder_penalty_policy_minus = 0.001f;  // --ladder_penalty_policy_minus
 #else
-    cfg_ladder_penalty_policy = 0.55f;   // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 0.75f;  // --ladder_penalty_winrate
+    cfg_ladder_penalty_policy = 0.3f;    // --ladder_penalty_policy
+    cfg_ladder_penalty_winrate = 0.5f;   // --ladder_penalty_winrate
 #endif
 
     cfg_analyze_tags = AnalyzeTags{};
