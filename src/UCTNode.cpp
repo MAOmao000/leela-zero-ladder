@@ -51,6 +51,8 @@
 #include "Utils.h"
 #include "LadderDetection.h"
 
+//#define SIMPLE_LADDER_DETECT
+
 using namespace Utils;
 
 UCTNode::UCTNode(const int vertex, const float policy)
@@ -102,8 +104,23 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     std::vector<Network::PolicyVertexPair> nodelist;
 
+#ifndef SIMPLE_LADDER_DETECT
     int ladder_map[NUM_INTERSECTIONS] = {};
-    LadderDetection(&state, ladder_map);
+    if (state.m_komove == FastBoard::NO_VERTEX) {
+        LadderDetection(&state, ladder_map);
+    }
+    int ladder_defense;
+    int ladder_offense;
+    if (cfg_ladder_temperature > 1) {
+        ladder_defense =
+            cfg_ladder_defense + state.get_movenum() / cfg_ladder_temperature;
+        ladder_offense = -1 *
+            (cfg_ladder_offense + state.get_movenum() / cfg_ladder_temperature);
+    } else {
+        ladder_defense = cfg_ladder_defense;
+        ladder_offense =  -1 * cfg_ladder_offense;
+    }
+#endif
 
     auto legal_sum = 0.0f;
     for (auto i = 0; i < NUM_INTERSECTIONS; i++) {
@@ -111,25 +128,24 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
         if (state.is_move_legal(to_move, vertex)) {
-            if ((ladder_map[i] > -1 * cfg_ladder_offense
-                && ladder_map[i] < cfg_ladder_defense)) {
+#ifndef SIMPLE_LADDER_DETECT
+            if ((ladder_map[i] > ladder_offense
+                && ladder_map[i] < ladder_defense)) {
+#endif
                 nodelist.emplace_back(raw_netlist.policy[i], vertex);
                 legal_sum += raw_netlist.policy[i];
+#ifndef SIMPLE_LADDER_DETECT
             } else {
                 if (raw_netlist.policy[i] >= cfg_ladder_penalty_policy) {
                     if (root_color == FastBoard::WHITE) {
-                        m_net_eval += (1.0f - m_net_eval) * cfg_ladder_penalty_winrate;
+                        m_net_eval += (1.0f - m_net_eval) * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
                     } else {
-                        m_net_eval -= m_net_eval * cfg_ladder_penalty_winrate;
+                        m_net_eval -= m_net_eval * raw_netlist.policy[i] * cfg_ladder_penalty_winrate;
                     }
                     eval = m_net_eval;
                 }
-#ifdef MINUS_POLICY
-                nodelist.emplace_back(
-                    -1.0f * cfg_ladder_penalty_policy_minus * raw_netlist.policy[i], vertex);
-                legal_sum += raw_netlist.policy[i];
-#endif
             }
+#endif
         }
     }
 
@@ -193,47 +209,27 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
     }
 
     // Use best to worst order, so highest go first
-#ifdef MINUS_POLICY
-    auto comparison_condition =
-        [](std::pair<float, int>(a), std::pair<float, int>(b)) {
-            return std::abs(a.first) < std::abs(b.first);};
-    std::stable_sort(rbegin(nodelist), rend(nodelist), comparison_condition);
-    const auto max_psa = std::abs(nodelist[0].first);
-#else
     std::stable_sort(rbegin(nodelist), rend(nodelist));
     auto comparison_condition =
         [](std::pair<float, int>(a), std::pair<float, int>(b)) {
             return std::abs(a.first) < std::abs(b.first);};
     std::stable_sort(rbegin(nodelist), rend(nodelist), comparison_condition);
     const auto max_psa = nodelist[0].first;
-#endif
     const auto old_min_psa = max_psa * m_min_psa_ratio_children;
     const auto new_min_psa = max_psa * min_psa_ratio;
     if (new_min_psa > 0.0f) {
         m_children.reserve(std::count_if(
             cbegin(nodelist), cend(nodelist),
-#ifdef MINUS_POLICY
-            [=](const auto& node) { return std::abs(node.first) >= new_min_psa; }));
-#else
             [=](const auto& node) { return node.first >= new_min_psa; }));
-#endif
     } else {
         m_children.reserve(nodelist.size());
     }
 
     auto skipped_children = false;
     for (const auto& node : nodelist) {
-#ifdef MINUS_POLICY
-        if (std::abs(node.first) < new_min_psa) {
-#else
         if (node.first < new_min_psa) {
-#endif
             skipped_children = true;
-#ifdef MINUS_POLICY
-        } else if (std::abs(node.first) < old_min_psa) {
-#else
         } else if (node.first < old_min_psa) {
-#endif
             m_children.emplace_back(node.second, node.first);
             ++nodecount;
         }
@@ -353,9 +349,16 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
+#ifdef SIMPLE_LADDER_DETECT
+    int ladder_map[NUM_INTERSECTIONS] = {};
+    auto ko = state.m_komove == FastBoard::NO_VERTEX;
+    LadderDetection(&state, ladder_map);
+#else
+    (void) state;
+#endif
     // Count parentvisits manually to avoid issues with transpositions.
     auto total_visited_policy = 0.0f;
     auto parentvisits = size_t{0};
@@ -363,11 +366,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         if (child.valid()) {
             parentvisits += child.get_visits();
             if (child.get_visits() > 0) {
-#ifdef MINUS_POLICY
-                total_visited_policy += std::abs(child.get_policy());
-#else
                 total_visited_policy += child.get_policy();
-#endif
             }
         }
     }
@@ -396,15 +395,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             // if we can avoid so, because we'd block on it.
             winrate = -1.0f - fpu_reduction;
         } else if (child.get_visits() > 0) {
-#ifdef MINUS_POLICY
-            if (child.get_policy() < 0.0f) {
-                winrate = child.get_eval(color) * cfg_ladder_penalty_winrate;
-            } else {
-                winrate = child.get_eval(color);
-            }
-#else
             winrate = child.get_eval(color);
-#endif
         }
         auto stdev = 1.0f;
         if (cfg_use_stdev_uct) {
@@ -420,16 +411,22 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
                 stdev = alpha * k + (1.0f - alpha) * 1.0f;
             }
         }
-#ifdef MINUS_POLICY
-    	const auto psa = std::abs(child.get_policy());
-#else
         auto cpuct = cfg_puct * stdev;
-#endif
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
-        const auto value = winrate + puct;
+        auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
+#ifdef SIMPLE_LADDER_DETECT
+        const auto move = child.get_move();
+        if (!ko && move != FastBoard::PASS) {
+            auto xy = state.board.get_xy(move);
+            if (ladder_map[xy.second * BOARD_SIZE + xy.first] <= -1 * cfg_ladder_offense
+                || ladder_map[xy.second * BOARD_SIZE + xy.first] >= cfg_ladder_defense) {
+                value *= 0.01;
+            }
+        }
+#endif
 
         if (value > best_value) {
             best_value = value;
@@ -478,11 +475,7 @@ public:
 
         // neither has visits, sort on policy prior
         if (a_visit == 0) {
-#ifdef MINUS_POLICY
-            return std::abs(a.get_policy()) < std::abs(b.get_policy());
-#else
             return a.get_policy() < b.get_policy();
-#endif
         }
 
         // both have same non-zero number of visits

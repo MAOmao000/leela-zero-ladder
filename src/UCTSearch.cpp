@@ -270,7 +270,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(color, node == m_root.get());
+        auto next = node->uct_select_child(currstate, color, node == m_root.get());
         auto move = next->get_move();
 
         currstate.play_move(move);
@@ -323,11 +323,7 @@ void UCTSearch::dump_stats(const FastState& state, UCTNode& parent) {
                  move.c_str(), node->get_visits(),
                  node->get_visits() ? node->get_raw_eval(color) * 100.0f : 0.0f,
                  std::max(0.0f, node->get_eval_lcb(color) * 100.0f),
-#ifdef MINUS_POLICY
-                 std::abs(node->get_policy()) * 100.0f, pv.c_str());
-#else
                  node->get_policy() * 100.0f, pv.c_str());
-#endif
     }
     tree_stats(parent);
 }
@@ -360,11 +356,7 @@ void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
         auto rest_of_pv = get_pv(tmpstate, *node);
         auto pv = move + (rest_of_pv.empty() ? "" : " " + rest_of_pv);
         auto move_eval = node->get_visits() ? node->get_raw_eval(color) : 0.0f;
-#ifdef MINUS_POLICY
-        auto policy = std::abs(node->get_policy());
-#else
         auto policy = node->get_policy();
-#endif
         auto lcb = node->get_eval_lcb(color);
         auto visits = node->get_visits();
         // Need at least 2 visits for valid LCB.
