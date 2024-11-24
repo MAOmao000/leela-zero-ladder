@@ -120,10 +120,8 @@ int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
+int cfg_ladder_temperature;
 float cfg_ladder_penalty_policy;
-#ifdef MINUS_POLICY
-float cfg_ladder_penalty_policy_minus;
-#endif
 float cfg_ladder_penalty_winrate;
 
 AnalyzeTags cfg_analyze_tags;
@@ -410,26 +408,21 @@ void GTP::setup_default_parameters() {
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
 #ifdef USE_CPU_ONLY
-    cfg_cpu_only = true;        // --cpu-only
+    cfg_cpu_only = true;             // --cpu-only
 #else
-    cfg_cpu_only = false;       // --cpu-only
+    cfg_cpu_only = false;            // --cpu-only
 #endif
-    cfg_use_stdev_uct = true;   // --no_use_stdev_uct
+    cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
-    cfg_ladder_check = true;    // --no_ladder_check
-    cfg_ladder_defense = 10;    // --ladder_defense
-    cfg_ladder_offense = 10;    // --ladder_offense
-    cfg_defense_stones = 1;     // --defense_stones
-    cfg_offense_stones = 3;     // --offense_stones
-    cfg_ladder_depth = 200;     // --ladder_depth
-#ifdef MINUS_POLICY
-    cfg_ladder_penalty_policy = 0.001f;  // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 0.25f;  // --ladder_penalty_winrate
-    cfg_ladder_penalty_policy_minus = 0.001f;  // --ladder_penalty_policy_minus
-#else
-    cfg_ladder_penalty_policy = 0.3f;    // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 0.5f;   // --ladder_penalty_winrate
-#endif
+    cfg_ladder_check = true;        // --no_ladder_check
+    cfg_ladder_defense = 12;        // --ladder_defense
+    cfg_ladder_offense = 12;        // --ladder_offense
+    cfg_defense_stones = 1;         // --defense_stones
+    cfg_offense_stones = 3;         // --offense_stones
+    cfg_ladder_depth = 200;         // --ladder_depth
+    cfg_ladder_temperature = 50;    // --ladder_temperature
+    cfg_ladder_penalty_policy = 0.25f;   // --ladder_penalty_policy
+    cfg_ladder_penalty_winrate = 1.0f;   // --ladder_penalty_winrate
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -640,6 +633,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
+        s_network->nncache_clear();
         s_network->forward_wait_time_reset();
         Training::clear_training();
         game.reset_game();
