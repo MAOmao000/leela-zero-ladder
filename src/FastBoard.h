@@ -52,7 +52,7 @@ public:
     /*
         number of vertices in a "letterboxed" board representation
     */
-    static constexpr int NUM_VERTICES = ((BOARD_SIZE + 2) * (BOARD_SIZE + 2));
+    static constexpr int NUM_VERTICES = ((BOARD_SIZE + 2) * (BOARD_SIZE + 1));
 
     /*
         no applicable vertex

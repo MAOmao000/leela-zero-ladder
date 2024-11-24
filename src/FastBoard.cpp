@@ -114,8 +114,8 @@ void FastBoard::set_state(const int x, const int y,
 
 void FastBoard::reset_board(const int size) {
     m_boardsize = size;
-    m_sidevertices = size + 2;
-    m_numvertices = m_sidevertices * m_sidevertices;
+    m_sidevertices = size + 1;
+    m_numvertices = m_sidevertices * (m_sidevertices + 1);
     m_tomove = BLACK;
     m_prisoners[BLACK] = 0;
     m_prisoners[WHITE] = 0;
