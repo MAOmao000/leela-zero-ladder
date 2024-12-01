@@ -260,7 +260,6 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             // another thread requests draining the search.
             const auto success = node->create_children(
                 m_network, m_nodes, currstate, eval,
-                m_rootstate.get_to_move(),
                 get_min_psa_ratio());
             if (!had_children && success) {
                 result = SearchResult::from_eval(eval);

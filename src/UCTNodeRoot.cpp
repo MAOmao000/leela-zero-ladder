@@ -46,8 +46,6 @@
 #include "Utils.h"
 #include "LadderDetection.h"
 
-//#define SIMPLE_LADDER_DETECT
-
 /*
  * These functions belong to UCTNode but should only be called on the root node
  * of UCTSearch and have been seperated to increase code clarity.
@@ -206,17 +204,10 @@ void UCTNode::inflate_all_children() {
 void UCTNode::prepare_root_node(Network& network, const int color,
                                 std::atomic<int>& nodes,
                                 GameState& root_state) {
-#ifndef SIMPLE_LADDER_DETECT
-    bool children_create = false;
-#endif
     float root_eval;
     const auto had_children = has_children();
     if (expandable()) {
-#ifndef SIMPLE_LADDER_DETECT
-        children_create = true;
-#endif
-        create_children(network, nodes, root_state, root_eval,
-            root_state.get_to_move());
+        create_children(network, nodes, root_state, root_eval);
     }
     if (had_children) {
         root_eval = get_net_eval(color);
@@ -233,38 +224,14 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // This also removes a lot of special cases.
     kill_superkos(root_state);
 
-#ifndef SIMPLE_LADDER_DETECT
-    int ladder_map[NUM_INTERSECTIONS] = {};
-    if (!children_create && root_state.m_komove == FastBoard::NO_VERTEX) {
-        LadderDetection(&root_state, ladder_map);
-    }
-    int ladder_defense = cfg_ladder_defense;
-    int ladder_offense = -1 * cfg_ladder_offense;
-    if (!children_create && cfg_ladder_temperature > 1) {
-        ladder_defense =
-            cfg_ladder_defense + root_state.get_movenum() / cfg_ladder_temperature;
-        ladder_offense = -1 *
-            (cfg_ladder_offense + root_state.get_movenum() / cfg_ladder_temperature);
-    }
-#endif
-
     for (auto& child : m_children) {
         auto move = child->get_move();
         if (move != FastBoard::PASS) {
             auto xy = root_state.board.get_xy(move);
-#ifndef SIMPLE_LADDER_DETECT
-            if (!root_state.is_move_legal(color, move)
-                || ladder_map[xy.first * BOARD_SIZE + xy.second] <= ladder_offense
-                || ladder_map[xy.first * BOARD_SIZE + xy.second] >= ladder_defense) {
-                // Don't delete nodes for now, just mark them invalid.
-                child->invalidate();
-            }
-#else
             if (!root_state.is_move_legal(color, move)) {
                 // Don't delete nodes for now, just mark them invalid.
                 child->invalidate();
             }
-#endif
         }
     }
     // Now do the actual deletion.
