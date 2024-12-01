@@ -121,8 +121,10 @@ int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
 int cfg_ladder_temperature;
+float cfg_ladder_threshold_policy;
 float cfg_ladder_penalty_policy;
-float cfg_ladder_penalty_winrate;
+float cfg_ladder_penalty_value;
+bool cfg_ladder_simple_detect;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -400,9 +402,9 @@ void GTP::setup_default_parameters() {
     cfg_fpu_root_reduction = cfg_fpu_reduction; // --noise
     cfg_ci_alpha = 1e-5f;            // --ci_alpha
     cfg_lcb_min_visit_ratio = 0.10f; // --lcb_visits_ratio
-    cfg_random_cnt = 30;             // -m, --randomcnt;
+    cfg_random_cnt = 0;              // -m, --randomcnt
     cfg_random_min_visits = 1;       // --randomvisits
-    cfg_random_temp = 0.8f;          // --randomtemp;
+    cfg_random_temp = 1.0f;          // --randomtemp
     cfg_dumbpass = false;            // -d, --dumbpass
     cfg_logfile_handle = nullptr;    // -l, --logfile
     cfg_quiet = false;               // -q, --quiet
@@ -415,14 +417,16 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;        // --no_ladder_check
-    cfg_ladder_defense = 12;        // --ladder_defense
-    cfg_ladder_offense = 12;        // --ladder_offense
-    cfg_defense_stones = 1;         // --defense_stones
+    cfg_ladder_defense = 10;        // --ladder_defense
+    cfg_ladder_offense = 10;        // --ladder_offense
+    cfg_defense_stones = 0;         // --defense_stones
     cfg_offense_stones = 3;         // --offense_stones
-    cfg_ladder_depth = 200;         // --ladder_depth
+    cfg_ladder_depth = 100;         // --ladder_depth
     cfg_ladder_temperature = 50;    // --ladder_temperature
-    cfg_ladder_penalty_policy = 0.25f;   // --ladder_penalty_policy
-    cfg_ladder_penalty_winrate = 1.0f;   // --ladder_penalty_winrate
+    cfg_ladder_threshold_policy = 0.01f; // --ladder_threshold_policy
+    cfg_ladder_penalty_policy = 0.001f;  // --ladder_penalty_policy
+    cfg_ladder_penalty_value = 0.01f;    // --ladder_penalty_value
+    cfg_ladder_simple_detect = false;    // --ladder_simple_detect
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -633,7 +637,6 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
-        s_network->nncache_clear();
         s_network->forward_wait_time_reset();
         Training::clear_training();
         game.reset_game();

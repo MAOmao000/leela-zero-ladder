@@ -228,11 +228,13 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ladder_temperature", po::value<int>()->default_value(cfg_ladder_temperature),
                       "Each time the board advances by this value,"
                       " the depth of the ladder judgement is increased by 1.")
+        ("ladder_threshold_policy", po::value<float>()->default_value(cfg_ladder_threshold_policy),
+                      "Minimal policy that does ladder checking.")
         ("ladder_penalty_policy", po::value<float>()->default_value(cfg_ladder_penalty_policy),
-                      "When ladder move is greater than this value,"
-                      " lower the winning rate of that board.")
-        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
-                      "The rate at which the ladder reduces the winning rate of the board.")
+                      "Replace the ladder detection policy with this penalty probability.")
+        ("ladder_penalty_value", po::value<float>()->default_value(cfg_ladder_penalty_value),
+                      "Penalty ratio to multiply the ladder detection value by.")
+        ("ladder_simple_detect", "Detect ladder when searching for UCT nodes.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -666,12 +668,20 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_temperature = vm["ladder_temperature"].as<int>();
     }
 
+    if (vm.count("ladder_threshold_policy")) {
+        cfg_ladder_threshold_policy = vm["ladder_threshold_policy"].as<float>();
+    }
+
     if (vm.count("ladder_penalty_policy")) {
         cfg_ladder_penalty_policy = vm["ladder_penalty_policy"].as<float>();
     }
 
-    if (vm.count("ladder_penalty_winrate")) {
-        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
+    if (vm.count("ladder_penalty_value")) {
+        cfg_ladder_penalty_value = vm["ladder_penalty_value"].as<float>();
+    }
+
+    if (vm.count("ladder_simple_detect")) {
+        cfg_ladder_simple_detect = true;
     }
 
     auto out = std::stringstream{};
