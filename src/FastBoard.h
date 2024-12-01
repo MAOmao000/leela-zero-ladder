@@ -113,16 +113,21 @@ public:
         auto newpos = vertex;
         auto liberty_cnt = 0;
         std::array<int, 2> liberty_pos = {0, 0};
+        char breath_checked[FastBoard::NUM_VERTICES] = {};
+        // Follow the connecting stones and find the breathing point.
         do {
-            for (auto d = 0; d < 4; d++) {
-                auto n_vtx = get_state_neighbor(newpos, d);
-                if (get_state(n_vtx) == FastBoard::EMPTY && n_vtx != liberty_pos[0]) {
-                    liberty_pos[liberty_cnt] = n_vtx;
-                    liberty_cnt++;
-                    if (liberty_cnt >= liberty_num) break;
+            if (!breath_checked[newpos]) {
+                breath_checked[newpos] = 1;
+                for (auto d = 0; d < 4; d++) {
+                    auto n_vtx = get_state_neighbor(newpos, d);
+                    if (get_state(n_vtx) == FastBoard::EMPTY && n_vtx != liberty_pos[0]) {
+                        liberty_pos[liberty_cnt] = n_vtx;
+                        liberty_cnt++;
+                        if (liberty_cnt >= liberty_num) break;
+                    }
                 }
+                if (liberty_cnt >= liberty_num) break;
             }
-            if (liberty_cnt >= liberty_num) break;
             newpos = get_next_stone(newpos);
         } while (newpos != vertex);
         return liberty_pos;
