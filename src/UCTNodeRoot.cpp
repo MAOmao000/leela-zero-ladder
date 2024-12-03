@@ -227,7 +227,6 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     for (auto& child : m_children) {
         auto move = child->get_move();
         if (move != FastBoard::PASS) {
-            auto xy = root_state.board.get_xy(move);
             if (!root_state.is_move_legal(color, move)) {
                 // Don't delete nodes for now, just mark them invalid.
                 child->invalidate();
