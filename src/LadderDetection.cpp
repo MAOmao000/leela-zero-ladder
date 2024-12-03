@@ -18,6 +18,7 @@ static bool IsLadderCaptured(
     std::unique_ptr<GameState> &state,
     const int str_vtx,
     const int turn_color,
+    const int max_ladder_depth,
     const bool escape = true,
     int escape_pos = 0)
 {
@@ -26,7 +27,7 @@ static bool IsLadderCaptured(
     if (escape_pos && escape_color == FastBoard::EMPTY) {
         num_liberty = 1;
     } else {
-        if (escape_color == FastBoard::EMPTY) {// && !escape_pos) {
+        if (escape_color == FastBoard::EMPTY) {
             if (state->m_komove != FastBoard::NO_VERTEX) {
                 return ALIVE;
             } else {
@@ -35,7 +36,7 @@ static bool IsLadderCaptured(
         }
         num_liberty = state->board.get_liberties(str_vtx);
     }
-    if (depth >= cfg_ladder_depth) {
+    if (depth >= max_ladder_depth) {
         if (escape) {
             return DEAD;
         } else {
@@ -45,7 +46,7 @@ static bool IsLadderCaptured(
     auto base_depth = depth;
     if (turn_color == escape_color || escape_color == FastBoard::EMPTY) {
         auto max_depth_alive = 0;
-        auto min_depth_dead = cfg_ladder_depth + 1;
+        auto min_depth_dead = max_ladder_depth + 1;
         if (turn_color == escape_color) {
             if (state->m_komove != FastBoard::NO_VERTEX || num_liberty >= 2) {
                 return ALIVE;
@@ -70,7 +71,14 @@ static bool IsLadderCaptured(
                     if (state->is_move_legal(turn_color, liberty_pos[0])) {
                         state->play_move(turn_color, liberty_pos[0]);
                         depth = base_depth;
-                        if (IsLadderCaptured(++depth, state, str_vtx, FLIP_COLOR(turn_color), escape) == ALIVE) {
+                        if (IsLadderCaptured(
+                                ++depth,
+                                state,
+                                str_vtx,
+                                FLIP_COLOR(turn_color),
+                                max_ladder_depth,
+                                escape
+                            ) == ALIVE) {
                             if (escape) {
                                 state->undo_move();
                                 return ALIVE;
@@ -101,7 +109,14 @@ static bool IsLadderCaptured(
         if (state->is_move_legal(turn_color, escape_pos)) {
             state->play_move(turn_color, escape_pos);
             depth = base_depth;
-            if (IsLadderCaptured(++depth, state, str_vtx, FLIP_COLOR(turn_color), escape) == ALIVE) {
+            if (IsLadderCaptured(
+                    ++depth,
+                    state,
+                    str_vtx,
+                    FLIP_COLOR(turn_color),
+                    max_ladder_depth,
+                    escape
+                ) == ALIVE) {
                 state->undo_move();
                 if (depth < max_depth_alive) {
                     depth = max_depth_alive;
@@ -122,7 +137,7 @@ static bool IsLadderCaptured(
         if (max_depth_alive) {
             depth = max_depth_alive;
             return ALIVE;
-        } else if (min_depth_dead <= cfg_ladder_depth) {
+        } else if (min_depth_dead <= max_ladder_depth) {
             depth = min_depth_dead;
         }
         return DEAD;
@@ -131,13 +146,20 @@ static bool IsLadderCaptured(
              return ALIVE;
         }
         auto max_depth_alive = 0;
-        auto min_depth_dead = cfg_ladder_depth + 1;
+        auto min_depth_dead = max_ladder_depth + 1;
         auto liberty_pos = state->board.get_liberty_pos(2, str_vtx);
         for (auto i = 0; i < 2; i++) {
             if (liberty_pos[i] && state->is_move_legal(turn_color, liberty_pos[i])) {
                 state->play_move(turn_color, liberty_pos[i]);
                 depth = base_depth;
-                if (IsLadderCaptured(++depth, state, str_vtx, FLIP_COLOR(turn_color), escape) == DEAD) {
+                if (IsLadderCaptured(
+                        ++depth,
+                        state,
+                        str_vtx,
+                        FLIP_COLOR(turn_color),
+                        max_ladder_depth,
+                        escape
+                    ) == DEAD) {
                     if (!escape) {
                         state->undo_move();
                         return DEAD;
@@ -149,7 +171,7 @@ static bool IsLadderCaptured(
                 state->undo_move();
             }
         }
-        if (min_depth_dead <= cfg_ladder_depth) {
+        if (min_depth_dead <= max_ladder_depth) {
             depth = min_depth_dead;
             return DEAD;
         } else if (max_depth_alive) {
@@ -191,7 +213,15 @@ void LadderDetection(
             }
             if (liberty_count == 2) {
                 depth = 0;
-                if (IsLadderCaptured(depth, state_copy, vertex, turn_color, true, vertex) == DEAD) {
+                if (IsLadderCaptured(
+                        depth,
+                        state_copy,
+                        vertex,
+                        turn_color,
+                        cfg_ladder_depth,
+                        true,
+                        vertex
+                    ) == DEAD) {
                     ladder_pos[i] = depth;
                 }
             }
@@ -206,7 +236,15 @@ void LadderDetection(
             if (policy[0] < 0.0f ||
                 policy[xy.first + xy.second * BOARD_SIZE] > cfg_ladder_threshold_policy) {
                 depth = 0;
-                if (IsLadderCaptured(depth, state_copy, vertex, turn_color, true, liberty_pos[0]) == DEAD) {
+                if (IsLadderCaptured(
+                        depth,
+                        state_copy,
+                        vertex,
+                        turn_color,
+                        cfg_ladder_depth,
+                        true,
+                        liberty_pos[0]
+                    ) == DEAD) {
                     if (ladder_pos[xy.first + xy.second * BOARD_SIZE] <= 0) {
                         if (-1 * ladder_pos[xy.first + xy.second * BOARD_SIZE] < depth) {
                             ladder_pos[xy.first + xy.second * BOARD_SIZE] = depth;
@@ -224,19 +262,22 @@ void LadderDetection(
             // Check the opponent's stone with two breathing points.
             auto liberty_pos = state->board.get_liberty_pos(2, vertex);
 
-            std::pair<int, int> xy[2];
-            xy[0] = state_copy->board.get_xy(liberty_pos[0]);
-            xy[1] = state_copy->board.get_xy(liberty_pos[1]);
-            if (policy[0] < 0.0f ||
-                policy[xy[0].first + xy[0].second * BOARD_SIZE] > cfg_ladder_threshold_policy ||
-                policy[xy[1].first + xy[1].second * BOARD_SIZE] > cfg_ladder_threshold_policy) {
-                // Checking the stone of the current turn with two breathing points.
-                for (auto i = 0; i < 2; i++) {
-                    auto ladder_idx = xy[i].first + xy[i].second * BOARD_SIZE;
+            // Checking the stone of the current turn with two breathing points.
+            for (auto i = 0; i < 2; i++) {
+                auto xy = state_copy->board.get_xy(liberty_pos[i]);
+                auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
+                if (policy[0] < 0.0f || policy[ladder_idx] > cfg_ladder_threshold_policy) {
                     if (state_copy->is_move_legal(turn_color, liberty_pos[i])) {
                         state_copy->play_move(turn_color, liberty_pos[i]);
                         depth = 0;
-                        if (IsLadderCaptured(depth, state_copy, vertex, opponent, false) == ALIVE) {
+                        if (IsLadderCaptured(
+                                depth,
+                                state_copy,
+                                vertex,
+                                opponent,
+                                cfg_ladder_depth,
+                                false
+                            ) == ALIVE) {
                             if (ladder_pos[ladder_idx] <= 0) {
                                 if (-1 * ladder_pos[ladder_idx] < depth) {
                                     ladder_pos[ladder_idx] = -1 * depth;
