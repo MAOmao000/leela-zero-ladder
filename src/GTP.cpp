@@ -417,13 +417,13 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;        // --no_ladder_check
-    cfg_ladder_defense = 10;        // --ladder_defense
-    cfg_ladder_offense = 10;        // --ladder_offense
+    cfg_ladder_defense = 12;        // --ladder_defense
+    cfg_ladder_offense = 20;        // --ladder_offense
     cfg_defense_stones = 0;         // --defense_stones
-    cfg_offense_stones = 3;         // --offense_stones
+    cfg_offense_stones = 5;         // --offense_stones
     cfg_ladder_depth = 100;         // --ladder_depth
-    cfg_ladder_temperature = 50;    // --ladder_temperature
-    cfg_ladder_threshold_policy = 0.01f; // --ladder_threshold_policy
+    cfg_ladder_temperature = 15;    // --ladder_temperature
+    cfg_ladder_threshold_policy = 0.1f;  // --ladder_threshold_policy
     cfg_ladder_penalty_policy = 0.001f;  // --ladder_penalty_policy
     cfg_ladder_penalty_value = 0.01f;    // --ladder_penalty_value
     cfg_ladder_simple_detect = false;    // --ladder_simple_detect
