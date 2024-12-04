@@ -200,7 +200,7 @@ void LadderDetection(
 
         if (cfg_defense_stones < 1 &&
             state_copy->board.get_state(vertex) == FastBoard::EMPTY &&
-            (policy[0] < 0.0f || policy[i] > cfg_ladder_threshold_policy)) {
+            (policy[0] < 0.0f || policy[i] > cfg_ladder_min_policy)) {
             auto liberty_count = 0;
             for (auto d = 0; d < 4; d++) {
                 auto n_vtx = state_copy->board.get_state_neighbor(vertex, d);
@@ -234,7 +234,7 @@ void LadderDetection(
 
             auto xy = state_copy->board.get_xy(liberty_pos[0]);
             if (policy[0] < 0.0f ||
-                policy[xy.first + xy.second * BOARD_SIZE] > cfg_ladder_threshold_policy) {
+                policy[xy.first + xy.second * BOARD_SIZE] > cfg_ladder_min_policy) {
                 depth = 0;
                 if (IsLadderCaptured(
                         depth,
@@ -266,7 +266,7 @@ void LadderDetection(
             for (auto i = 0; i < 2; i++) {
                 auto xy = state_copy->board.get_xy(liberty_pos[i]);
                 auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                if (policy[0] < 0.0f || policy[ladder_idx] > cfg_ladder_threshold_policy) {
+                if (policy[0] < 0.0f || policy[ladder_idx] > cfg_ladder_min_policy) {
                     if (state_copy->is_move_legal(turn_color, liberty_pos[i])) {
                         state_copy->play_move(turn_color, liberty_pos[i]);
                         depth = 0;

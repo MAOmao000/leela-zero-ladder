@@ -228,7 +228,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ladder_temperature", po::value<int>()->default_value(cfg_ladder_temperature),
                       "Each time the board advances by this value,"
                       " the depth of the ladder judgement is increased by 1.")
-        ("ladder_threshold_policy", po::value<float>()->default_value(cfg_ladder_threshold_policy),
+        ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
                       "Minimal policy that does ladder checking.")
         ("ladder_penalty_policy", po::value<float>()->default_value(cfg_ladder_penalty_policy),
                       "Replace the ladder detection policy with this penalty probability.")
@@ -668,8 +668,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_temperature = vm["ladder_temperature"].as<int>();
     }
 
-    if (vm.count("ladder_threshold_policy")) {
-        cfg_ladder_threshold_policy = vm["ladder_threshold_policy"].as<float>();
+    if (vm.count("ladder_min_policy")) {
+        cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
     }
 
     if (vm.count("ladder_penalty_policy")) {

@@ -199,7 +199,7 @@ extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 extern int cfg_ladder_temperature;
-extern float cfg_ladder_threshold_policy;
+extern float cfg_ladder_min_policy;
 extern float cfg_ladder_penalty_policy;
 extern float cfg_ladder_penalty_value;
 extern bool cfg_ladder_simple_detect;
