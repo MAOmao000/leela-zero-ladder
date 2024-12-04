@@ -1141,21 +1141,18 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
         LadderDetection(state, ladder_map, result.policy);
     }
     int ladder_defense;
-    int ladder_offense;
     if (cfg_ladder_temperature > 1) {
         ladder_defense =
             cfg_ladder_defense + state->get_movenum() / cfg_ladder_temperature;
-        ladder_offense = -1 *
-            (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature);
     } else {
         ladder_defense = cfg_ladder_defense;
-        ladder_offense =  -1 * cfg_ladder_offense;
     }
+    auto ladder_offense =  -1 * cfg_ladder_offense;
     auto penalty_value = false;
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         if (ladder_map[sym_idx] <= ladder_offense || ladder_map[sym_idx] >= ladder_defense) {
-            if (!penalty_value && cfg_ladder_penalty_value > 0.0f) {
+            if (!penalty_value && cfg_ladder_penalty_value > 0.0f && ladder_map[sym_idx] > 0) {
                 penalty_value = true;
                 if (m_value_head_not_stm && state->board.get_to_move() == FastBoard::WHITE) {
                     // v2 format (ELF Open Go) returns black value, not stm
