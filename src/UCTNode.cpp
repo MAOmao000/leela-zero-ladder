@@ -312,8 +312,25 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
     wait_expanded();
 
     int ladder_map[NUM_INTERSECTIONS] = {};
+    int ladder_defense, ladder_offense;
     static constexpr std::array<float, NUM_INTERSECTIONS> policy = {-1.0f};
     if (cfg_ladder_simple_detect && cfg_ladder_check) {
+        if (cfg_ladder_temperature > 1) {
+            ladder_defense =
+                cfg_ladder_defense + state.get_movenum() / cfg_ladder_temperature;
+            ladder_offense = -1 *
+                (cfg_ladder_offense + state.get_movenum() / cfg_ladder_temperature);
+        } else if (cfg_ladder_temperature < -1) {
+            ladder_defense =
+                cfg_ladder_defense * 2 + state.get_movenum() / cfg_ladder_temperature;
+            ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
+            ladder_offense =
+                cfg_ladder_offense * 2 + state.get_movenum() / cfg_ladder_temperature;
+            ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
+        } else {
+            ladder_defense = cfg_ladder_defense;
+            ladder_offense = -1 * cfg_ladder_offense;
+        }
         const auto ko = state.m_komove == FastBoard::NO_VERTEX;
         if (!ko) {
             LadderDetection(&state, ladder_map, policy);
@@ -383,9 +400,9 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
             const auto ko = state.m_komove == FastBoard::NO_VERTEX;
             if (!ko && move != FastBoard::PASS) {
                 auto xy = state.board.get_xy(move);
-                if (ladder_map[xy.second * BOARD_SIZE + xy.first] <= -1 * cfg_ladder_offense
-                    || ladder_map[xy.second * BOARD_SIZE + xy.first] >= cfg_ladder_defense) {
-                    value *= 0.01;
+                if (ladder_map[xy.second * BOARD_SIZE + xy.first] <= ladder_offense
+                    || ladder_map[xy.second * BOARD_SIZE + xy.first] >= ladder_defense) {
+                    value *= cfg_ladder_penalty_simple;
                 }
             }
         }

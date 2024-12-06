@@ -230,11 +230,17 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       " the depth of the ladder judgement is increased by 1.")
         ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
                       "Minimal policy that does ladder checking.")
-        ("ladder_penalty_policy", po::value<float>()->default_value(cfg_ladder_penalty_policy),
+        ("ladder_penalty_p_defense", po::value<float>()->default_value(cfg_ladder_penalty_p_defense),
                       "Replace the ladder detection policy with this penalty probability.")
-        ("ladder_penalty_value", po::value<float>()->default_value(cfg_ladder_penalty_value),
+        ("ladder_penalty_p_offense", po::value<float>()->default_value(cfg_ladder_penalty_p_offense),
+                      "Replace the ladder detection policy with this penalty probability.")
+        ("ladder_penalty_v_defense", po::value<float>()->default_value(cfg_ladder_penalty_v_defense),
                       "Penalty ratio to multiply the ladder detection value by.")
-        ("ladder_simple_detect", "Detect ladder when searching for UCT nodes.")
+        ("ladder_penalty_v_offense", po::value<float>()->default_value(cfg_ladder_penalty_v_offense),
+                      "Penalty ratio to multiply the ladder detection value by.")
+        ("no_ladder_simple_detect", "Detect ladder when creating for UCT nodes.")
+        ("ladder_penalty_simple", po::value<float>()->default_value(cfg_ladder_penalty_simple),
+                      "Penalty ratio to multiply the ladder simple detection value by.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -672,16 +678,28 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
     }
 
-    if (vm.count("ladder_penalty_policy")) {
-        cfg_ladder_penalty_policy = vm["ladder_penalty_policy"].as<float>();
+    if (vm.count("ladder_penalty_p_defense")) {
+        cfg_ladder_penalty_p_defense = vm["ladder_penalty_p_defense"].as<float>();
     }
 
-    if (vm.count("ladder_penalty_value")) {
-        cfg_ladder_penalty_value = vm["ladder_penalty_value"].as<float>();
+    if (vm.count("ladder_penalty_p_offense")) {
+        cfg_ladder_penalty_p_offense = vm["ladder_penalty_p_offense"].as<float>();
     }
 
-    if (vm.count("ladder_simple_detect")) {
-        cfg_ladder_simple_detect = true;
+    if (vm.count("ladder_penalty_v_defense")) {
+        cfg_ladder_penalty_v_defense = vm["ladder_penalty_v_defense"].as<float>();
+    }
+
+    if (vm.count("ladder_penalty_v_offense")) {
+        cfg_ladder_penalty_v_offense = vm["ladder_penalty_v_offense"].as<float>();
+    }
+
+    if (vm.count("no_ladder_simple_detect")) {
+        cfg_ladder_simple_detect = false;
+    }
+
+    if (vm.count("ladder_penalty_simple")) {
+        cfg_ladder_penalty_simple = vm["ladder_penalty_simple"].as<float>();
     }
 
     auto out = std::stringstream{};

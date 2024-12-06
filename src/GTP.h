@@ -200,9 +200,12 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 extern int cfg_ladder_temperature;
 extern float cfg_ladder_min_policy;
-extern float cfg_ladder_penalty_policy;
-extern float cfg_ladder_penalty_value;
+extern float cfg_ladder_penalty_p_defense;
+extern float cfg_ladder_penalty_p_offense;
+extern float cfg_ladder_penalty_v_defense;
+extern float cfg_ladder_penalty_v_offense;
 extern bool cfg_ladder_simple_detect;
+extern float cfg_ladder_penalty_simple;
 
 extern AnalyzeTags cfg_analyze_tags;
 

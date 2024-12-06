@@ -122,9 +122,12 @@ int cfg_offense_stones;
 int cfg_ladder_depth;
 int cfg_ladder_temperature;
 float cfg_ladder_min_policy;
-float cfg_ladder_penalty_policy;
-float cfg_ladder_penalty_value;
+float cfg_ladder_penalty_p_defense;
+float cfg_ladder_penalty_p_offense;
+float cfg_ladder_penalty_v_defense;
+float cfg_ladder_penalty_v_offense;
 bool cfg_ladder_simple_detect;
+float cfg_ladder_penalty_simple;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -417,16 +420,19 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;        // --no_ladder_check
-    cfg_ladder_defense = 12;        // --ladder_defense
-    cfg_ladder_offense = 12;        // --ladder_offense
+    cfg_ladder_defense = 20;        // --ladder_defense
+    cfg_ladder_offense = 20;        // --ladder_offense
     cfg_defense_stones = 0;         // --defense_stones
-    cfg_offense_stones = 3;         // --offense_stones
+    cfg_offense_stones = 2;         // --offense_stones
     cfg_ladder_depth = 100;         // --ladder_depth
-    cfg_ladder_temperature = 50;    // --ladder_temperature
-    cfg_ladder_min_policy = 0.1f;   // --ladder_min_policy
-    cfg_ladder_penalty_policy = 0.001f;  // --ladder_penalty_policy
-    cfg_ladder_penalty_value = 0.1f;     // --ladder_penalty_value
-    cfg_ladder_simple_detect = false;    // --ladder_simple_detect
+    cfg_ladder_temperature = 0;     // --ladder_temperature
+    cfg_ladder_min_policy = 0.75f;  // --ladder_min_policy
+    cfg_ladder_penalty_p_defense = 0.001f;  // --ladder_penalty_p_defense
+    cfg_ladder_penalty_p_offense = 0.001f;  // --ladder_penalty_p_offense
+    cfg_ladder_penalty_v_defense = 0.5f;    // --ladder_penalty_v_defense
+    cfg_ladder_penalty_v_offense = 0.5f;    // --ladder_penalty_v_offense
+    cfg_ladder_simple_detect = true;       // --ladder_simple_detect
+    cfg_ladder_penalty_simple = 0.01f;      // --ladder_penalty_simple
 
     cfg_analyze_tags = AnalyzeTags{};
 
