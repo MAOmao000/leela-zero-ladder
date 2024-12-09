@@ -311,31 +311,6 @@ void UCTNode::accumulate_eval(const float eval) {
 UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
-    int ladder_map[NUM_INTERSECTIONS] = {};
-    int ladder_defense, ladder_offense;
-    static constexpr std::array<float, NUM_INTERSECTIONS> policy = {-1.0f};
-    if (cfg_ladder_simple_detect && cfg_ladder_check) {
-        if (cfg_ladder_temperature > 1) {
-            ladder_defense =
-                cfg_ladder_defense + state.get_movenum() / cfg_ladder_temperature;
-            ladder_offense = -1 *
-                (cfg_ladder_offense + state.get_movenum() / cfg_ladder_temperature);
-        } else if (cfg_ladder_temperature < -1) {
-            ladder_defense =
-                cfg_ladder_defense * 2 + state.get_movenum() / cfg_ladder_temperature;
-            ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
-            ladder_offense =
-                cfg_ladder_offense * 2 + state.get_movenum() / cfg_ladder_temperature;
-            ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
-        } else {
-            ladder_defense = cfg_ladder_defense;
-            ladder_offense = -1 * cfg_ladder_offense;
-        }
-        const auto ko = state.m_komove == FastBoard::NO_VERTEX;
-        if (!ko) {
-            LadderDetection(&state, ladder_map, policy);
-        }
-    }
     // Count parentvisits manually to avoid issues with transpositions.
     auto total_visited_policy = 0.0f;
     auto parentvisits = size_t{0};
@@ -394,18 +369,6 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
         const auto puct = cpuct * psa * (numerator / denom);
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
-
-        if (cfg_ladder_simple_detect && cfg_ladder_check) {
-            const auto move = child.get_move();
-            const auto ko = state.m_komove == FastBoard::NO_VERTEX;
-            if (!ko && move != FastBoard::PASS) {
-                auto xy = state.board.get_xy(move);
-                if (ladder_map[xy.second * BOARD_SIZE + xy.first] <= ladder_offense
-                    || ladder_map[xy.second * BOARD_SIZE + xy.first] >= ladder_defense) {
-                    value *= cfg_ladder_penalty_simple;
-                }
-            }
-        }
 
         if (value > best_value) {
             best_value = value;

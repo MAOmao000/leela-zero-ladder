@@ -1007,58 +1007,18 @@ Network::Netresult Network::get_output(
     if (read_cache) {
         // See if we already have this in the cache.
         if (probe_cache(state, result)) {
-            if (cfg_ladder_simple_detect || !cfg_ladder_check) {
-                return result;
-            }
-            int ladder_map[NUM_INTERSECTIONS] = {};
-            if (state->m_komove == FastBoard::NO_VERTEX) {
-                LadderDetection(state, ladder_map, result.policy);
-            }
-            int ladder_defense, ladder_offense;
-            if (cfg_ladder_temperature > 1) {
-                ladder_defense =
-                    cfg_ladder_defense + state->get_movenum() / cfg_ladder_temperature;
-                ladder_offense = -1 *
-                    (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature);
-            } else if (cfg_ladder_temperature < -1) {
-                ladder_defense =
-                    cfg_ladder_defense * 2 + state->get_movenum() / cfg_ladder_temperature;
-                ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
-                ladder_offense =
-                    cfg_ladder_offense * 2 + state->get_movenum() / cfg_ladder_temperature;
-                ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
-            } else {
-                ladder_defense = cfg_ladder_defense;
-                ladder_offense = -1 * cfg_ladder_offense;
-            }
-            auto penalty_value = false;
-            for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-                if (ladder_map[idx] <= ladder_offense || ladder_map[idx] >= ladder_defense) {
-                    if (!penalty_value) {
-                        if (cfg_ladder_penalty_v_defense > 0.0f && ladder_map[idx] > 0) {
-                            penalty_value = true;
-                            result.winrate *= cfg_ladder_penalty_v_defense;
-                        } else if (cfg_ladder_penalty_v_offense > 0.0f && ladder_map[idx] < 0) {
-                            penalty_value = true;
-                            result.winrate *= cfg_ladder_penalty_v_offense;
-                        }
-                    }
-                    if (cfg_ladder_penalty_v_defense > 0.0f && ladder_map[idx] > 0) {
-                        result.policy[idx] = std::min(cfg_ladder_penalty_p_defense, result.policy[idx]);
-                    } else if (cfg_ladder_penalty_v_offense > 0.0f && ladder_map[idx] < 0) {
-                        result.policy[idx] = std::min(cfg_ladder_penalty_p_offense, result.policy[idx]);
-                    }
-                }
-            }
             return result;
         }
     }
 
+    int sym_tbl = 0;
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
+        sym_tbl = symmetry;
         result = get_output_internal(state, symmetry);
     } else if (ensemble == AVERAGE) {
         assert(symmetry == -1);
+        sym_tbl = 0;
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
             auto tmpresult = get_output_internal(state, sym);
             result.winrate +=
@@ -1074,8 +1034,8 @@ Network::Netresult Network::get_output(
     } else {
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
-        const auto rand_sym = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        result = get_output_internal(state, rand_sym);
+        sym_tbl = Random::get_Rng().randfix<NUM_SYMMETRIES>();
+        result = get_output_internal(state, sym_tbl);
 #ifdef USE_OPENCL_SELFCHECK
         // Both implementations are available, self-check the OpenCL driver by
         // running both with a probability of 1/2000.
@@ -1084,7 +1044,7 @@ Network::Netresult Network::get_output(
         if (m_forward_cpu != nullptr
             && (force_selfcheck
                 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)) {
-            auto result_ref = get_output_internal(state, rand_sym, true);
+            auto result_ref = get_output_internal(state, sym_tbl, true);
             compare_net_outputs(result, result_ref);
         }
 #else
@@ -1097,12 +1057,12 @@ Network::Netresult Network::get_output(
             result.winrate = 1.0f - result.winrate;
         }
     }
-    if (write_cache) {
-        // Insert result into cache.
-        m_nncache.insert(state->board.get_hash(), result);
-    }
 
-    if (cfg_ladder_simple_detect || !cfg_ladder_check) {
+    if (!cfg_ladder_check) {
+        if (write_cache) {
+            // Insert result into cache.
+            m_nncache.insert(state->board.get_hash(), result);
+        }
         return result;
     }
     int ladder_map[NUM_INTERSECTIONS] = {};
@@ -1117,10 +1077,10 @@ Network::Netresult Network::get_output(
             (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature);
     } else if (cfg_ladder_temperature < -1) {
         ladder_defense =
-            cfg_ladder_defense * 2 + state->get_movenum() / cfg_ladder_temperature;
+            cfg_ladder_defense * 3 + state->get_movenum() / cfg_ladder_temperature;
         ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
         ladder_offense =
-            cfg_ladder_offense * 2 + state->get_movenum() / cfg_ladder_temperature;
+            cfg_ladder_offense * 3 + state->get_movenum() / cfg_ladder_temperature;
         ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
     } else {
         ladder_defense = cfg_ladder_defense;
@@ -1128,8 +1088,16 @@ Network::Netresult Network::get_output(
     }
     auto penalty_value = false;
     for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-        const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-        if (ladder_map[sym_idx] <= ladder_offense || ladder_map[sym_idx] >= ladder_defense) {
+        const auto sym_idx = symmetry_nn_idx_table[sym_tbl][idx];
+        if (ladder_map[sym_idx] > cfg_ladder_depth) {
+            if (ladder_map[sym_idx] > ladder_defense + cfg_ladder_depth) {
+                if (!penalty_value) {
+                    penalty_value = true;
+                    result.winrate *= 1.0f + cfg_ladder_advantage_v;
+                }
+                result.policy[sym_idx] *= 1.0f + cfg_ladder_advantage_p;
+            }
+        } else if (ladder_map[sym_idx] <= ladder_offense || ladder_map[sym_idx] >= ladder_defense) {
             if (!penalty_value) {
                 if (cfg_ladder_penalty_v_defense > 0.0f && ladder_map[sym_idx] > 0) {
                     penalty_value = true;
@@ -1145,6 +1113,10 @@ Network::Netresult Network::get_output(
                 result.policy[sym_idx] = std::min(cfg_ladder_penalty_p_offense, result.policy[sym_idx]);
             }
         }
+    }
+    if (write_cache) {
+        // Insert result into cache.
+        m_nncache.insert(state->board.get_hash(), result);
     }
     return result;
 }
