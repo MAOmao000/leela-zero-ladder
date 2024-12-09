@@ -238,9 +238,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Penalty ratio to multiply the ladder detection value by.")
         ("ladder_penalty_v_offense", po::value<float>()->default_value(cfg_ladder_penalty_v_offense),
                       "Penalty ratio to multiply the ladder detection value by.")
-        ("no_ladder_simple_detect", "Detect ladder when creating for UCT nodes.")
-        ("ladder_penalty_simple", po::value<float>()->default_value(cfg_ladder_penalty_simple),
-                      "Penalty ratio to multiply the ladder simple detection value by.")
+        ("ladder_advantage_p", po::value<float>()->default_value(cfg_ladder_advantage_p),
+                      "The advantage given to policy if player can capture opponent's stones during a ladder chase.")
+        ("ladder_advantage_v", po::value<float>()->default_value(cfg_ladder_advantage_v),
+                      "The advantage given to winning rate if player can capture opponent's stones during a ladder chase.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -694,12 +695,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_penalty_v_offense = vm["ladder_penalty_v_offense"].as<float>();
     }
 
-    if (vm.count("no_ladder_simple_detect")) {
-        cfg_ladder_simple_detect = false;
+    if (vm.count("ladder_advantage_p")) {
+        cfg_ladder_advantage_p = vm["ladder_advantage_p"].as<float>();
     }
 
-    if (vm.count("ladder_penalty_simple")) {
-        cfg_ladder_penalty_simple = vm["ladder_penalty_simple"].as<float>();
+    if (vm.count("ladder_advantage_v")) {
+        cfg_ladder_advantage_v = vm["ladder_advantage_v"].as<float>();
     }
 
     auto out = std::stringstream{};

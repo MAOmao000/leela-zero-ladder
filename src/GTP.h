@@ -204,8 +204,8 @@ extern float cfg_ladder_penalty_p_defense;
 extern float cfg_ladder_penalty_p_offense;
 extern float cfg_ladder_penalty_v_defense;
 extern float cfg_ladder_penalty_v_offense;
-extern bool cfg_ladder_simple_detect;
-extern float cfg_ladder_penalty_simple;
+extern float cfg_ladder_advantage_p;
+extern float cfg_ladder_advantage_v;
 
 extern AnalyzeTags cfg_analyze_tags;
 
