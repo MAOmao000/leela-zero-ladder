@@ -87,10 +87,6 @@ static bool IsLadderCaptured(
                                 max_depth_alive = depth;
                             }
                         } else {
-                            if (!escape) {
-                                state->undo_move();
-                                return DEAD;
-                            }
                             if (depth < min_depth_dead) {
                                 min_depth_dead = depth;
                             }
@@ -261,7 +257,6 @@ void LadderDetection(
             ladder_checked[state_copy->board.get_parent_stone(vertex)] = CHECKED;
             // Check the opponent's stone with two breathing points.
             auto liberty_pos = state->board.get_liberty_pos(2, vertex);
-
             // Checking the stone of the current turn with two breathing points.
             for (auto i = 0; i < 2; i++) {
                 auto xy = state_copy->board.get_xy(liberty_pos[i]);
@@ -286,8 +281,8 @@ void LadderDetection(
                                 ladder_pos[ladder_idx] = -1 * depth;
                             }
                         } else {
-                            if (ladder_pos[ladder_idx] < 0) {
-                                ladder_pos[ladder_idx] = 0;
+                            if (ladder_pos[ladder_idx] <= 0) {
+                                ladder_pos[ladder_idx] = depth + cfg_ladder_depth + 1;
                             }
                         }
                         state_copy->undo_move();
