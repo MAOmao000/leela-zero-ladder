@@ -308,7 +308,7 @@ void UCTNode::accumulate_eval(const float eval) {
     atomic_add(m_blackevals, double(eval));
 }
 
-UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
+UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
     wait_expanded();
 
     // Count parentvisits manually to avoid issues with transpositions.

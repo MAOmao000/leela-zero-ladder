@@ -225,11 +225,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
-        ("ladder_temperature", po::value<int>()->default_value(cfg_ladder_temperature),
+        ("ladder_temperature_defense", po::value<int>()->default_value(cfg_ladder_temperature_defense),
                       "Each time the board advances by this value,"
                       " the depth of the ladder judgement is increased by 1.")
-        ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
-                      "Minimal policy that does ladder checking.")
+        ("ladder_temperature_offense", po::value<int>()->default_value(cfg_ladder_temperature_offense),
+                      "Each time the board advances by this value,"
+                      " the depth of the ladder judgement is increased by 1.")
+        ("ladder_min_policy_defense", po::value<float>()->default_value(cfg_ladder_min_policy_defense),
+                      "Minimal policy that does ladder escape checking.")
+        ("ladder_min_policy_offense", po::value<float>()->default_value(cfg_ladder_min_policy_offense),
+                      "Minimal policy that does ladder chase checking.")
         ("ladder_penalty_p_defense", po::value<float>()->default_value(cfg_ladder_penalty_p_defense),
                       "Replace the ladder detection policy with this penalty probability.")
         ("ladder_penalty_p_offense", po::value<float>()->default_value(cfg_ladder_penalty_p_offense),
@@ -671,12 +676,20 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
     }
 
-    if (vm.count("ladder_temperature")) {
-        cfg_ladder_temperature = vm["ladder_temperature"].as<int>();
+    if (vm.count("ladder_temperature_defense")) {
+        cfg_ladder_temperature_defense = vm["ladder_temperature_defense"].as<int>();
     }
 
-    if (vm.count("ladder_min_policy")) {
-        cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
+    if (vm.count("ladder_temperature_offense")) {
+        cfg_ladder_temperature_offense = vm["ladder_temperature_offense"].as<int>();
+    }
+
+    if (vm.count("ladder_min_policy_defense")) {
+        cfg_ladder_min_policy_defense = vm["ladder_min_policy_defense"].as<float>();
+    }
+
+    if (vm.count("ladder_min_policy_offense")) {
+        cfg_ladder_min_policy_offense = vm["ladder_min_policy_offense"].as<float>();
     }
 
     if (vm.count("ladder_penalty_p_defense")) {

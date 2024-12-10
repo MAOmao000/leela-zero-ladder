@@ -120,8 +120,10 @@ int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
-int cfg_ladder_temperature;
-float cfg_ladder_min_policy;
+int cfg_ladder_temperature_defense;
+int cfg_ladder_temperature_offense;
+float cfg_ladder_min_policy_defense;
+float cfg_ladder_min_policy_offense;
 float cfg_ladder_penalty_p_defense;
 float cfg_ladder_penalty_p_offense;
 float cfg_ladder_penalty_v_defense;
@@ -420,17 +422,19 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;         // --no_ladder_check
-    cfg_ladder_defense = 10;         // --ladder_defense
-    cfg_ladder_offense = 10;         // --ladder_offense
+    cfg_ladder_defense = 15;         // --ladder_defense
+    cfg_ladder_offense = 15;         // --ladder_offense
     cfg_defense_stones = 0;          // --defense_stones
-    cfg_offense_stones = 1;          // --offense_stones
+    cfg_offense_stones = 3;          // --offense_stones
     cfg_ladder_depth = 100;          // --ladder_depth
-    cfg_ladder_temperature = -10;    // --ladder_temperature
-    cfg_ladder_min_policy = 0.9f;    // --ladder_min_policy
-    cfg_ladder_penalty_p_defense = 0.00001f;  // --ladder_penalty_p_defense
-    cfg_ladder_penalty_p_offense = 0.00001f;  // --ladder_penalty_p_offense
-    cfg_ladder_penalty_v_defense = 0.95f;    // --ladder_penalty_v_defense
-    cfg_ladder_penalty_v_offense = 0.95f;    // --ladder_penalty_v_offense
+    cfg_ladder_temperature_defense = 0;     // --ladder_temperature_defense
+    cfg_ladder_temperature_offense = 0;     // --ladder_temperature_offense
+    cfg_ladder_min_policy_defense = 0.1f;   // --ladder_min_policy_defense
+    cfg_ladder_min_policy_offense = 0.75f;  // --ladder_min_policy_offense
+    cfg_ladder_penalty_p_defense = 0.001f;  // --ladder_penalty_p_defense
+    cfg_ladder_penalty_p_offense = 0.01f;   // --ladder_penalty_p_offense
+    cfg_ladder_penalty_v_defense = 0.95f;   // --ladder_penalty_v_defense
+    cfg_ladder_penalty_v_offense = 0.95f;   // --ladder_penalty_v_offense
     cfg_ladder_advantage_p = 0.05f;   // --ladder_advantage_p
     cfg_ladder_advantage_v = 0.05f;   // --ladder_advantage_v
 

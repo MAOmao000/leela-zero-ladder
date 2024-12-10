@@ -1070,20 +1070,24 @@ Network::Netresult Network::get_output(
         LadderDetection(state, ladder_map, result.policy);
     }
     int ladder_defense, ladder_offense;
-    if (cfg_ladder_temperature > 1) {
+    if (cfg_ladder_temperature_defense > 1) {
         ladder_defense =
-            cfg_ladder_defense + state->get_movenum() / cfg_ladder_temperature;
-        ladder_offense = -1 *
-            (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature);
-    } else if (cfg_ladder_temperature < -1) {
+            cfg_ladder_defense + state->get_movenum() / cfg_ladder_temperature_defense;
+    } else if (cfg_ladder_temperature_defense < -1) {
         ladder_defense =
-            cfg_ladder_defense * 3 + state->get_movenum() / cfg_ladder_temperature;
+            cfg_ladder_defense * 3 - state->get_movenum() / -cfg_ladder_temperature_defense;
         ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
-        ladder_offense =
-            cfg_ladder_offense * 3 + state->get_movenum() / cfg_ladder_temperature;
-        ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
     } else {
         ladder_defense = cfg_ladder_defense;
+    }
+    if (cfg_ladder_temperature_offense > 1) {
+        ladder_offense = -1 *
+            (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature_offense);
+    } else if (cfg_ladder_temperature_offense < -1) {
+        ladder_offense =
+            cfg_ladder_offense * 3 - state->get_movenum() / -cfg_ladder_temperature_offense;
+        ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
+    } else {
         ladder_offense = -1 * cfg_ladder_offense;
     }
     auto penalty_value = false;
@@ -1107,9 +1111,9 @@ Network::Netresult Network::get_output(
                     result.winrate *= cfg_ladder_penalty_v_offense;
                 }
             }
-            if (cfg_ladder_penalty_v_defense > 0.0f && ladder_map[sym_idx] > 0) {
+            if (cfg_ladder_penalty_p_defense > 0.0f && ladder_map[sym_idx] > 0) {
                 result.policy[sym_idx] = std::min(cfg_ladder_penalty_p_defense, result.policy[sym_idx]);
-            } else if (cfg_ladder_penalty_v_offense > 0.0f && ladder_map[sym_idx] < 0) {
+            } else if (cfg_ladder_penalty_p_offense > 0.0f && ladder_map[sym_idx] < 0) {
                 result.policy[sym_idx] = std::min(cfg_ladder_penalty_p_offense, result.policy[sym_idx]);
             }
         }
