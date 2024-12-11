@@ -430,9 +430,9 @@ void GTP::setup_default_parameters() {
     cfg_ladder_temperature_defense = 0;     // --ladder_temperature_defense
     cfg_ladder_temperature_offense = 0;     // --ladder_temperature_offense
     cfg_ladder_min_policy_defense = 0.1f;   // --ladder_min_policy_defense
-    cfg_ladder_min_policy_offense = 0.75f;  // --ladder_min_policy_offense
+    cfg_ladder_min_policy_offense = 0.1f;   // --ladder_min_policy_offense
     cfg_ladder_penalty_p_defense = 0.001f;  // --ladder_penalty_p_defense
-    cfg_ladder_penalty_p_offense = 0.01f;   // --ladder_penalty_p_offense
+    cfg_ladder_penalty_p_offense = 0.001f;  // --ladder_penalty_p_offense
     cfg_ladder_penalty_v_defense = 0.95f;   // --ladder_penalty_v_defense
     cfg_ladder_penalty_v_offense = 0.95f;   // --ladder_penalty_v_offense
     cfg_ladder_advantage_p = 0.05f;   // --ladder_advantage_p
