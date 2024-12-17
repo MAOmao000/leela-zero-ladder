@@ -120,6 +120,11 @@ public:
     std::string explain_last_think() const;
     SearchResult play_simulation(GameState& currstate, UCTNode* node);
     void stop_run();
+#ifdef LADDER_PERF
+    int get_nodes() { return m_nodes.load(); }
+    int get_escapes() { return m_escapes.load(); }
+    int get_chases() { return m_chases.load(); }
+#endif
 
 private:
     float get_min_psa_ratio() const;
@@ -142,6 +147,10 @@ private:
     std::unique_ptr<GameState> m_last_rootstate;
     std::unique_ptr<UCTNode> m_root;
     std::atomic<int> m_nodes{0};
+#ifdef LADDER_PERF
+    std::atomic<int> m_escapes{0};
+    std::atomic<int> m_chases{0};
+#endif
     std::atomic<int> m_playouts{0};
     std::atomic<bool> m_run{false};
     int m_maxplayouts;

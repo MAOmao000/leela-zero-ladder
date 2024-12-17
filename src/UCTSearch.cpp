@@ -259,7 +259,11 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             // Careful: create_children() can throw a NetworkHaltException when
             // another thread requests draining the search.
             const auto success = node->create_children(
+#ifdef LADDER_PERF
+                m_network, m_nodes, m_escapes, m_chases, currstate, eval,
+#else
                 m_network, m_nodes, currstate, eval,
+#endif
                 get_min_psa_ratio());
             if (!had_children && success) {
                 result = SearchResult::from_eval(eval);
@@ -269,7 +273,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
     }
 
     if (node->has_children() && !result.valid()) {
-        auto next = node->uct_select_child(color, node == m_root.get());
+        auto next = node->uct_select_child(currstate, color, node == m_root.get());
         auto move = next->get_move();
 
         currstate.play_move(move);
@@ -790,7 +794,11 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     // create a sorted list of legal moves (make sure we
     // play something legal and decent even in time trouble)
+#ifdef LADDER_PERF
+    m_root->prepare_root_node(m_network, color, m_nodes, m_escapes, m_chases, m_rootstate);
+#else
     m_root->prepare_root_node(m_network, color, m_nodes, m_rootstate);
+#endif
 
     m_run = true;
     int cpus = cfg_num_threads;
@@ -904,7 +912,11 @@ void UCTSearch::ponder() {
     update_root();
 
     m_root->prepare_root_node(m_network, m_rootstate.board.get_to_move(),
+#ifdef LADDER_PERF
+                              m_nodes, m_escapes, m_chases, m_rootstate);
+#else
                               m_nodes, m_rootstate);
+#endif
 
     m_run = true;
     ThreadGroup tg(thread_pool);

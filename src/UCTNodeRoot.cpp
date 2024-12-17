@@ -203,11 +203,19 @@ void UCTNode::inflate_all_children() {
 
 void UCTNode::prepare_root_node(Network& network, const int color,
                                 std::atomic<int>& nodes,
+#ifdef LADDER_PERF
+                                std::atomic<int>& escapes,
+                                std::atomic<int>& chases,
+#endif
                                 GameState& root_state) {
     float root_eval;
     const auto had_children = has_children();
     if (expandable()) {
+#ifdef LADDER_PERF
+        create_children(network, nodes, escapes, chases, root_state, root_eval);
+#else
         create_children(network, nodes, root_state, root_eval);
+#endif
     }
     if (had_children) {
         root_eval = get_net_eval(color);
