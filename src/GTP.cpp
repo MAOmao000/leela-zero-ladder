@@ -122,14 +122,14 @@ int cfg_offense_stones;
 int cfg_ladder_depth;
 int cfg_ladder_temperature_defense;
 int cfg_ladder_temperature_offense;
-float cfg_ladder_min_policy_defense;
-float cfg_ladder_min_policy_offense;
+float cfg_ladder_min_policy;
 float cfg_ladder_penalty_p_defense;
 float cfg_ladder_penalty_p_offense;
 float cfg_ladder_penalty_v_defense;
 float cfg_ladder_penalty_v_offense;
 float cfg_ladder_advantage_p;
 float cfg_ladder_advantage_v;
+int cfg_ladder_node;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -422,21 +422,21 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;         // --no_ladder_check
-    cfg_ladder_defense = 15;         // --ladder_defense
+    cfg_ladder_defense = 10;         // --ladder_defense
     cfg_ladder_offense = 15;         // --ladder_offense
     cfg_defense_stones = 0;          // --defense_stones
     cfg_offense_stones = 3;          // --offense_stones
     cfg_ladder_depth = 100;          // --ladder_depth
-    cfg_ladder_temperature_defense = 0;     // --ladder_temperature_defense
-    cfg_ladder_temperature_offense = 0;     // --ladder_temperature_offense
-    cfg_ladder_min_policy_defense = 0.1f;   // --ladder_min_policy_defense
-    cfg_ladder_min_policy_offense = 0.1f;   // --ladder_min_policy_offense
-    cfg_ladder_penalty_p_defense = 0.001f;  // --ladder_penalty_p_defense
-    cfg_ladder_penalty_p_offense = 0.001f;  // --ladder_penalty_p_offense
-    cfg_ladder_penalty_v_defense = 0.95f;   // --ladder_penalty_v_defense
-    cfg_ladder_penalty_v_offense = 0.95f;   // --ladder_penalty_v_offense
+    cfg_ladder_temperature_defense = 0;      // --ladder_temperature_defense
+    cfg_ladder_temperature_offense = 0;      // --ladder_temperature_offense
+    cfg_ladder_min_policy = 0.001f;          // --ladder_min_policy
+    cfg_ladder_penalty_p_defense = 0.00001f; // --ladder_penalty_p_defense
+    cfg_ladder_penalty_p_offense = 0.00001f; // --ladder_penalty_p_offense
+    cfg_ladder_penalty_v_defense = 0.85f;    // --ladder_penalty_v_defense
+    cfg_ladder_penalty_v_offense = 0.85f;    // --ladder_penalty_v_offense
     cfg_ladder_advantage_p = 0.05f;   // --ladder_advantage_p
     cfg_ladder_advantage_v = 0.05f;   // --ladder_advantage_v
+    cfg_ladder_node = 7;              // --ladder_node
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -575,6 +575,12 @@ void GTP::execute(GameState& game, const std::string& xinput) {
     if (input == "") {
         return;
     } else if (input == "exit") {
+#ifdef LADDER_PERF
+        FILE* perf_logfile_handle = fopen("perf.log", "a");
+        fprintf(perf_logfile_handle, "%d,%d,%d\n",
+            search->get_nodes(), search->get_escapes(), search->get_chases());
+        fclose(perf_logfile_handle);
+#endif
         exit(EXIT_SUCCESS);
     } else if (input.find("#") == 0) {
         return;
@@ -599,6 +605,12 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         gtp_printf(id, "%s.%s", PROGRAM_VERSION_MAJOR, PROGRAM_VERSION_MINOR);
         return;
     } else if (command == "quit") {
+#ifdef LADDER_PERF
+        FILE* perf_logfile_handle = fopen("perf.log", "a");
+        fprintf(perf_logfile_handle, "%d,%d,%d\n",
+            search->get_nodes(), search->get_escapes(), search->get_chases());
+        fclose(perf_logfile_handle);
+#endif
         gtp_printf(id, "");
         exit(EXIT_SUCCESS);
     } else if (command.find("known_command") == 0) {
@@ -647,6 +659,12 @@ void GTP::execute(GameState& game, const std::string& xinput) {
 
         return;
     } else if (command.find("clear_board") == 0) {
+#ifdef LADDER_PERF
+        FILE* perf_logfile_handle = fopen("perf.log", "a");
+        fprintf(perf_logfile_handle, "%d,%d,%d\n",
+            search->get_nodes(), search->get_escapes(), search->get_chases());
+        fclose(perf_logfile_handle);
+#endif
         s_network->nncache_clear();
         s_network->forward_wait_time_reset();
         Training::clear_training();
