@@ -13,6 +13,8 @@ using namespace Utils;
 #define CHECKED 1
 #define FLIP_COLOR(col) ((col) ^ 0x01)
 
+//#define CHECK_SINGLE_STONE
+
 static bool IsLadderCaptured(
     int &depth,
     std::unique_ptr<GameState> &state,
@@ -28,60 +30,58 @@ static bool IsLadderCaptured(
     }
     auto num_liberty = state->board.get_liberties(str_vtx);
     if (depth >= max_ladder_depth) {
-        return escape ? DEAD : ALIVE;
+        return escape ? ALIVE : DEAD;
     }
     auto base_depth = depth;
     if (turn_color == escape_color) {
         auto max_depth_alive = 0;
         auto min_depth_dead = max_ladder_depth + 1;
-        if (turn_color == escape_color) {
-            if (num_liberty >= 2) {
-                return ALIVE;
-            } else if (state->m_komove != FastBoard::NO_VERTEX) {
-                return ALIVE;
-            }
-            // Check if can capture the stone of the surrounding opponent.
-            char capture_checked[FastBoard::NUM_VERTICES] = {};
-            auto newpos = str_vtx;
-            auto n_vtx = 0;
-            do {
-                // Check whether can capture the stone at the breathing point of opponent's stones.
-                for (auto d = 0; d < 4; d++) {
-                    n_vtx = state->board.get_state_neighbor(newpos, d);
-                    if (state->board.get_state(n_vtx) != FLIP_COLOR(escape_color) ||
-                        state->board.get_liberties(n_vtx) != 1) {
-                        continue;
-                    }
-                    if (capture_checked[state->board.get_parent_stone(n_vtx)]) {
-                        continue;
-                    }
-                    capture_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
-                    auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
-                    if (state->is_move_legal(turn_color, liberty_pos[0])) {
-                        state->play_move(turn_color, liberty_pos[0]);
-                        depth = base_depth;
-                        if (IsLadderCaptured(
-                                ++depth,
-                                state,
-                                str_vtx,
-                                FLIP_COLOR(turn_color),
-                                max_ladder_depth,
-                                escape
-                            ) == ALIVE) {
-                            if (escape) {
-                                state->undo_move();
-                                return ALIVE;
-                            }
-                            max_depth_alive = std::max(depth, max_depth_alive);
-                        } else {
-                            min_depth_dead = std::min(depth, min_depth_dead);
-                        }
-                        state->undo_move();
-                    }
-                }
-                newpos = state->board.get_next_stone(newpos);
-            } while (newpos != str_vtx);
+        if (num_liberty >= 2) {
+            return ALIVE;
+        } else if (state->m_komove != FastBoard::NO_VERTEX) {
+            return escape ? ALIVE : DEAD;
         }
+        // Check if can capture the stone of the surrounding opponent.
+        char capture_checked[FastBoard::NUM_VERTICES] = {};
+        auto newpos = str_vtx;
+        auto n_vtx = 0;
+        do {
+            // Check whether can capture the stone at the breathing point of opponent's stones.
+            for (auto d = 0; d < 4; d++) {
+                n_vtx = state->board.get_state_neighbor(newpos, d);
+                if (state->board.get_state(n_vtx) != FLIP_COLOR(escape_color) ||
+                    state->board.get_liberties(n_vtx) != 1) {
+                    continue;
+                }
+                if (capture_checked[state->board.get_parent_stone(n_vtx)]) {
+                    continue;
+                }
+                capture_checked[state->board.get_parent_stone(n_vtx)] = CHECKED;
+                auto liberty_pos = state->board.get_liberty_pos(1, n_vtx);
+                if (state->is_move_legal(turn_color, liberty_pos[0])) {
+                    state->play_move(turn_color, liberty_pos[0]);
+                    depth = base_depth;
+                    if (IsLadderCaptured(
+                            ++depth,
+                            state,
+                            str_vtx,
+                            FLIP_COLOR(turn_color),
+                            max_ladder_depth,
+                            escape
+                        ) == ALIVE) {
+                        if (escape) {
+                            state->undo_move();
+                            return ALIVE;
+                        }
+                        max_depth_alive = std::max(depth, max_depth_alive);
+                    } else {
+                        min_depth_dead = std::min(depth, min_depth_dead);
+                    }
+                    state->undo_move();
+                }
+            }
+            newpos = state->board.get_next_stone(newpos);
+        } while (newpos != str_vtx);
 
         if (!escape_pos) {
             auto liberty_pos = state->board.get_liberty_pos(1, str_vtx);
@@ -120,9 +120,9 @@ static bool IsLadderCaptured(
         return DEAD;
     } else {
         if (num_liberty >= 3) {
-             return ALIVE;
+            return ALIVE;
         } else if (state->m_komove != FastBoard::NO_VERTEX) {
-             return ALIVE;
+            return escape ? ALIVE : DEAD;
         }
         auto max_depth_alive = 0;
         auto min_depth_dead = max_ladder_depth + 1;
@@ -175,7 +175,6 @@ static bool IsLadderCaptured(
             depth = max_depth_alive;
             return ALIVE;
         }
-        return escape ? ALIVE : DEAD;
     }
     return ALIVE;
 }
@@ -213,39 +212,36 @@ void LadderDetection(
                     liberty_count++;
                 }
             }
-            if (liberty_count == 2) {
-                if (state_copy->is_move_legal(turn_color, vertex)) {
-                    state_copy->play_move(turn_color, vertex);
-                    // Checking the stone of the current turn with two breathing points.
-                    for (auto j = 0; j < 2; j++) {
-                        auto xy = state_copy->board.get_xy(liberty_pos[j]);
-                        auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                        if (policy[ladder_idx] > ladder_min_policy) {
-                            if (state_copy->is_move_legal(opponent_color, liberty_pos[j])) {
-                                state_copy->play_move(opponent_color, liberty_pos[j]);
-                                depth = 0;
-                                if (IsLadderCaptured(
-                                    depth,
-                                    state_copy,
-                                    vertex,
-                                    turn_color,
-                                    cfg_ladder_depth,
-                                    true
-                                    ) == DEAD) {
-                                    if (ladder_pos[i] <= 0) {
-                                        if (-1 * ladder_pos[i] < depth) {
-                                            ladder_pos[i] = depth;
-                                        }
-                                    } else if (ladder_pos[i] > depth) {
-                                        ladder_pos[i] = depth;
-                                    }
+            if (liberty_count == 2 && state_copy->is_move_legal(turn_color, vertex)) {
+                state_copy->play_move(turn_color, vertex);
+                // Checking the stone of the current turn with two breathing points.
+                for (auto j = 0; j < 2; j++) {
+                    auto xy = state_copy->board.get_xy(liberty_pos[j]);
+                    auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
+                    if (policy[ladder_idx] > ladder_min_policy &&
+                        state_copy->is_move_legal(opponent_color, liberty_pos[j])) {
+                        state_copy->play_move(opponent_color, liberty_pos[j]);
+                        depth = 0;
+                        if (IsLadderCaptured(
+                            depth,
+                            state_copy,
+                            vertex,
+                            turn_color,
+                            cfg_ladder_depth,
+                            true
+                            ) == DEAD) {
+                            if (ladder_pos[i] <= 0) {
+                                if (-1 * ladder_pos[i] < depth) {
+                                    ladder_pos[i] = depth;
                                 }
-                                state_copy->undo_move();
+                            } else if (ladder_pos[i] > depth) {
+                                ladder_pos[i] = depth;
                             }
                         }
+                        state_copy->undo_move();
                     }
-                    state_copy->undo_move();
                 }
+                state_copy->undo_move();
             }
         } else if (state_copy->board.get_state(vertex) == turn_color &&
             !ladder_checked[state_copy->board.get_parent_stone(vertex)] &&
@@ -297,32 +293,31 @@ void LadderDetection(
 #endif
                     auto xy = state_copy->board.get_xy(liberty_pos[j]);
                     auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                    if (policy[ladder_idx] > ladder_min_policy) {
-                        if (state_copy->is_move_legal(turn_color, liberty_pos[j])) {
-                            state_copy->play_move(turn_color, liberty_pos[j]);
-                            depth = 0;
-                            if (IsLadderCaptured(
-                                    depth,
-                                    state_copy,
-                                    vertex,
-                                    opponent_color,
-                                    cfg_ladder_depth,
-                                    false
-                                ) == ALIVE) {
-                                if (ladder_pos[ladder_idx] <= 0) {
-                                    if (-1 * ladder_pos[ladder_idx] < depth) {
-                                        ladder_pos[ladder_idx] = -1 * depth;
-                                    }
-                                } else if (ladder_pos[ladder_idx] < depth) {
+                    if (policy[ladder_idx] > ladder_min_policy &&
+                        state_copy->is_move_legal(turn_color, liberty_pos[j])) {
+                        state_copy->play_move(turn_color, liberty_pos[j]);
+                        depth = 0;
+                        if (IsLadderCaptured(
+                                depth,
+                                state_copy,
+                                vertex,
+                                opponent_color,
+                                cfg_ladder_depth,
+                                false
+                            ) == ALIVE) {
+                            if (ladder_pos[ladder_idx] <= 0) {
+                                if (-1 * ladder_pos[ladder_idx] < depth) {
                                     ladder_pos[ladder_idx] = -1 * depth;
                                 }
-                            } else {
-                                if (ladder_pos[ladder_idx] <= 0) {
-                                    ladder_pos[ladder_idx] = depth + cfg_ladder_depth + 1;
-                                }
+                            } else if (ladder_pos[ladder_idx] < depth) {
+                                ladder_pos[ladder_idx] = -1 * depth;
                             }
-                            state_copy->undo_move();
+                        } else {
+                            if (ladder_pos[ladder_idx] <= 0) {
+                                ladder_pos[ladder_idx] = depth + cfg_ladder_depth + 1;
+                            }
                         }
+                        state_copy->undo_move();
                     }
 #ifdef CHECK_SINGLE_STONE
                 }
