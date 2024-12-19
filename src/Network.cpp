@@ -28,6 +28,8 @@
     work.
 */
 
+//#define SIMPLE_LADDER_CHECK
+
 #include "config.h"
 
 #include <algorithm>
@@ -1029,28 +1031,28 @@ static void ladder_update(
     auto penalty_value = false;
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
         if (ladder_map[i] > cfg_ladder_depth) {
-            if (ladder_map[i] > ladder_defense + cfg_ladder_depth &&
-                result.policy[i] > 0.5f) {
-                if (!penalty_value) {
-                    penalty_value = true;
-                    result.winrate *= 1.0f + cfg_ladder_advantage_v;
+            if (ladder_map[i] > ladder_defense + cfg_ladder_depth) {
+                if (cfg_ladder_advantage_v > 0.0f) {
+                    if (!penalty_value) {
+                        penalty_value = true;
+                        result.winrate *= 1.0f + cfg_ladder_advantage_v;
+                    }
                 }
-                result.policy[i] *= 1.0f + cfg_ladder_advantage_p;
+                if (cfg_ladder_advantage_p > 0.0f) {
+                    result.policy[i] *= 1.0f + cfg_ladder_advantage_p;
+                }
             }
-        } else if ((ladder_map[i] <= ladder_offense || ladder_map[i] >= ladder_defense) &&
-            result.policy[i] > 0.5f) {
+        } else if (ladder_map[i] <= ladder_offense || ladder_map[i] >= ladder_defense) {
             if (!penalty_value) {
-                if (cfg_ladder_penalty_v_defense > 0.0f) {
-                    if (ladder_map[i] > 0) {
+                if (ladder_map[i] > 0) {
+                    if (cfg_ladder_penalty_v_defense > 0.0f) {
                         penalty_value = true;
                         result.winrate *= cfg_ladder_penalty_v_defense;
-                        //result.winrate *=
-                        //    (1.0f - result.policy[i]) * cfg_ladder_penalty_v_defense;
-                    } else {
+                    }
+                } else {
+                    if (cfg_ladder_penalty_v_offense > 0.0f) {
                         penalty_value = true;
                         result.winrate *= cfg_ladder_penalty_v_offense;
-                        //result.winrate *=
-                        //    (1.0f - result.policy[i]) * cfg_ladder_penalty_v_offense;
                     }
                 }
             }
@@ -1059,7 +1061,7 @@ static void ladder_update(
                 result.escape++;
 #endif
                 result.policy[i] = std::min(cfg_ladder_penalty_p_defense, result.policy[i]);
-            } else if (cfg_ladder_penalty_p_offense > 0.0f && ladder_map[i] < 0) {
+            } else if (cfg_ladder_penalty_p_offense != 0.0f && ladder_map[i] < 0) {
 #ifdef LADDER_PERF
                 result.chase++;
 #endif
@@ -1131,9 +1133,11 @@ Network::Netresult Network::get_output(
             result.winrate = 1.0f - result.winrate;
         }
     }
+#ifndef SIMPLE_LADDER_CHECK
     if (cfg_ladder_check && state->m_komove == FastBoard::NO_VERTEX) {
         ladder_update(state, result);
     }
+#endif
     if (write_cache) {
         // Insert result into cache.
         m_nncache.insert(state->board.get_hash(), result);
