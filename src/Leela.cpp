@@ -257,7 +257,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-        ("use_drain_resume", "Enable drain and formula.")
+        ("unuse_drain_resume", "Disable drain and formula.")
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
@@ -292,7 +292,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("ci_alpha", po::value<float>())
         ("z_entries", po::value<int>())
         ("lcb_visits_ratio", po::value<float>())
-        ("no_use_stdev_uct", "Disable sample variance in UCT formula.");
+        ("unuse_stdev_uct", "Disable sample variance in UCT formula.");
 #endif
     // These won't be shown, we use them to catch incorrect usage of the
     // command line.
@@ -398,7 +398,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("lcb_visits_ratio")) {
         cfg_lcb_min_visit_ratio = vm["lcb_visits_ratio"].as<float>();
     }
-    if (vm.count("no_use_stdev_uct")) {
+    if (vm.count("unuse_stdev_uct")) {
         cfg_use_stdev_uct = false;
     }
 #endif
@@ -441,8 +441,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     }
     if (vm.count("cpu-only")) {
         cfg_cpu_only = true;
-    } else if (vm.count("use_drain_resume")) {
-        cfg_use_drain_resume = true;
+    } else if (vm.count("unuse_drain_resume")) {
+        cfg_use_drain_resume = false;
     }
 #else
     cfg_cpu_only = true;

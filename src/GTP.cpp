@@ -372,7 +372,7 @@ void GTP::setup_default_parameters() {
     cfg_gpus = {};                       // --gpu
     cfg_sgemm_exhaustive = false;        // --full-tuner
     cfg_tune_only = false;               // --tune-only
-    cfg_use_drain_resume = false;        // --use_drain_resume
+    cfg_use_drain_resume = true;         // --unuse_drain_resume
 #ifdef USE_TENSOR_RT
     cfg_cache_plan = true;               // --trt-cache
     cfg_backend = backend_t::TENSORRT;   // --backend
@@ -422,21 +422,21 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;         // --no_ladder_check
-    cfg_ladder_defense = 10;         // --ladder_defense
-    cfg_ladder_offense = 15;         // --ladder_offense
+    cfg_ladder_defense = 12;         // --ladder_defense
+    cfg_ladder_offense = 12;         // --ladder_offense
     cfg_defense_stones = 0;          // --defense_stones
     cfg_offense_stones = 3;          // --offense_stones
     cfg_ladder_depth = 100;          // --ladder_depth
     cfg_ladder_temperature_defense = 0;      // --ladder_temperature_defense
     cfg_ladder_temperature_offense = 0;      // --ladder_temperature_offense
-    cfg_ladder_min_policy = 0.001f;          // --ladder_min_policy
+    cfg_ladder_min_policy = 0.01f;           // --ladder_min_policy
     cfg_ladder_penalty_p_defense = 0.00001f; // --ladder_penalty_p_defense
     cfg_ladder_penalty_p_offense = 0.00001f; // --ladder_penalty_p_offense
-    cfg_ladder_penalty_v_defense = 0.85f;    // --ladder_penalty_v_defense
-    cfg_ladder_penalty_v_offense = 0.85f;    // --ladder_penalty_v_offense
+    cfg_ladder_penalty_v_defense = 0.95f;    // --ladder_penalty_v_defense
+    cfg_ladder_penalty_v_offense = 0.95f;    // --ladder_penalty_v_offense
     cfg_ladder_advantage_p = 0.05f;   // --ladder_advantage_p
     cfg_ladder_advantage_v = 0.05f;   // --ladder_advantage_v
-    cfg_ladder_node = 7;              // --ladder_node
+    cfg_ladder_node = 7;             // --ladder_node
 
     cfg_analyze_tags = AnalyzeTags{};
 
