@@ -27,6 +27,8 @@
     work.
 */
 
+//#define SIMPLE_LADDER_CHECK
+
 #include "config.h"
 
 #include <algorithm>
@@ -320,7 +322,7 @@ void UCTNode::accumulate_eval(const float eval) {
 UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, const bool is_root) {
     wait_expanded();
 
-#ifdef LADDER_DOUBLE_CHECK
+#ifdef SIMPLE_LADDER_CHECK
     int ladder_map[NUM_INTERSECTIONS] = {};
     std::array<float, NUM_INTERSECTIONS> policy;
     policy.fill(-1.0f);
@@ -337,27 +339,31 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
             if (child.get_visits() > 0) {
                 total_visited_policy += child.get_policy();
             }
-#ifdef LADDER_DOUBLE_CHECK
-            const auto move = child.get_move();
-            auto xy = state.board.get_xy(move);
-            policy[xy.first + xy.second * BOARD_SIZE] = child.get_policy();
+#ifdef SIMPLE_LADDER_CHECK
+            if (state.m_komove == FastBoard::NO_VERTEX) {
+                const auto move = child.get_move();
+                if (move != FastBoard::PASS) {
+                    auto xy = state.board.get_xy(move);
+                    policy[xy.first + xy.second * BOARD_SIZE] = child.get_policy();
+                }
+            }
 #endif
         }
     }
 
-#ifdef LADDER_DOUBLE_CHECK
-    std::array<float, NUM_INTERSECTIONS> sorted_policy = policy;
-    std::stable_sort(rbegin(sorted_policy), rend(sorted_policy), std::greater<float>());
-    auto ladder_min_policy = sorted_policy[cfg_ladder_node - 1];
-    if (sorted_policy[cfg_ladder_node - 1] < cfg_ladder_min_policy) {
-        for (auto i = cfg_ladder_node - 1; i >= 0; i--) {
-            if (sorted_policy[i] >= cfg_ladder_min_policy) {
-                ladder_min_policy = sorted_policy[i];
-                break;
+#ifdef SIMPLE_LADDER_CHECK
+    if (state.m_komove == FastBoard::NO_VERTEX) {
+        std::array<float, NUM_INTERSECTIONS> sorted_policy = policy;
+        std::stable_sort(rbegin(sorted_policy), rend(sorted_policy), std::greater<float>());
+        auto ladder_min_policy = sorted_policy[cfg_ladder_node - 1];
+        if (sorted_policy[cfg_ladder_node - 1] < cfg_ladder_min_policy) {
+            for (auto i = cfg_ladder_node - 1; i >= 0; i--) {
+                if (sorted_policy[i] >= cfg_ladder_min_policy) {
+                    ladder_min_policy = sorted_policy[i];
+                    break;
+                }
             }
         }
-    }
-    if (state.m_komove == FastBoard::NO_VERTEX) {
         LadderDetection(&state, ladder_map, policy, ladder_min_policy);
     }
 
@@ -382,8 +388,8 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
     } else {
         ladder_offense = cfg_ladder_offense;
     }
-    ladder_defense = std::max(ladder_defense / 2, 1);
-    ladder_offense = -1 * std::max(ladder_offense / 2, 1);
+    ladder_defense = std::max(ladder_defense, 1);
+    ladder_offense = -1 * std::max(ladder_offense, 1);
 #endif
 
     const auto numerator = std::sqrt(
@@ -433,12 +439,12 @@ UCTNode* UCTNode::uct_select_child(const GameState& state, const int color, cons
         auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
-#ifdef LADDER_DOUBLE_CHECK
+#ifdef SIMPLE_LADDER_CHECK
         const auto move = child.get_move();
         if (state.m_komove == FastBoard::NO_VERTEX && move != FastBoard::PASS) {
             auto xy = state.board.get_xy(move);
             if (ladder_map[xy.first + xy.second * BOARD_SIZE] <= ladder_offense
-                || (ladder_map[xy.first + xy.second * BOARD_SIZE] >= ladder_defense&&
+                || (ladder_map[xy.first + xy.second * BOARD_SIZE] >= ladder_defense &&
                 ladder_map[xy.first + xy.second * BOARD_SIZE] <= cfg_ladder_depth)) {
                 value *= 0.01;
             }
