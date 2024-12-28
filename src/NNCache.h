@@ -56,14 +56,7 @@ public:
         // winrate
         float winrate;
 
-#ifdef LADDER_PERF
-        int escape;
-        int chase;
-        Netresult() : policy_pass(0.0f), winrate(0.0f), escape(0), chase(0) {
-#else
-
         Netresult() : policy_pass(0.0f), winrate(0.0f) {
-#endif
             policy.fill(0.0f);
         }
     };
