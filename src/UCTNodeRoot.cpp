@@ -203,19 +203,11 @@ void UCTNode::inflate_all_children() {
 
 void UCTNode::prepare_root_node(Network& network, const int color,
                                 std::atomic<int>& nodes,
-#ifdef LADDER_PERF
-                                std::atomic<int>& escapes,
-                                std::atomic<int>& chases,
-#endif
                                 GameState& root_state) {
     float root_eval;
     const auto had_children = has_children();
     if (expandable()) {
-#ifdef LADDER_PERF
-        create_children(network, nodes, escapes, chases, root_state, root_eval);
-#else
         create_children(network, nodes, root_state, root_eval);
-#endif
     }
     if (had_children) {
         root_eval = get_net_eval(color);
@@ -253,4 +245,38 @@ void UCTNode::prepare_root_node(Network& network, const int color,
         auto alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;
         dirichlet_noise(0.25f, alpha);
     }
+}
+
+UCTNode* UCTNode::get_noladder_child(GameState& state) const {
+    if (m_children.empty()) {
+        return nullptr;
+    }
+    if (state.m_komove != FastBoard::NO_VERTEX) {
+        return m_children.front().get();
+    }
+    int ladder_map[NUM_INTERSECTIONS] = {};
+    std::array<float, NUM_INTERSECTIONS> policy;
+    policy.fill(-1.0f);
+    auto ladder_min_policy = 0.0f;
+    for (const auto& child : m_children) {
+        if (child->m_move != FastBoard::PASS) {
+            auto xy = state.board.get_xy(child->m_move);
+            policy[xy.first + xy.second * BOARD_SIZE] = child.get_policy();
+            if (policy[xy.first + xy.second * BOARD_SIZE] > ladder_min_policy) {
+                ladder_min_policy = policy[xy.first + xy.second * BOARD_SIZE];
+            }
+        }
+    }
+    LadderDetection(&state, ladder_map, policy, ladder_min_policy);
+    for (const auto& child : m_children) {
+        if (child->m_move == FastBoard::PASS) {
+            return child.get();
+        }
+        auto xy = state.board.get_xy(child->m_move);
+        if (ladder_map[xy.first + xy.second * BOARD_SIZE] > -cfg_ladder_offense
+            && ladder_map[xy.first + xy.second * BOARD_SIZE] < cfg_ladder_defense) {
+            return child.get();
+        }
+    }
+    return m_children.front().get();
 }
