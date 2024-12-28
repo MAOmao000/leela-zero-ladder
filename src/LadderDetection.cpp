@@ -13,8 +13,6 @@ using namespace Utils;
 #define CHECKED 1
 #define FLIP_COLOR(col) ((col) ^ 0x01)
 
-//#define CHECK_SINGLE_STONE
-
 static bool IsLadderCaptured(
     int &depth,
     std::unique_ptr<GameState> &state,
@@ -129,7 +127,6 @@ static bool IsLadderCaptured(
         auto liberty_pos = state->board.get_liberty_pos(2, str_vtx);
         for (auto i = 0; i < 2; i++) {
             if (liberty_pos[i] && state->is_move_legal(turn_color, liberty_pos[i])) {
-#ifdef CHECK_SINGLE_STONE
                 auto single_stone = true;
                 if (!escape) {
                     for (auto d = 0; d < 4; d++) {
@@ -141,16 +138,15 @@ static bool IsLadderCaptured(
                     }
                 }
                 if (single_stone) {
-#endif
                     state->play_move(turn_color, liberty_pos[i]);
                     depth = base_depth;
                     if (IsLadderCaptured(
-                            ++depth,
-                            state,
-                            str_vtx,
-                            FLIP_COLOR(turn_color),
-                            max_ladder_depth,
-                            escape
+                        ++depth,
+                        state,
+                        str_vtx,
+                        FLIP_COLOR(turn_color),
+                        max_ladder_depth,
+                        escape
                         ) == DEAD) {
                         if (!escape) {
                             state->undo_move();
@@ -161,11 +157,9 @@ static bool IsLadderCaptured(
                         max_depth_alive = std::max(depth, max_depth_alive);
                     }
                     state->undo_move();
-#ifdef CHECK_SINGLE_STONE
                 }
-#endif
             //} else {
-                // liberty_pos[i] is_suicide
+            // liberty_pos[i] is_suicide
             }
         }
         if (min_depth_dead <= max_ladder_depth) {
@@ -199,7 +193,7 @@ void LadderDetection(
 
         if (cfg_defense_stones < 1 &&
             state_copy->board.get_state(vertex) == FastBoard::EMPTY &&
-            policy[i] > ladder_min_policy) {
+            policy[i] >= ladder_min_policy) {
             auto liberty_count = 0;
             std::array<int, 4> liberty_pos;
             for (auto d = 0; d < 4; d++) {
@@ -218,7 +212,7 @@ void LadderDetection(
                 for (auto j = 0; j < 2; j++) {
                     auto xy = state_copy->board.get_xy(liberty_pos[j]);
                     auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                    if (policy[ladder_idx] > ladder_min_policy &&
+                    if (policy[ladder_idx] >= ladder_min_policy &&
                         state_copy->is_move_legal(opponent_color, liberty_pos[j])) {
                         state_copy->play_move(opponent_color, liberty_pos[j]);
                         depth = 0;
@@ -251,7 +245,7 @@ void LadderDetection(
             auto liberty_pos = state->board.get_liberty_pos(1, vertex);
 
             auto xy = state_copy->board.get_xy(liberty_pos[0]);
-            if (policy[xy.first + xy.second * BOARD_SIZE] > ladder_min_policy) {
+            if (policy[xy.first + xy.second * BOARD_SIZE] >= ladder_min_policy) {
                 depth = 0;
                 if (IsLadderCaptured(
                         depth,
@@ -262,12 +256,16 @@ void LadderDetection(
                         true,
                         liberty_pos[0]
                     ) == DEAD) {
+                    auto new_depth = depth * std::sqrt(
+                        std::max(1,
+                            state_copy->board.get_string_count(vertex)
+                                - cfg_defense_stones));
                     if (ladder_pos[xy.first + xy.second * BOARD_SIZE] <= 0) {
-                        if (-1 * ladder_pos[xy.first + xy.second * BOARD_SIZE] < depth) {
-                            ladder_pos[xy.first + xy.second * BOARD_SIZE] = depth;
+                        if (-1 * ladder_pos[xy.first + xy.second * BOARD_SIZE] < new_depth) {
+                            ladder_pos[xy.first + xy.second * BOARD_SIZE] = new_depth;
                         }
-                    } else if (ladder_pos[xy.first + xy.second * BOARD_SIZE] > depth) {
-                        ladder_pos[xy.first + xy.second * BOARD_SIZE] = depth;
+                    } else if (ladder_pos[xy.first + xy.second * BOARD_SIZE] > new_depth) {
+                        ladder_pos[xy.first + xy.second * BOARD_SIZE] = new_depth;
                     }
                 }
             }
@@ -280,7 +278,6 @@ void LadderDetection(
             auto liberty_pos = state->board.get_liberty_pos(2, vertex);
             // Checking the stone of the current turn with two breathing points.
             for (auto j = 0; j < 2; j++) {
-#ifdef CHECK_SINGLE_STONE
                 auto single_stone = true;
                 for (auto d = 0; d < 4; d++) {
                     auto n_vtx = state_copy->board.get_state_neighbor(liberty_pos[j], d);
@@ -290,10 +287,9 @@ void LadderDetection(
                     }
                 }
                 if (single_stone) {
-#endif
                     auto xy = state_copy->board.get_xy(liberty_pos[j]);
                     auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
-                    if (policy[ladder_idx] > ladder_min_policy &&
+                    if (policy[ladder_idx] >= ladder_min_policy &&
                         state_copy->is_move_legal(turn_color, liberty_pos[j])) {
                         state_copy->play_move(turn_color, liberty_pos[j]);
                         depth = 0;
@@ -305,23 +301,25 @@ void LadderDetection(
                                 cfg_ladder_depth,
                                 false
                             ) == ALIVE) {
+                            auto new_depth = depth * std::sqrt(
+                                std::max(1,
+                                    state_copy->board.get_string_count(vertex)
+                                        - cfg_offense_stones));
                             if (ladder_pos[ladder_idx] <= 0) {
-                                if (-1 * ladder_pos[ladder_idx] < depth) {
-                                    ladder_pos[ladder_idx] = -1 * depth;
+                                if (-1 * ladder_pos[ladder_idx] < new_depth) {
+                                    ladder_pos[ladder_idx] = -new_depth;
                                 }
-                            } else if (ladder_pos[ladder_idx] < depth) {
-                                ladder_pos[ladder_idx] = -1 * depth;
+                            } else if (ladder_pos[ladder_idx] < new_depth) {
+                                ladder_pos[ladder_idx] = -new_depth;
                             }
                         } else {
-                            if (ladder_pos[ladder_idx] <= 0) {
-                                ladder_pos[ladder_idx] = depth + cfg_ladder_depth + 1;
+                            if (ladder_pos[ladder_idx] < 0) {
+                                ladder_pos[ladder_idx] = 0;
                             }
                         }
                         state_copy->undo_move();
                     }
-#ifdef CHECK_SINGLE_STONE
                 }
-#endif
             }
         }
     }
