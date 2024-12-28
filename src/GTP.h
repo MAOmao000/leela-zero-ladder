@@ -198,16 +198,8 @@ extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
-extern int cfg_ladder_temperature_defense;
-extern int cfg_ladder_temperature_offense;
-extern float cfg_ladder_min_policy;
-extern float cfg_ladder_penalty_p_defense;
-extern float cfg_ladder_penalty_p_offense;
-extern float cfg_ladder_penalty_v_defense;
-extern float cfg_ladder_penalty_v_offense;
-extern float cfg_ladder_advantage_p;
-extern float cfg_ladder_advantage_v;
-extern int cfg_ladder_node;
+extern float cfg_ladder_penalty_defense;
+extern float cfg_ladder_penalty_offense;
 
 extern AnalyzeTags cfg_analyze_tags;
 

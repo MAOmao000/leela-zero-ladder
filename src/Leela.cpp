@@ -225,28 +225,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
-        ("ladder_temperature_defense", po::value<int>()->default_value(cfg_ladder_temperature_defense),
-                      "Each time the board advances by this value,"
-                      " the depth of the ladder judgement is increased by 1.")
-        ("ladder_temperature_offense", po::value<int>()->default_value(cfg_ladder_temperature_offense),
-                      "Each time the board advances by this value,"
-                      " the depth of the ladder judgement is increased by 1.")
-        ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
-                      "Minimal policy that does ladder detect checking.")
-        ("ladder_penalty_p_defense", po::value<float>()->default_value(cfg_ladder_penalty_p_defense),
+        ("ladder_penalty_defense", po::value<float>()->default_value(cfg_ladder_penalty_defense),
                       "Replace the ladder detection policy with this penalty probability.")
-        ("ladder_penalty_p_offense", po::value<float>()->default_value(cfg_ladder_penalty_p_offense),
+        ("ladder_penalty_offense", po::value<float>()->default_value(cfg_ladder_penalty_offense),
                       "Replace the ladder detection policy with this penalty probability.")
-        ("ladder_penalty_v_defense", po::value<float>()->default_value(cfg_ladder_penalty_v_defense),
-                      "Penalty ratio to multiply the ladder detection value by.")
-        ("ladder_penalty_v_offense", po::value<float>()->default_value(cfg_ladder_penalty_v_offense),
-                      "Penalty ratio to multiply the ladder detection value by.")
-        ("ladder_advantage_p", po::value<float>()->default_value(cfg_ladder_advantage_p),
-                      "The advantage given to policy if player can capture opponent's stones during a ladder chase.")
-        ("ladder_advantage_v", po::value<float>()->default_value(cfg_ladder_advantage_v),
-                      "The advantage given to winning rate if player can capture opponent's stones during a ladder chase.")
-        ("ladder_node", po::value<int>()->default_value(cfg_ladder_node),
-                      "Number of upper nodes to check for ladder detection.")
         ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -676,44 +658,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
     }
 
-    if (vm.count("ladder_temperature_defense")) {
-        cfg_ladder_temperature_defense = vm["ladder_temperature_defense"].as<int>();
+    if (vm.count("ladder_penalty_defense")) {
+        cfg_ladder_penalty_defense = vm["ladder_penalty_defense"].as<float>();
     }
 
-    if (vm.count("ladder_temperature_offense")) {
-        cfg_ladder_temperature_offense = vm["ladder_temperature_offense"].as<int>();
-    }
-
-    if (vm.count("ladder_min_policy")) {
-        cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_p_defense")) {
-        cfg_ladder_penalty_p_defense = vm["ladder_penalty_p_defense"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_p_offense")) {
-        cfg_ladder_penalty_p_offense = vm["ladder_penalty_p_offense"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_v_defense")) {
-        cfg_ladder_penalty_v_defense = vm["ladder_penalty_v_defense"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_v_offense")) {
-        cfg_ladder_penalty_v_offense = vm["ladder_penalty_v_offense"].as<float>();
-    }
-
-    if (vm.count("ladder_advantage_p")) {
-        cfg_ladder_advantage_p = vm["ladder_advantage_p"].as<float>();
-    }
-
-    if (vm.count("ladder_advantage_v")) {
-        cfg_ladder_advantage_v = vm["ladder_advantage_v"].as<float>();
-    }
-
-    if (vm.count("ladder_node")) {
-        cfg_ladder_node = vm["ladder_node"].as<int>();
+    if (vm.count("ladder_penalty_offense")) {
+        cfg_ladder_penalty_offense = vm["ladder_penalty_offense"].as<float>();
     }
 
     auto out = std::stringstream{};
