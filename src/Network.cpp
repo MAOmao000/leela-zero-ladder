@@ -28,8 +28,6 @@
     work.
 */
 
-//#define SIMPLE_LADDER_CHECK
-
 #include "config.h"
 
 #include <algorithm>
@@ -997,75 +995,32 @@ bool Network::probe_cache(const GameState* const state,
     return false;
 }
 
-static void ladder_update(
+void Network::ladder_update(
     const GameState* const state, Network::Netresult& result) {
 
     int ladder_map[NUM_INTERSECTIONS] = {};
-    std::array<float, NUM_INTERSECTIONS> policy = result.policy;
-    std::stable_sort(rbegin(policy), rend(policy), std::greater<float>());
-    const auto ladder_min_policy = std::max(policy[cfg_ladder_node - 1], cfg_ladder_min_policy);
-    LadderDetection(state, ladder_map, result.policy, ladder_min_policy);
-
-    int ladder_defense, ladder_offense;
-    if (cfg_ladder_temperature_defense > 1) {
-        ladder_defense =
-            cfg_ladder_defense + state->get_movenum() / cfg_ladder_temperature_defense;
-    } else if (cfg_ladder_temperature_defense < -1) {
-        ladder_defense =
-            cfg_ladder_defense * 3 - state->get_movenum() / -cfg_ladder_temperature_defense;
-        ladder_defense = std::max(ladder_defense, cfg_ladder_defense);
-    } else {
-        ladder_defense = cfg_ladder_defense;
+    auto ladder_first_policy = 0.0f;
+    auto ladder_second_policy = 0.0f;
+    for (auto itr = result.policy.cbegin(); itr != result.policy.cend(); ++itr) {
+        if (*itr > ladder_first_policy) {
+            ladder_second_policy = ladder_first_policy;
+            ladder_first_policy = *itr;
+        } else if (*itr > ladder_second_policy) {
+            ladder_second_policy = *itr;
+        }
     }
-    if (cfg_ladder_temperature_offense > 1) {
-        ladder_offense = -1 *
-            (cfg_ladder_offense + state->get_movenum() / cfg_ladder_temperature_offense);
-    } else if (cfg_ladder_temperature_offense < -1) {
-        ladder_offense =
-            cfg_ladder_offense * 3 - state->get_movenum() / -cfg_ladder_temperature_offense;
-        ladder_offense = -1 * std::max(ladder_offense, cfg_ladder_offense);
-    } else {
-        ladder_offense = -1 * cfg_ladder_offense;
-    }
+    LadderDetection(state, ladder_map, result.policy, ladder_second_policy);
 
-    auto penalty_value = false;
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] > cfg_ladder_depth) {
-            if (ladder_map[i] > ladder_defense + cfg_ladder_depth) {
-                if (cfg_ladder_advantage_v > 0.0f) {
-                    if (!penalty_value) {
-                        penalty_value = true;
-                        result.winrate *= 1.0f + cfg_ladder_advantage_v;
-                    }
-                }
-                if (cfg_ladder_advantage_p > 0.0f) {
-                    result.policy[i] *= 1.0f + cfg_ladder_advantage_p;
-                }
+        if (ladder_map[i] >= cfg_ladder_defense * 3) {
+            if (cfg_ladder_penalty_defense > 0.0f) {
+                result.policy[i] = std::min(cfg_ladder_penalty_defense, result.policy[i]);
+                result.policy_pass = result.policy[i] * 0.95f;
             }
-        } else if (ladder_map[i] <= ladder_offense || ladder_map[i] >= ladder_defense) {
-            if (!penalty_value) {
-                if (ladder_map[i] > 0) {
-                    if (cfg_ladder_penalty_v_defense > 0.0f) {
-                        penalty_value = true;
-                        result.winrate *= cfg_ladder_penalty_v_defense;
-                    }
-                } else {
-                    if (cfg_ladder_penalty_v_offense > 0.0f) {
-                        penalty_value = true;
-                        result.winrate *= cfg_ladder_penalty_v_offense;
-                    }
-                }
-            }
-            if (cfg_ladder_penalty_p_defense > 0.0f && ladder_map[i] > 0) {
-#ifdef LADDER_PERF
-                result.escape++;
-#endif
-                result.policy[i] = std::min(cfg_ladder_penalty_p_defense, result.policy[i]);
-            } else if (cfg_ladder_penalty_p_offense != 0.0f && ladder_map[i] < 0) {
-#ifdef LADDER_PERF
-                result.chase++;
-#endif
-                result.policy[i] = std::min(cfg_ladder_penalty_p_offense, result.policy[i]);
+        } else if (ladder_map[i] <= -cfg_ladder_offense * 3) {
+            if (cfg_ladder_penalty_offense > 0.0f) {
+                result.policy[i] = std::min(cfg_ladder_penalty_offense, result.policy[i]);
+                result.policy_pass = result.policy[i] * 0.95f;
             }
         }
     }
@@ -1133,11 +1088,9 @@ Network::Netresult Network::get_output(
             result.winrate = 1.0f - result.winrate;
         }
     }
-#ifndef SIMPLE_LADDER_CHECK
     if (cfg_ladder_check && state->m_komove == FastBoard::NO_VERTEX) {
         ladder_update(state, result);
     }
-#endif
     if (write_cache) {
         // Insert result into cache.
         m_nncache.insert(state->board.get_hash(), result);
