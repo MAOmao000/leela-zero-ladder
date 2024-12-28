@@ -143,6 +143,7 @@ private:
                                std::vector<float>& M, int C, int K);
     Netresult get_output_internal(const GameState* state, int symmetry,
                                   bool selfcheck = false);
+    void ladder_update(const GameState* const state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
                                       std::vector<float>::iterator white,
