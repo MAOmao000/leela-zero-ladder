@@ -244,7 +244,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_BLAS;USE_DNNL;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>C:\lib\oneDNN\include;C:\lib\oneDNN\build\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenBLAS-0.3.21-x64\include;C:\lib\OpenCL-SDK_x64\install\include;C:\lib\nvidia\include;..\..\src\cudnn-frontend\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;C:\lib\TensorRT-10.0.0.6\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -266,6 +266,7 @@
       </OpenMPSupport>
       <FloatingPointModel>Fast</FloatingPointModel>
       <AdditionalOptions>/arch:AVX2 /D"__FMA__" %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -282,8 +283,9 @@
       <LinkTimeCodeGeneration>
       </LinkTimeCodeGeneration>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
-      <StackReserveSize>8388608</StackReserveSize>
+      <StackReserveSize>16777216</StackReserveSize>
       <LargeAddressAware>true</LargeAddressAware>
+      <StackCommitSize>8192</StackCommitSize>
     </Link>
     <CudaCompile>
       <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>
