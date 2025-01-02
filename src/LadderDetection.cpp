@@ -22,14 +22,14 @@ static bool IsLadderCaptured(
     const bool escape = true,
     int escape_pos = 0)
 {
+    if (depth >= max_ladder_depth) {
+        return escape ? ALIVE : DEAD;
+    }
     auto escape_color = state->board.get_state(str_vtx);
     if (escape_color == FastBoard::EMPTY) {
         return DEAD;
     }
     auto num_liberty = state->board.get_liberties(str_vtx);
-    if (depth >= max_ladder_depth) {
-        return escape ? ALIVE : DEAD;
-    }
     auto base_depth = depth;
     if (turn_color == escape_color) {
         auto max_depth_alive = 0;
