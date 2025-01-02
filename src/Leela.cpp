@@ -229,7 +229,13 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Replace the ladder detection policy with this penalty probability.")
         ("ladder_penalty_offense", po::value<float>()->default_value(cfg_ladder_penalty_offense),
                       "Replace the ladder detection policy with this penalty probability.")
-        ;
+        ("ladder_coef_elf", po::value<float>()->default_value(cfg_ladder_coef_elf),
+                      "Coefficient to multiply ladder_defense and ladder_offense when ladder judgment is performed.")
+        ("ladder_coef_minigo", po::value<float>()->default_value(cfg_ladder_coef_minigo),
+                      "Coefficient to multiply ladder_defense and ladder_offense when ladder judgment is performed.")
+        ("ladder_coef_leelaz", po::value<float>()->default_value(cfg_ladder_coef_leelaz),
+                      "Coefficient to multiply ladder_defense and ladder_offense when ladder judgment is performed.")
+      ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
     gpu_desc.add_options()
@@ -664,6 +670,18 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_penalty_offense")) {
         cfg_ladder_penalty_offense = vm["ladder_penalty_offense"].as<float>();
+    }
+
+    if (vm.count("ladder_coef_elf")) {
+        cfg_ladder_coef_elf = vm["ladder_coef_elf"].as<float>();
+    }
+
+    if (vm.count("ladder_coef_minigo")) {
+        cfg_ladder_coef_minigo = vm["ladder_coef_minigo"].as<float>();
+    }
+
+    if (vm.count("ladder_coef_leelaz")) {
+        cfg_ladder_coef_leelaz = vm["ladder_coef_leelaz"].as<float>();
     }
 
     auto out = std::stringstream{};

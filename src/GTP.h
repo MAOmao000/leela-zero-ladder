@@ -200,6 +200,9 @@ extern int cfg_offense_stones;
 extern int cfg_ladder_depth;
 extern float cfg_ladder_penalty_defense;
 extern float cfg_ladder_penalty_offense;
+extern float cfg_ladder_coef_elf;
+extern float cfg_ladder_coef_minigo;
+extern float cfg_ladder_coef_leelaz;
 
 extern AnalyzeTags cfg_analyze_tags;
 

@@ -190,5 +190,7 @@ private:
     std::string m_model_hash{""};
 
     NetworkType m_net_type{ NetworkType::LEELA_ZERO };
+    int m_ladder_defense;
+    int m_ladder_offense;
 };
 #endif
