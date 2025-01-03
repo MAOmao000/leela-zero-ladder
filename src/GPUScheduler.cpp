@@ -515,7 +515,11 @@ void GPUScheduler<net_t>::batch_worker(
                     // Check if there is any other single eval in progress,
                     // and if not, do one from this thread.
                     if (m_waittime > 1) {
-                        m_waittime--;
+                        if (cfg_backend == backend_t::OPENCL) {
+                            m_waittime--;
+                        } else if (m_waittime > count) {
+                            m_waittime -= count;
+                        }
                     }
                     break;
                 }
