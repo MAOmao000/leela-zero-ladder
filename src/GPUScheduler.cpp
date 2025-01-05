@@ -517,7 +517,7 @@ void GPUScheduler<net_t>::batch_worker(
                     if (m_waittime > 1) {
                         if (cfg_backend == backend_t::OPENCL) {
                             m_waittime--;
-                        } else if (m_waittime > count) {
+                        } else if (m_waittime > (int)count) {
                             m_waittime -= count;
                         }
                     }
