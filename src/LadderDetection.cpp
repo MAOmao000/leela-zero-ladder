@@ -1,5 +1,6 @@
 #include <iostream>
 #include <memory>
+#include <cmath>
 
 #include "LadderDetection.h"
 #include "GTP.h"
@@ -210,8 +211,6 @@ void LadderDetection(
                 state_copy->play_move(turn_color, vertex);
                 // Checking the stone of the current turn with two breathing points.
                 for (auto j = 0; j < 2; j++) {
-                    auto xy = state_copy->board.get_xy(liberty_pos[j]);
-                    auto ladder_idx = xy.first + xy.second * BOARD_SIZE;
                     if (state_copy->is_move_legal(opponent_color, liberty_pos[j])) {
                         state_copy->play_move(opponent_color, liberty_pos[j]);
                         depth = 0;
