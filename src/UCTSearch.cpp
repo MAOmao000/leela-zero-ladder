@@ -259,8 +259,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
             // Careful: create_children() can throw a NetworkHaltException when
             // another thread requests draining the search.
             const auto success = node->create_children(
-                m_network, m_nodes, currstate, eval,
-                get_min_psa_ratio());
+                m_network, m_nodes, currstate, eval, get_min_psa_ratio());
             if (!had_children && success) {
                 result = SearchResult::from_eval(eval);
                 new_node = true;
@@ -747,7 +746,7 @@ bool UCTSearch::have_alternate_moves(const int elapsed_centis,
 bool UCTSearch::stop_thinking(const int elapsed_centis,
                               const int time_for_move) const {
     return m_playouts >= m_maxplayouts || m_root->get_visits() >= m_maxvisits
-           || (elapsed_centis >= time_for_move && m_root->get_visits() >= cfg_min_visits);
+           || elapsed_centis >= time_for_move;
 }
 
 void UCTWorker::operator()() {
@@ -760,12 +759,8 @@ void UCTWorker::operator()() {
             }
         } while (m_search->is_running());
     } catch (NetworkHaltException&) {
-        m_search->stop_run();
+        // intentionally empty
     }
-}
-
-void UCTSearch::stop_run() {
-    m_run.store(false);
 }
 
 void UCTSearch::increment_playouts() {

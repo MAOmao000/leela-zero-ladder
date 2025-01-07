@@ -559,23 +559,22 @@ void Backend<net_t>::initialize(
     m_num_worker_threads = num_worker_threads;
     m_model_hash = model_hash;
 
-    for (auto i = 0; i < m_num_worker_threads; i++) {
-        if (cfg_backend == backend_t::TENSORRT) {
-            continue;
-        }
-        cudnnHandle_t cudnn;
-        checkCUDNN(cudnnCreate(&cudnn));
-        checkCUDNN(cudnnSetStream(cudnn, cudaStreamPerThread));
-        m_handle.emplace_back(cudnn);
-        if (net_type == NetworkType::MINIGO_SE) {
-            cublasHandle_t cublas;
-            checkCUBLAS(cublasCreate(&cublas));
-            checkCUBLAS(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_DEVICE));
-            if (m_tensorcore) {
-                checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
+    if (cfg_backend != backend_t::TENSORRT) {
+        for (auto i = 0; i < m_num_worker_threads; i++) {
+            cudnnHandle_t cudnn;
+            checkCUDNN(cudnnCreate(&cudnn));
+            checkCUDNN(cudnnSetStream(cudnn, cudaStreamPerThread));
+            m_handle.emplace_back(cudnn);
+            if (net_type == NetworkType::MINIGO_SE) {
+                cublasHandle_t cublas;
+                checkCUBLAS(cublasCreate(&cublas));
+                checkCUBLAS(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_DEVICE));
+                if (m_tensorcore) {
+                    checkCUBLAS(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
+                }
+                checkCUBLAS(cublasSetStream(cublas, cudaStreamPerThread));
+                m_cublas_handles.emplace_back(cublas);
             }
-            checkCUBLAS(cublasSetStream(cublas, cudaStreamPerThread));
-            m_cublas_handles.emplace_back(cublas);
         }
     }
 }
