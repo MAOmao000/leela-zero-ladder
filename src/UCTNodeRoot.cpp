@@ -224,22 +224,6 @@ void UCTNode::prepare_root_node(Network& network, const int color,
     // This also removes a lot of special cases.
     kill_superkos(root_state);
 
-    for (auto& child : m_children) {
-        auto move = child->get_move();
-        if (move != FastBoard::PASS) {
-            if (!root_state.is_move_legal(color, move)) {
-                // Don't delete nodes for now, just mark them invalid.
-                child->invalidate();
-            }
-        }
-    }
-    // Now do the actual deletion.
-    m_children.erase(
-        std::remove_if(begin(m_children), end(m_children),
-                       [](const auto &child) { return !child->valid(); }),
-        end(m_children)
-    );
-
     if (cfg_noise) {
         // Adjust the Dirichlet noise's alpha constant to the board size
         auto alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;

@@ -85,11 +85,11 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
             network.get_output(&state, Network::Ensemble::RANDOM_SYMMETRY);
     } catch (NetworkHaltException&) {
         expand_cancel();
-        throw NetworkHaltException();
+        throw;
     }
 
     // DCNN returns winrate as side to move
-    auto stm_eval = raw_netlist.winrate;
+    const auto stm_eval = raw_netlist.winrate;
     const auto to_move = state.board.get_to_move();
     // our search functions evaluate from black's point of view
     if (to_move == FastBoard::WHITE) {
@@ -122,11 +122,6 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     // If we're clever, only try passing if we're winning on the
     // net score and on the board count.
-    if (to_move == FastBoard::WHITE) {
-        stm_eval = 1.0f - m_net_eval;
-    } else {
-        stm_eval = m_net_eval;
-    }
     if (!allow_pass && stm_eval > 0.8f) {
         const auto relative_score =
             (to_move == FastBoard::BLACK ? 1 : -1) * state.final_score();
@@ -173,6 +168,7 @@ void UCTNode::link_nodelist(std::atomic<int>& nodecount,
 
     // Use best to worst order, so highest go first
     std::stable_sort(rbegin(nodelist), rend(nodelist));
+
     const auto max_psa = nodelist[0].first;
     const auto old_min_psa = max_psa * m_min_psa_ratio_children;
     const auto new_min_psa = max_psa * min_psa_ratio;
@@ -363,11 +359,11 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
                 stdev = alpha * k + (1.0f - alpha) * 1.0f;
             }
         }
-        auto cpuct = cfg_puct * stdev;
+        const auto cpuct = cfg_puct * stdev;
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
-        auto value = winrate + puct;
+        const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
         if (value > best_value) {
@@ -375,6 +371,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             best = &child;
         }
     }
+
     assert(best != nullptr);
     best->inflate();
     return best->get();
