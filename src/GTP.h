@@ -133,7 +133,6 @@ extern size_t cfg_num_threads;
 extern size_t cfg_batch_size;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
-extern int cfg_min_visits;
 extern size_t cfg_max_memory;
 extern size_t cfg_max_tree_size;
 extern int cfg_max_cache_ratio_percent;

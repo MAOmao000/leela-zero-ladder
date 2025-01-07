@@ -64,7 +64,6 @@ size_t cfg_num_threads;
 size_t cfg_batch_size;
 int cfg_max_playouts;
 int cfg_max_visits;
-int cfg_min_visits;
 size_t cfg_max_memory;
 size_t cfg_max_tree_size;
 int cfg_max_cache_ratio_percent;
@@ -355,7 +354,6 @@ void GTP::setup_default_parameters() {
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
     cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;    // -v, --visits
-    cfg_min_visits = 10;                               // --min_visits_needed 1600
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
     cfg_max_cache_ratio_percent = 10;      // fix
@@ -426,7 +424,7 @@ void GTP::setup_default_parameters() {
     cfg_ladder_penalty_offense = 0.0001f; // --ladder_penalty_offense
     cfg_ladder_coef_elf = 4.0f;           // --ladder_coef_elf
     cfg_ladder_coef_minigo = 4.0f;        // --ladder_coef_minigo
-    cfg_ladder_coef_leelaz = 3.0f;        // --ladder_coef_leelaz
+    cfg_ladder_coef_leelaz = 5.0f;        // --ladder_coef_leelaz
 
     cfg_analyze_tags = AnalyzeTags{};
 
