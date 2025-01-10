@@ -422,8 +422,8 @@ void GTP::setup_default_parameters() {
     cfg_ladder_depth = 100;          // --ladder_depth
     cfg_ladder_penalty_defense = 0.0001f; // --ladder_penalty_defense
     cfg_ladder_penalty_offense = 0.0001f; // --ladder_penalty_offense
-    cfg_ladder_coef_elf = 4.0f;           // --ladder_coef_elf
-    cfg_ladder_coef_minigo = 4.0f;        // --ladder_coef_minigo
+    cfg_ladder_coef_elf = 5.0f;           // --ladder_coef_elf
+    cfg_ladder_coef_minigo = 5.0f;        // --ladder_coef_minigo
     cfg_ladder_coef_leelaz = 5.0f;        // --ladder_coef_leelaz
 
     cfg_analyze_tags = AnalyzeTags{};
