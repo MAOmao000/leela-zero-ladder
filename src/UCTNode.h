@@ -90,10 +90,10 @@ public:
                            std::atomic<int>& nodecount, GameState& state);
 
     UCTNode* get_first_child() const;
-    UCTNode* get_nopass_child(FastState& state) const;
+    UCTNode* get_nopass_child(FastState& state, int *ladder_map) const;
     std::unique_ptr<UCTNode> find_child(int move);
     void inflate_all_children();
-    UCTNode* get_noladder_child(GameState& state) const;
+    UCTNode* get_noladder_child(GameState& state, int *ladder_map) const;
 
     void clear_expand_state();
 
