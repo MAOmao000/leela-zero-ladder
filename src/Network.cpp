@@ -740,16 +740,8 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     if (channels == 0) {
         exit(EXIT_FAILURE);
     }
-    if (m_value_head_not_stm) {
-        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_elf);
-        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_elf);
-    } else if (m_net_type == NetworkType::MINIGO_SE) {
-        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_minigo);
-        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_minigo);
-    } else {
-        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_leelaz);
-        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_leelaz);
-    }
+    m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef);
+    m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef);
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         auto weight_index = size_t{0};
         // Input convolution
@@ -1025,12 +1017,10 @@ void Network::ladder_update(
         if (ladder_map[i] >= m_ladder_defense) {
             if (cfg_ladder_penalty_defense > 0.0f) {
                 result.policy[i] = std::min(cfg_ladder_penalty_defense, result.policy[i]);
-                result.policy_pass = result.policy[i] * 0.95f;
             }
         } else if (ladder_map[i] <= -m_ladder_offense) {
             if (cfg_ladder_penalty_offense > 0.0f) {
                 result.policy[i] = std::min(cfg_ladder_penalty_offense, result.policy[i]);
-                result.policy_pass = result.policy[i] * 0.95f;
             }
         }
     }
