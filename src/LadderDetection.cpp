@@ -220,7 +220,8 @@ void LadderDetection(
                             vertex,
                             turn_color,
                             cfg_ladder_depth,
-                            true
+                            true,
+                            liberty_pos[j]
                             ) == DEAD) {
                             if (ladder_pos[i] <= 0) {
                                 if (-1 * ladder_pos[i] < depth) {
