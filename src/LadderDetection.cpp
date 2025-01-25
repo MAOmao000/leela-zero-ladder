@@ -128,37 +128,25 @@ static bool IsLadderCaptured(
         auto liberty_pos = state->board.get_liberty_pos(2, str_vtx);
         for (auto i = 0; i < 2; i++) {
             if (liberty_pos[i] && state->is_move_legal(turn_color, liberty_pos[i])) {
-                auto single_stone = true;
-                if (!escape) {
-                    for (auto d = 0; d < 4; d++) {
-                        auto n_vtx = state->board.get_state_neighbor(liberty_pos[i], d);
-                        if (state->board.get_state(n_vtx) == turn_color) {
-                            single_stone = false;
-                            break;
-                        }
+                state->play_move(turn_color, liberty_pos[i]);
+                depth = base_depth;
+                if (IsLadderCaptured(
+                    ++depth,
+                    state,
+                    str_vtx,
+                    FLIP_COLOR(turn_color),
+                    max_ladder_depth,
+                    escape
+                    ) == DEAD) {
+                    if (!escape) {
+                        state->undo_move();
+                        return DEAD;
                     }
+                    min_depth_dead = std::min(depth, min_depth_dead);
+                } else {
+                    max_depth_alive = std::max(depth, max_depth_alive);
                 }
-                if (single_stone) {
-                    state->play_move(turn_color, liberty_pos[i]);
-                    depth = base_depth;
-                    if (IsLadderCaptured(
-                        ++depth,
-                        state,
-                        str_vtx,
-                        FLIP_COLOR(turn_color),
-                        max_ladder_depth,
-                        escape
-                        ) == DEAD) {
-                        if (!escape) {
-                            state->undo_move();
-                            return DEAD;
-                        }
-                        min_depth_dead = std::min(depth, min_depth_dead);
-                    } else {
-                        max_depth_alive = std::max(depth, max_depth_alive);
-                    }
-                    state->undo_move();
-                }
+                state->undo_move();
             //} else {
             // liberty_pos[i] is_suicide
             }
