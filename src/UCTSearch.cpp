@@ -490,7 +490,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
 
     int ladder_map[NUM_INTERSECTIONS] = {};
     UCTNode* first_child;
-    if (cfg_ladder_check) {
+    if (cfg_ladder_final_check) {
         first_child = m_root->get_noladder_child(m_rootstate, ladder_map);
     } else {
         first_child = m_root->get_first_child();

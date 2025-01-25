@@ -740,8 +740,16 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     if (channels == 0) {
         exit(EXIT_FAILURE);
     }
-    m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef);
-    m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef);
+    if (m_value_head_not_stm) {
+        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_elf);
+        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_elf);
+    } else if (m_net_type == NetworkType::MINIGO_SE) {
+        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_minigo);
+        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_minigo);
+    } else {
+        m_ladder_defense = static_cast<int>(cfg_ladder_defense * cfg_ladder_coef_leelaz);
+        m_ladder_offense = static_cast<int>(cfg_ladder_offense * cfg_ladder_coef_leelaz);
+    }
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         auto weight_index = size_t{0};
         // Input convolution
@@ -1003,12 +1011,16 @@ void Network::ladder_update(
     int ladder_map[NUM_INTERSECTIONS] = {};
     auto ladder_first_policy = 0.0f;
     auto ladder_second_policy = 0.0f;
-    for (auto itr = result.policy.cbegin(); itr != result.policy.cend(); ++itr) {
-        if (*itr > ladder_first_policy) {
-            ladder_second_policy = ladder_first_policy;
-            ladder_first_policy = *itr;
-        } else if (*itr > ladder_second_policy) {
-            ladder_second_policy = *itr;
+    if (cfg_ladder_min_policy > 0.0f) {
+        ladder_second_policy = cfg_ladder_min_policy;
+    } else {
+        for (auto itr = result.policy.cbegin(); itr != result.policy.cend(); ++itr) {
+            if (*itr > ladder_first_policy) {
+                ladder_second_policy = ladder_first_policy;
+                ladder_first_policy = *itr;
+            } else if (*itr > ladder_second_policy) {
+                ladder_second_policy = *itr;
+            }
         }
     }
     LadderDetection(state, ladder_map, result.policy, ladder_second_policy);

@@ -114,14 +114,18 @@ bool cfg_cpu_only;
 bool cfg_use_stdev_uct;
 
 bool cfg_ladder_check;
+bool cfg_ladder_final_check;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
+float cfg_ladder_min_policy;
 float cfg_ladder_penalty_defense;
 float cfg_ladder_penalty_offense;
-float cfg_ladder_coef;
+float cfg_ladder_coef_elf;
+float cfg_ladder_coef_minigo;
+float cfg_ladder_coef_leelaz;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -413,14 +417,18 @@ void GTP::setup_default_parameters() {
     cfg_use_stdev_uct = true;        // --no_use_stdev_uct
 
     cfg_ladder_check = true;         // --no_ladder_check
+    cfg_ladder_final_check = true;   // --no_ladder_final_check
     cfg_ladder_defense = 10;         // --ladder_defense
     cfg_ladder_offense = 10;         // --ladder_offense
     cfg_defense_stones = 0;          // --defense_stones
     cfg_offense_stones = 3;          // --offense_stones
     cfg_ladder_depth = 100;          // --ladder_depth
+    cfg_ladder_min_policy = -0.001f; // --ladder_min_policy
     cfg_ladder_penalty_defense = 0.0001f; // --ladder_penalty_defense
     cfg_ladder_penalty_offense = 0.0001f; // --ladder_penalty_offense
-    cfg_ladder_coef = 3.0f;               // --ladder_coef
+    cfg_ladder_coef_elf = 5.0f;           // --ladder_coef_elf
+    cfg_ladder_coef_minigo = 5.0f;        // --ladder_coef_minigo
+    cfg_ladder_coef_leelaz = 5.0f;        // --ladder_coef_leelaz
 
     cfg_analyze_tags = AnalyzeTags{};
 

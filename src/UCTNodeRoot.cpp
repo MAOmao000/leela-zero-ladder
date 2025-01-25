@@ -246,15 +246,13 @@ UCTNode* UCTNode::get_noladder_child(GameState& state, int *ladder_map) const {
         return front_child;
     }
     std::array<float, NUM_INTERSECTIONS> policy = {};
-    auto ladder_min_policy
-        = std::min(cfg_ladder_penalty_defense, cfg_ladder_penalty_offense);
     for (const auto& child : m_children) {
         if (child->m_move != FastBoard::PASS) {
             auto xy = state.board.get_xy(child->m_move);
             policy[xy.first + xy.second * BOARD_SIZE] = child.get_policy();
         }
     }
-    LadderDetection(&state, ladder_map, policy, ladder_min_policy);
+    LadderDetection(&state, ladder_map, policy, cfg_ladder_min_policy);
     for (const auto& child : m_children) {
         if (child->m_move == FastBoard::PASS) {
             return child.get();
