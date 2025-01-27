@@ -1011,7 +1011,7 @@ void Network::ladder_update(
     int ladder_map[NUM_INTERSECTIONS] = {};
     auto ladder_first_policy = 0.0f;
     auto ladder_second_policy = 0.0f;
-    if (cfg_ladder_min_policy > 0.0f) {
+    if (!cfg_ladder_final_check) {
         ladder_second_policy = cfg_ladder_min_policy;
     } else {
         for (auto itr = result.policy.cbegin(); itr != result.policy.cend(); ++itr) {
