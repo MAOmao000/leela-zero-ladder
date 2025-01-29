@@ -121,6 +121,7 @@ int cfg_defense_stones;
 int cfg_offense_stones;
 int cfg_ladder_depth;
 float cfg_ladder_min_policy;
+float cfg_ladder_penalty_winrate;
 float cfg_ladder_penalty_defense;
 float cfg_ladder_penalty_offense;
 float cfg_ladder_coef_elf;
@@ -360,7 +361,7 @@ void GTP::setup_default_parameters() {
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix
     cfg_max_cache_ratio_percent = 10;      // fix
     cfg_z_entries = 1000;                  // --z_entries
-    cfg_timemanage = TimeManagement::OFF;  // --timemanage
+    cfg_timemanage = TimeManagement::AUTO; // --timemanage
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
 #ifdef USE_OPENCL
@@ -414,16 +415,17 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;            // --cpu-only
 #endif
-    cfg_use_stdev_uct = true;        // --no_use_stdev_uct
+    cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
     cfg_ladder_check = true;         // --no_ladder_check
     cfg_ladder_final_check = true;   // --no_ladder_final_check
-    cfg_ladder_defense = 10;         // --ladder_defense
+    cfg_ladder_defense = 3;          // --ladder_defense
     cfg_ladder_offense = 10;         // --ladder_offense
     cfg_defense_stones = 0;          // --defense_stones
     cfg_offense_stones = 3;          // --offense_stones
     cfg_ladder_depth = 100;          // --ladder_depth
     cfg_ladder_min_policy = 0.001f;  // --ladder_min_policy
+    cfg_ladder_penalty_winrate = 0.3f;    // --ladder_penalty_winrate
     cfg_ladder_penalty_defense = 0.0001f; // --ladder_penalty_defense
     cfg_ladder_penalty_offense = 0.0001f; // --ladder_penalty_offense
     cfg_ladder_coef_elf = 5.0f;           // --ladder_coef_elf

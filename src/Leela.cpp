@@ -183,7 +183,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("logfile,l", po::value<std::string>(),
                       "File to log input/output to.")
         ("quiet,q", "Disable all diagnostic output.")
-        ("timemanage", po::value<std::string>()->default_value("off"),
+        ("timemanage", po::value<std::string>()->default_value("auto"),
                        "[auto|on|off|fast|no_pruning] Enable time management features.\n"
                        "auto = no_pruning when using -n, otherwise on.\n"
                        "on = Cut off search when the best move can't change"
@@ -226,6 +226,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder check maximum depth.")
         ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
                       "Minimal policy that does ladder detect checking.")
+        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
+                      "The rate at which the ladder reduces the winning rate of the board.")
         ("ladder_penalty_defense", po::value<float>()->default_value(cfg_ladder_penalty_defense),
                       "Replace the ladder detection policy with this penalty probability.")
         ("ladder_penalty_offense", po::value<float>()->default_value(cfg_ladder_penalty_offense),
@@ -667,6 +669,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_min_policy")) {
         cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
+    }
+
+    if (vm.count("ladder_penalty_winrate")) {
+        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
     }
 
     if (vm.count("ladder_penalty_defense")) {
