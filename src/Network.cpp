@@ -1026,6 +1026,9 @@ void Network::ladder_update(
     LadderDetection(state, ladder_map, result.policy, ladder_second_policy);
 
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
+        if (ladder_map[i] >= cfg_ladder_defense || ladder_map[i] <= -cfg_ladder_offense) {
+            result.winrate -= result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+        }
         if (ladder_map[i] >= m_ladder_defense) {
             if (cfg_ladder_penalty_defense > 0.0f) {
                 result.policy[i] = std::min(cfg_ladder_penalty_defense, result.policy[i]);
