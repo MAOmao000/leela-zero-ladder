@@ -213,7 +213,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #endif
 #endif
         ("no_ladder_check", "Disable ladder check.")
-        ("no_ladder_final_check", "Disable ladder final check.")
         ("ladder_defense", po::value<int>()->default_value(cfg_ladder_defense),
                       "Ladder defense check minimum depth.")
         ("ladder_offense", po::value<int>()->default_value(cfg_ladder_offense),
@@ -224,20 +223,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_depth", po::value<int>()->default_value(cfg_ladder_depth),
                       "Ladder check maximum depth.")
-        ("ladder_min_policy", po::value<float>()->default_value(cfg_ladder_min_policy),
-                      "Minimal policy that does ladder detect checking.")
-        ("ladder_penalty_winrate", po::value<float>()->default_value(cfg_ladder_penalty_winrate),
+        ("ladder_penalty_winrate", po::value<int>()->default_value(cfg_ladder_penalty_winrate),
                       "The rate at which the ladder reduces the winning rate of the board.")
-        ("ladder_penalty_defense", po::value<float>()->default_value(cfg_ladder_penalty_defense),
-                      "Replace the ladder detection policy with this penalty probability.")
-        ("ladder_penalty_offense", po::value<float>()->default_value(cfg_ladder_penalty_offense),
-                      "Replace the ladder detection policy with this penalty probability.")
-        ("ladder_coef_elf", po::value<float>()->default_value(cfg_ladder_coef_elf),
-                      "The coefficient to multiply ladder_defense and ladder_offense by when making ladder judgments for ELFOpenGo v2.")
-        ("ladder_coef_minigo", po::value<float>()->default_value(cfg_ladder_coef_minigo),
-                      "The coefficient to multiply ladder_defense and ladder_offense by when making ladder judgments for MiniGo v17.")
-        ("ladder_coef_leelaz", po::value<float>()->default_value(cfg_ladder_coef_leelaz),
-                      "The coefficient to multiply ladder_defense and ladder_offense by when making ladder judgments for Leela Zero.")
       ;
 #ifdef USE_OPENCL
     po::options_description gpu_desc("OpenCL device options");
@@ -643,10 +630,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_check = false;
     }
 
-    if (vm.count("no_ladder_final_check")) {
-        cfg_ladder_final_check = false;
-    }
-
     if (vm.count("ladder_defense")) {
         cfg_ladder_defense = vm["ladder_defense"].as<int>();
     }
@@ -667,32 +650,8 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_depth = vm["ladder_depth"].as<int>();
     }
 
-    if (vm.count("ladder_min_policy")) {
-        cfg_ladder_min_policy = vm["ladder_min_policy"].as<float>();
-    }
-
     if (vm.count("ladder_penalty_winrate")) {
-        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_defense")) {
-        cfg_ladder_penalty_defense = vm["ladder_penalty_defense"].as<float>();
-    }
-
-    if (vm.count("ladder_penalty_offense")) {
-        cfg_ladder_penalty_offense = vm["ladder_penalty_offense"].as<float>();
-    }
-
-    if (vm.count("ladder_coef_elf")) {
-        cfg_ladder_coef_elf = vm["ladder_coef_elf"].as<float>();
-    }
-
-    if (vm.count("ladder_coef_minigo")) {
-        cfg_ladder_coef_minigo = vm["ladder_coef_minigo"].as<float>();
-    }
-
-    if (vm.count("ladder_coef_leelaz")) {
-        cfg_ladder_coef_leelaz = vm["ladder_coef_leelaz"].as<float>();
+        cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<int>();
     }
 
     auto out = std::stringstream{};
