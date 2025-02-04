@@ -488,13 +488,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
         m_root->randomize_first_proportionally();
     }
 
-    int ladder_map[NUM_INTERSECTIONS] = {};
-    UCTNode* first_child;
-    if (cfg_ladder_final_check) {
-        first_child = m_root->get_noladder_child(m_rootstate, ladder_map);
-    } else {
-        first_child = m_root->get_first_child();
-    }
+    auto first_child = m_root->get_first_child();
     assert(first_child != nullptr);
 
     auto bestmove = first_child->get_move();
@@ -505,7 +499,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
     if (passflag & UCTSearch::NOPASS) {
         // were we going to pass?
         if (bestmove == FastBoard::PASS) {
-            UCTNode* nopass = m_root->get_nopass_child(m_rootstate, ladder_map);
+            UCTNode* nopass = m_root->get_nopass_child(m_rootstate);
 
             if (nopass != nullptr) {
                 myprintf("Preferring not to pass.\n");
@@ -546,7 +540,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
             if (relative_score < 0.0f) {
                 myprintf("Passing loses :-(\n");
                 // Find a valid non-pass move.
-                UCTNode* nopass = m_root->get_nopass_child(m_rootstate, ladder_map);
+                UCTNode* nopass = m_root->get_nopass_child(m_rootstate);
                 if (nopass != nullptr) {
                     myprintf("Avoiding pass because it loses.\n");
                     bestmove = nopass->get_move();
@@ -563,7 +557,7 @@ int UCTSearch::get_best_move(const passflag_t passflag) {
             } else {
                 myprintf("Passing draws :-|\n");
                 // Find a valid non-pass move.
-                const auto nopass = m_root->get_nopass_child(m_rootstate, ladder_map);
+                const auto nopass = m_root->get_nopass_child(m_rootstate);
                 if (nopass != nullptr && !nopass->first_visit()) {
                     const auto nopass_eval = nopass->get_raw_eval(color);
                     if (nopass_eval > 0.5f) {

@@ -44,7 +44,6 @@
 #include "Random.h"
 #include "UCTNode.h"
 #include "Utils.h"
-#include "LadderDetection.h"
 
 /*
  * These functions belong to UCTNode but should only be called on the root node
@@ -167,17 +166,14 @@ void UCTNode::randomize_first_proportionally() {
     std::iter_swap(begin(m_children), begin(m_children) + index);
 }
 
-UCTNode* UCTNode::get_nopass_child(FastState& state, int *ladder_map) const {
+UCTNode* UCTNode::get_nopass_child(FastState& state) const {
     for (const auto& child : m_children) {
         /* If we prevent the engine from passing, we must bail out when
            we only have unreasonable moves to pick, like filling eyes.
            Note that this knowledge isn't required by the engine,
            we require it because we're overruling its moves. */
-        auto xy = state.board.get_xy(child->m_move);
         if (child->m_move != FastBoard::PASS
-            && !state.board.is_eye(state.get_to_move(), child->m_move)
-            && ladder_map[xy.first + xy.second * BOARD_SIZE] > -cfg_ladder_offense
-            && ladder_map[xy.first + xy.second * BOARD_SIZE] < cfg_ladder_defense) {
+            && !state.board.is_eye(state.get_to_move(), child->m_move)) {
             return child.get();
         }
     }
@@ -232,36 +228,4 @@ void UCTNode::prepare_root_node(Network& network, const int color,
         auto alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;
         dirichlet_noise(0.25f, alpha);
     }
-}
-
-UCTNode* UCTNode::get_noladder_child(GameState& state, int *ladder_map) const {
-    if (m_children.empty()) {
-        return nullptr;
-    }
-    UCTNode* front_child = m_children.front().get();
-    if (front_child->m_move == FastBoard::PASS) {
-        return front_child;
-    }
-    if (state.m_komove != FastBoard::NO_VERTEX) {
-        return front_child;
-    }
-    std::array<float, NUM_INTERSECTIONS> policy = {};
-    for (const auto& child : m_children) {
-        if (child->m_move != FastBoard::PASS) {
-            auto xy = state.board.get_xy(child->m_move);
-            policy[xy.first + xy.second * BOARD_SIZE] = child.get_policy();
-        }
-    }
-    LadderDetection(&state, ladder_map, policy, cfg_ladder_min_policy);
-    for (const auto& child : m_children) {
-        if (child->m_move == FastBoard::PASS) {
-            return child.get();
-        }
-        auto xy = state.board.get_xy(child->m_move);
-        if (ladder_map[xy.first + xy.second * BOARD_SIZE] > -cfg_ladder_offense
-            && ladder_map[xy.first + xy.second * BOARD_SIZE] < cfg_ladder_defense) {
-            return child.get();
-        }
-    }
-    return front_child;
 }
