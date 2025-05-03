@@ -1,6 +1,8 @@
 #ifndef _LADDER_DETECTION_H_
 #define _LADDER_DETECTION_H_
 
+#include <climits>
+
 #include "GameState.h"
 #include "GTP.h"
 
