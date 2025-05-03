@@ -124,7 +124,7 @@ private:
     float get_min_psa_ratio() const;
     void dump_stats(const FastState& state, UCTNode& parent);
     void tree_stats(const UCTNode& node);
-    std::string get_pv(FastState& state, const UCTNode& parent);
+    std::string get_pv(FastState& state, UCTNode& parent);
     std::string get_analysis(int playouts);
     bool should_resign(passflag_t passflag, float besteval);
     bool have_alternate_moves(int elapsed_centis, int time_for_move);

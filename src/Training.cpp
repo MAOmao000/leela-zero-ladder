@@ -125,7 +125,7 @@ void OutputChunker::flush_chunks() {
         auto in_buff = std::make_unique<char[]>(in_buff_size);
         memcpy(in_buff.get(), m_buffer.data(), in_buff_size);
 
-        auto comp_size = gzwrite(out, in_buff.get(), in_buff_size);
+        auto comp_size = gzwrite(out, in_buff.get(), static_cast<unsigned int>(in_buff_size));
         if (!comp_size) {
             throw std::runtime_error("Error in gzip output");
         }
@@ -162,14 +162,15 @@ TimeStep::NNPlanes Training::get_planes(const GameState* const state) {
     return planes;
 }
 
-void Training::record(Network& network, const GameState& state,
+void Training::record(Network& network, GameState& state,
                       const UCTNode& root) {
     auto step = TimeStep{};
     step.to_move = state.board.get_to_move();
     step.planes = get_planes(&state);
 
-    const auto result = network.get_output(&state, Network::Ensemble::DIRECT,
-                                           Network::IDENTITY_SYMMETRY);
+    NNCache::Netresult result;
+    network.get_output(&state, Network::Ensemble::DIRECT, result,
+                       Network::IDENTITY_SYMMETRY);
     step.net_winrate = result.winrate;
 
     const auto& best_node = root.get_best_root_child(step.to_move);

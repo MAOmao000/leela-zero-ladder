@@ -183,7 +183,7 @@ public:
         return m_layers.size();
     }
 
-    void forward(const std::vector<float>& input,
+    bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
                  OpenCLContext& opencl_context, const int batch_size = 1);

@@ -55,8 +55,8 @@ public:
     ~UCTNode() = default;
 
     bool create_children(Network& network, std::atomic<int>& nodecount,
-                         const GameState& state, float& eval,
-                         float min_psa_ratio = 0.0f);
+                         GameState& state, float& eval,
+                         const float min_psa_ratio = 0.0f);
 
     const std::vector<UCTNodePointer>& get_children() const;
     void sort_children(int color, float lcb_min_visits);
@@ -90,9 +90,10 @@ public:
                            std::atomic<int>& nodecount, GameState& state);
 
     UCTNode* get_first_child() const;
-    UCTNode* get_nopass_child(FastState& state) const;
+    UCTNode* get_nopass_child(GameState& state);
     std::unique_ptr<UCTNode> find_child(int move);
     void inflate_all_children();
+    UCTNode* get_noladder_child(GameState& state);
 
     void clear_expand_state();
 

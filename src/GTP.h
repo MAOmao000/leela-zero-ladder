@@ -131,6 +131,7 @@ extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
 extern size_t cfg_num_threads;
 extern size_t cfg_batch_size;
+extern int cfg_batch_wait_time;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;
@@ -155,12 +156,12 @@ extern bool cfg_NCHW;
 extern std::vector<int> cfg_gpus;
 extern bool cfg_sgemm_exhaustive;
 extern bool cfg_tune_only;
-extern bool cfg_use_drain_resume;
 #ifdef USE_TENSOR_RT
 extern trtLog::Logger cfg_logger;
 enum class trtcache_t {
     PLAN, TIMING
 };
+extern int cfg_builder_opt_level;
 extern bool cfg_cache_plan;
 #endif
 #ifdef USE_HALF
@@ -189,15 +190,21 @@ extern bool cfg_quiet;
 extern std::string cfg_options_str;
 extern bool cfg_benchmark;
 extern bool cfg_cpu_only;
-extern bool cfg_use_stdev_uct;
 
-extern bool cfg_ladder_check;
 extern int cfg_ladder_defense;
 extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
-extern int cfg_ladder_depth;
-extern int cfg_ladder_penalty_winrate;
+extern int cfg_ladder_check_nodes;
+extern float cfg_ladder_penalty_winrate;
+extern float cfg_ladder_min_policy;
+extern int cfg_ladder_defense_root;
+extern int cfg_ladder_offense_root;
+extern float cfg_cut_policy;
+enum class style_t {
+    STANDARD, STABLE, RISKY
+};
+extern style_t cfg_play_style;
 
 extern AnalyzeTags cfg_analyze_tags;
 

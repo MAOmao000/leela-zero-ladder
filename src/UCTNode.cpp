@@ -49,7 +49,6 @@
 #include "GameState.h"
 #include "Network.h"
 #include "Utils.h"
-#include "LadderDetection.h"
 
 using namespace Utils;
 
@@ -61,7 +60,7 @@ bool UCTNode::first_visit() const {
 }
 
 bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
-                              const GameState& state, float& eval,
+                              GameState& state, float& eval,
                               const float min_psa_ratio) {
     // no successors in final state
     if (state.get_passes() >= 2) {
@@ -80,12 +79,9 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     }
 
     NNCache::Netresult raw_netlist;
-    try {
-        raw_netlist =
-            network.get_output(&state, Network::Ensemble::RANDOM_SYMMETRY);
-    } catch (NetworkHaltException&) {
-        expand_cancel();
-        throw;
+    if (!network.get_output(
+        &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist)) {
+        return false;
     }
 
     // DCNN returns winrate as side to move
@@ -106,7 +102,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
         const auto x = i % BOARD_SIZE;
         const auto y = i / BOARD_SIZE;
         const auto vertex = state.board.get_vertex(x, y);
-        if (state.is_move_legal(to_move, vertex)) {
+        if (state.is_move_legal(to_move, vertex) && raw_netlist.policy[i] > 0.0f) {
             nodelist.emplace_back(raw_netlist.policy[i], vertex);
             legal_sum += raw_netlist.policy[i];
         }
@@ -346,24 +342,22 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
             winrate = child.get_eval(color);
         }
         auto stdev = 1.0f;
-        if (cfg_use_stdev_uct) {
-            // See
-            // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
-            if (child.get_visits() > 1) {
-                auto variance = child.get_eval_variance(1.0f);
-                auto stddev = std::sqrt(variance);
-                auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
-                k = std::max(0.5, (double)k);
-                k = std::min(1.4, (double)k);
-                auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
-                stdev = alpha * k + (1.0f - alpha) * 1.0f;
-            }
+        // See
+        // https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
+        if (child.get_visits() > 1) {
+            auto variance = child.get_eval_variance(1.0f);
+            auto stddev = std::sqrt(variance);
+            auto k = cfg_dynamic_k_factor * std::sqrt(stddev / child.get_visits());
+            k = std::max(0.5f, k);
+            k = std::min(1.4f, k);
+            auto alpha = 1.0f / (1.0f + std::sqrt(parentvisits / cfg_dynamic_k_base));
+            stdev = alpha * k + (1.0f - alpha) * 1.0f;
         }
         const auto cpuct = cfg_puct * stdev;
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
-        const auto value = winrate + puct;
+        auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
         if (value > best_value) {
@@ -378,8 +372,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
 }
 
 class NodeComp
-//    : public std::binary_function<UCTNodePointer&, UCTNodePointer&, bool> {
-    : public std::function<bool(UCTNodePointer&, UCTNodePointer&)> {
+    : public std::function<bool(const UCTNodePointer&, const UCTNodePointer&)> {
 public:
     NodeComp(const int color, const float lcb_min_visits)
         : m_color(color), m_lcb_min_visits(lcb_min_visits) {}

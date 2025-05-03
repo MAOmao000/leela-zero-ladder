@@ -319,7 +319,7 @@ int TimeControl::get_moves_expected(const int boardsize,
     // Don't think too long in the opening.
     auto fast_moves = opening_moves(boardsize);
     if (movenum < fast_moves) {
-        return (base_remaining + fast_moves) - movenum;
+        return static_cast<int>((base_remaining + fast_moves) - movenum);
     } else {
         return base_remaining;
     }

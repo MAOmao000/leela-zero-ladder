@@ -110,14 +110,15 @@ float Network::benchmark_time(const int centiseconds) {
     // As a sanity run, try one run with self check.
     // Isn't enough to guarantee correctness but better than nothing,
     // plus for large nets self-check takes a while (1~3 eval per second)
-    get_output(&state, Ensemble::RANDOM_SYMMETRY, -1, false, true, true);
+    Netresult result;
+    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false, true, true);
 
     const Time start;
     for (auto i = size_t{0}; i < cpus; i++) {
-        tg.add_task([this, &runcount, start, centiseconds, state]() {
+        tg.add_task([this, &runcount, start, centiseconds, state, &result]() {
             while (true) {
                 runcount++;
-                get_output(&state, Ensemble::RANDOM_SYMMETRY, -1, false);
+                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
                 const Time end;
                 const auto elapsed = Time::timediff_centis(start, end);
                 if (elapsed >= centiseconds) {
@@ -133,18 +134,19 @@ float Network::benchmark_time(const int centiseconds) {
     return 100.0f * runcount.load() / elapsed;
 }
 
-void Network::benchmark(const GameState* const state, const int iterations) {
+void Network::benchmark(const GameState* state, const int iterations) {
     const auto cpus = cfg_num_threads;
     const Time start;
 
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
+    Netresult result;
 
     for (auto i = size_t{0}; i < cpus; i++) {
-        tg.add_task([this, &runcount, iterations, state]() {
+        tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
             }
         });
     }
@@ -252,7 +254,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
             auto count = std::distance(std::istream_iterator<std::string>(iss),
                                        std::istream_iterator<std::string>());
             myprintf("%d channels...", count);
-            channels = count;
+            channels = static_cast<int>(count);
         }
         linecount++;
     }
@@ -575,7 +577,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 
     pipe->initialize(channels, m_net_type, m_model_hash);
 #ifdef USE_CPU_ONLY
-     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
+    pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 #else
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
@@ -720,9 +722,11 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
              EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
 #endif
     m_fwd_weights = std::make_shared<ForwardPipeWeights>();
+
     // Make a guess at a good size as long as the user doesn't
     // explicitly set a maximum memory usage.
     m_nncache.set_size_from_playouts(playouts);
+
     // Prepare symmetry table
     for (auto s = 0; s < NUM_SYMMETRIES; ++s) {
         for (auto v = 0; v < NUM_INTERSECTIONS; ++v) {
@@ -734,6 +738,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
                    && symmetry_nn_idx_table[s][v] < NUM_INTERSECTIONS);
         }
     }
+
     // Load network from file
     size_t channels, residual_blocks;
     std::tie(channels, residual_blocks) = load_network_file(weightsfile);
@@ -810,7 +815,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
     }
 #ifndef USE_CPU_ONLY
     if (!cfg_cpu_only && cfg_backend == backend_t::TENSORRT) {
-        select_precision(channels);
+        select_precision(static_cast<int>(channels));
     } else {
 #endif
 #ifdef USE_OPENCL
@@ -828,7 +833,7 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
 #ifdef USE_HALF
             // HALF support is enabled, and we are using the GPU.
             // Select the precision to use at runtime.
-            select_precision(channels);
+            select_precision(static_cast<int>(channels));
 #else
             std::string backend("OpenCL");
             if (cfg_backend == backend_t::TENSORRT) {
@@ -966,7 +971,6 @@ std::vector<float> softmax(const std::vector<float>& input,
 
 bool Network::probe_cache(const GameState* const state,
                           Network::Netresult& result) {
-
     if (m_nncache.lookup(state->board.get_hash(), result)) {
         return true;
     }
@@ -996,59 +1000,103 @@ bool Network::probe_cache(const GameState* const state,
 }
 
 void Network::ladder_update(
-    const GameState* const state, Network::Netresult& result) {
+    const GameState* state, Network::Netresult& result) {
 
     int ladder_map[NUM_INTERSECTIONS] = {};
-    auto ladder_first_policy = 0.0f;
-    auto ladder_second_policy = 0.0f;
-    for (auto itr = result.policy.cbegin(); itr != result.policy.cend(); ++itr) {
-        if (*itr > ladder_first_policy) {
-            ladder_second_policy = ladder_first_policy;
-            ladder_first_policy = *itr;
-        } else if (*itr > ladder_second_policy) {
-            ladder_second_policy = *itr;
+    std::array<float, NUM_INTERSECTIONS> policy = result.policy;
+    std::stable_sort(rbegin(policy), rend(policy));
+    auto ladder_check_nodes = cfg_ladder_check_nodes;
+    auto cut_policy = 0.0f;
+    if (policy[0] <= 0.9f && policy[1] > result.policy_pass) {
+        if (cfg_play_style == style_t::STANDARD) {
+            cut_policy = result.winrate * cfg_cut_policy;
+        } else if (cfg_play_style == style_t::STABLE) {
+            cut_policy = cfg_cut_policy;
+        //} else { // style_t::RISKY
+        //    cut_policy = 0.0f;
         }
     }
-    LadderDetection(state, ladder_map, result.policy, ladder_second_policy);
-
+    auto min_policy = std::max(cut_policy, cfg_ladder_min_policy);
+    for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
+        if (policy[i] < min_policy) {
+            ladder_check_nodes = i;
+            break;
+        }
+    }
+    LadderDetection(
+        state,
+        ladder_map,
+        result.policy,
+        policy[ladder_check_nodes - 1],
+        ladder_check_nodes
+    );
     for (auto i = size_t{0}; i < NUM_INTERSECTIONS; i++) {
-        if (ladder_map[i] >= cfg_ladder_defense || ladder_map[i] <= -cfg_ladder_offense) {
-            if (cfg_ladder_penalty_winrate > 0) {
+        if (result.policy[i] <= cut_policy) {
+            result.policy[i] = -1.0f;
+        } else if (ladder_map[i] < 0 && ladder_map[i] <= -cfg_ladder_defense) {
+            const int x = static_cast<int>(i % BOARD_SIZE);
+            const int y = static_cast<int>(i / BOARD_SIZE);
+            const auto vertex = state->board.get_vertex(x, y);
+            auto check_vertex = state->move_to_text(vertex);
+            myprintf("escape %s(%s) depth:%d\n", check_vertex.c_str(),
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
+                ladder_map[i]);
+            if (cfg_ladder_penalty_winrate > 0.0f) {
                 result.winrate -=
-                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate / 100.0f;
-                result.winrate = std::max(0.0f, result.winrate);
+                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                result.winrate = std::max(0.001f, result.winrate);
             }
-            result.policy[i] = 0.0f;
+            result.policy[i] = -1.0f;
+        } else if (ladder_map[i] > 0 && ladder_map[i] >= cfg_ladder_offense) {
+            const int x = static_cast<int>(i % BOARD_SIZE);
+            const int y = static_cast<int>(i / BOARD_SIZE);
+            const auto vertex = state->board.get_vertex(x, y);
+            auto check_vertex = state->move_to_text(vertex);
+            myprintf("chase %s(%s) depth:%d\n", check_vertex.c_str(),
+                state->board.get_to_move() == FastBoard::WHITE ? "WHITE": "BLACK",
+                ladder_map[i]);
+            if (cfg_ladder_penalty_winrate > 0.0f) {
+                result.winrate -=
+                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                result.winrate = std::max(0.001f, result.winrate);
+            }
+            result.policy[i] = -1.0f;
         }
     }
 }
 
-Network::Netresult Network::get_output(
-    const GameState* const state, const Ensemble ensemble, const int symmetry,
-    const bool read_cache, const bool write_cache, const bool force_selfcheck) {
-
-    Netresult result;
+bool Network::get_output(
+    const GameState* state, const Ensemble ensemble,
+    Network::Netresult& result,
+    const int symmetry,
+    const bool read_cache, const bool write_cache,
+    const bool force_selfcheck) {
     if (state->board.get_boardsize() != BOARD_SIZE) {
-        return result;
+        return false;
     }
 
     if (read_cache) {
         // See if we already have this in the cache.
         if (probe_cache(state, result)) {
-            return result;
+            return true;
         }
     }
 
+    bool ret;
     int sym_tbl = 0;
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
         sym_tbl = symmetry;
-        result = get_output_internal(state, symmetry);
+        ret = get_output_internal(state, symmetry, result);
     } else if (ensemble == AVERAGE) {
         assert(symmetry == -1);
         sym_tbl = 0;
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
-            auto tmpresult = get_output_internal(state, sym);
+            Netresult tmpresult;
+            ret = get_output_internal(state, sym, tmpresult);
+            if (!ret) {
+                break;
+            }
             result.winrate +=
                 tmpresult.winrate / static_cast<float>(NUM_SYMMETRIES);
             result.policy_pass +=
@@ -1063,7 +1111,7 @@ Network::Netresult Network::get_output(
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         sym_tbl = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        result = get_output_internal(state, sym_tbl);
+        ret = get_output_internal(state, sym_tbl, result);
 #ifdef USE_OPENCL_SELFCHECK
         // Both implementations are available, self-check the OpenCL driver by
         // running both with a probability of 1/2000.
@@ -1072,36 +1120,40 @@ Network::Netresult Network::get_output(
         if (m_forward_cpu != nullptr
             && (force_selfcheck
                 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)) {
-            auto result_ref = get_output_internal(state, sym_tbl, true);
-            compare_net_outputs(result, result_ref);
+            Netresult result_ref;
+            if (get_output_internal(state, sym_tbl, result_ref, true)) {
+                compare_net_outputs(result, result_ref);
+            }
         }
 #else
         (void)force_selfcheck;
 #endif
     }
-    // v2 format (ELF Open Go) returns black value, not stm
+
+    // v2 format (ELF Open Go) returns black value, not stm (side to move)
     if (m_value_head_not_stm) {
         if (state->board.get_to_move() == FastBoard::WHITE) {
             result.winrate = 1.0f - result.winrate;
         }
     }
-//    if (cfg_ladder_check && state->m_komove == FastBoard::NO_VERTEX) {
-    if (cfg_ladder_check) {
+
+    if (cfg_ladder_defense > 0 || cfg_ladder_offense > 0) {
         ladder_update(state, result);
     }
     if (write_cache) {
         // Insert result into cache.
         m_nncache.insert(state->board.get_hash(), result);
     }
-    return result;
+
+    return true;
 }
 
-Network::Netresult Network::get_output_internal(const GameState* const state,
-                                                const int symmetry,
-                                                bool selfcheck) {
+bool Network::get_output_internal(const GameState* state,
+                                  const int symmetry,
+                                  Network::Netresult& result,
+                                  bool selfcheck) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-    Netresult result;
     const auto input_data = gather_features(state, symmetry);
     size_t policy_data_size;
     size_t value_data_size;
@@ -1112,18 +1164,22 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
         policy_data_size = OUTPUTS_POLICY * NUM_INTERSECTIONS;
         value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
     }
+    bool ret;
     std::vector<float> policy_data(policy_data_size);
     std::vector<float> value_data(value_data_size);
 #ifdef USE_OPENCL_SELFCHECK
     if (selfcheck) {
-        m_forward_cpu->forward(input_data, policy_data, value_data);
+        ret = m_forward_cpu->forward(input_data, policy_data, value_data);
     } else {
-        m_forward->forward(input_data, policy_data, value_data);
+        ret = m_forward->forward(input_data, policy_data, value_data);
     }
 #else
-    m_forward->forward(input_data, policy_data, value_data);
+    ret = m_forward->forward(input_data, policy_data, value_data);
     (void)selfcheck;
 #endif
+    if (!ret) {
+        return false;
+    }
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         // Policy and value header Batch Normalization
         batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
@@ -1167,12 +1223,11 @@ Network::Netresult Network::get_output_internal(const GameState* const state,
         const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
         result.winrate = winrate;
     }
-    return result;
+    return true;
 }
 
 void Network::show_heatmap(const FastState* const state,
                            const Netresult& result, const bool topmoves) {
-
     std::vector<std::string> display_map;
     std::string line;
 
@@ -1181,7 +1236,7 @@ void Network::show_heatmap(const FastState* const state,
             auto policy = 0;
             const auto vertex = state->board.get_vertex(x, y);
             if (state->board.get_state(vertex) == FastBoard::EMPTY) {
-                policy = result.policy[y * BOARD_SIZE + x] * 1000;
+                policy = static_cast<int>(result.policy[y * BOARD_SIZE + x] * 1000);
             }
 
             line += boost::str(boost::format("%3d ") % policy);
@@ -1191,7 +1246,7 @@ void Network::show_heatmap(const FastState* const state,
         line.clear();
     }
 
-    for (int i = display_map.size() - 1; i >= 0; --i) {
+    for (int i = static_cast<int>(display_map.size() - 1); i >= 0; --i) {
         myprintf("%s\n", display_map[i].c_str());
     }
     const auto pass_policy = int(result.policy_pass * 1000);
@@ -1227,7 +1282,6 @@ void Network::fill_input_plane_pair(const FullBoard& board,
                                     std::vector<float>::iterator black,
                                     std::vector<float>::iterator white,
                                     const int symmetry) {
-
     for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
         const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
         const auto x = sym_idx % BOARD_SIZE;
@@ -1264,7 +1318,7 @@ std::vector<float> Network::gather_features(const GameState* const state,
     // Go back in time, fill history boards
     for (auto h = size_t{0}; h < moves; h++) {
         // collect white, black occupation planes
-        fill_input_plane_pair(state->get_past_board(h),
+        fill_input_plane_pair(state->get_past_board(static_cast<int>(h)),
                               black_it + h * NUM_INTERSECTIONS,
                               white_it + h * NUM_INTERSECTIONS, symmetry);
     }

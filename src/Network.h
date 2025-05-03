@@ -58,9 +58,6 @@ constexpr auto WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
 constexpr auto WINOGRAD_P = WINOGRAD_WTILES * WINOGRAD_WTILES;
 constexpr auto SQ2 = 1.4142135623730951f; // Square root of 2
 
-// See drain_evals() / resume_evals() for details.
-class NetworkHaltException : public std::exception {};
-
 class Network {
     using ForwardPipeWeights = ForwardPipe::ForwardPipeWeights;
 
@@ -75,9 +72,10 @@ public:
 
     virtual ~Network() = default;
 
-    Netresult get_output(const GameState* state, Ensemble ensemble,
-                         int symmetry = -1, bool read_cache = true,
-                         bool write_cache = true, bool force_selfcheck = false);
+    bool get_output(const GameState* state, Ensemble ensemble,
+                    Network::Netresult& result,
+                    int symmetry = -1, bool read_cache = true,
+                    bool write_cache = true, bool force_selfcheck = false);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -103,9 +101,6 @@ public:
     void nncache_resize(int max_count);
     void nncache_clear();
 
-    // 'Drain' evaluations.  Threads with an evaluation will throw a
-    // NetworkHaltException if possible, or will just proceed and drain ASAP.
-    // New evaluation requests will also result in a NetworkHaltException.
     virtual void drain_evals();
 
     // Flag the network to be open for business.
@@ -141,9 +136,9 @@ private:
     static void winograd_sgemm(const std::vector<float>& U,
                                const std::vector<float>& V,
                                std::vector<float>& M, int C, int K);
-    Netresult get_output_internal(const GameState* state, int symmetry,
-                                  bool selfcheck = false);
-    void ladder_update(const GameState* const state, Network::Netresult& result);
+    bool get_output_internal(const GameState* state, int symmetry,
+                             Network::Netresult& result, bool selfcheck = false);
+    void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
                                       std::vector<float>::iterator white,

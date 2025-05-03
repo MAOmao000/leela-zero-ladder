@@ -40,7 +40,7 @@
 class CPUPipe : public ForwardPipe {
 public:
     void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") override;
-    void forward(const std::vector<float>& input,
+    bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val) override;
 

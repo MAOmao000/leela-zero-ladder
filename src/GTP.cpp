@@ -62,6 +62,7 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
+int cfg_batch_wait_time;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -83,10 +84,10 @@ bool cfg_NCHW;
 std::vector<int> cfg_gpus;
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
-bool cfg_use_drain_resume;
 #ifdef USE_TENSOR_RT
 trtLog::Logger cfg_logger{};
 #endif
+int cfg_builder_opt_level;
 bool cfg_cache_plan;
 #ifdef USE_HALF
 precision_t cfg_precision;
@@ -111,15 +112,18 @@ bool cfg_quiet;
 std::string cfg_options_str;
 bool cfg_benchmark;
 bool cfg_cpu_only;
-bool cfg_use_stdev_uct;
 
-bool cfg_ladder_check;
 int cfg_ladder_defense;
 int cfg_ladder_offense;
 int cfg_defense_stones;
 int cfg_offense_stones;
-int cfg_ladder_depth;
-int cfg_ladder_penalty_winrate;
+int cfg_ladder_check_nodes;
+float cfg_ladder_penalty_winrate;
+float cfg_ladder_min_policy;
+int cfg_ladder_defense_root;
+int cfg_ladder_offense_root;
+float cfg_cut_policy;
+style_t cfg_play_style;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -346,6 +350,7 @@ void GTP::setup_default_parameters() {
     cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
+    cfg_batch_wait_time = 20;   // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -361,8 +366,8 @@ void GTP::setup_default_parameters() {
     cfg_gpus = {};                       // --gpu
     cfg_sgemm_exhaustive = false;        // --full-tuner
     cfg_tune_only = false;               // --tune-only
-    cfg_use_drain_resume = true;         // --unuse_drain_resume
 #ifdef USE_TENSOR_RT
+    cfg_builder_opt_level = 2;           // --builder_opt_level
     cfg_cache_plan = true;               // --trt-cache
     cfg_backend = backend_t::TENSORRT;   // --backend
 #else
@@ -381,7 +386,7 @@ void GTP::setup_default_parameters() {
     cfg_backend = backend_t::NONE; // --backend
     cfg_NCHW = false;              // --channel-first
 #endif
-    cfg_puct = 0.8f;               // --puct(No significant difference between 0.5 and 0.8)
+    cfg_puct = 0.5f;               // --puct(No significant difference between 0.5 and 0.8)
     cfg_logpuct = 0.015f;          // --logpuct
     cfg_logconst = 1.7f;           // --logconst
     cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
@@ -408,15 +413,18 @@ void GTP::setup_default_parameters() {
 #else
     cfg_cpu_only = false;            // --cpu-only
 #endif
-    cfg_use_stdev_uct = true;        // --unuse_stdev_uct
 
-    cfg_ladder_check = true;         // --no_ladder_check
-    cfg_ladder_defense = 12;         // --ladder_defense
-    cfg_ladder_offense = 12;         // --ladder_offense
-    cfg_defense_stones = 0;          // --defense_stones
-    cfg_offense_stones = 3;          // --offense_stones
-    cfg_ladder_depth = 100;          // --ladder_depth
-    cfg_ladder_penalty_winrate = 90; // --ladder_penalty_winrate
+    cfg_ladder_defense = 9;            // --ladder_defense
+    cfg_ladder_offense = 8;            // --ladder_offense
+    cfg_defense_stones = 4;            // --defense_stones
+    cfg_offense_stones = 4;            // --offense_stones
+    cfg_ladder_check_nodes = 10;       // --ladder_check_nodes
+    cfg_ladder_penalty_winrate = 0.9f; // --ladder_penalty_winrate
+    cfg_ladder_min_policy = 0.005f;    // --ladder_min_policy
+    cfg_ladder_defense_root = 0;       // --ladder_defense_root
+    cfg_ladder_offense_root = 0;       // --ladder_offense_root
+    cfg_cut_policy = 0.01f;            // --cut_policy
+    cfg_play_style = style_t::STABLE;  // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -913,20 +921,20 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
-                                        Network::IDENTITY_SYMMETRY, false);
+            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                  Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                vec = s_network->get_output(&game, Network::Ensemble::DIRECT, s,
-                                            false);
+                s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
+                                      false);
                 Network::show_heatmap(&game, vec, false);
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            vec = s_network->get_output(&game, Network::Ensemble::AVERAGE, -1,
-                                        false);
+            s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
+                                  false);
         } else {
-            vec = s_network->get_output(&game, Network::Ensemble::DIRECT,
-                                        std::stoi(symmetry), false);
+            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                  std::stoi(symmetry), false);
         }
 
         if (symmetry != "all") {
@@ -1298,9 +1306,7 @@ std::pair<bool, std::string> GTP::set_max_memory(
 
     assert(cache_size_ratio_percent >= 1);
     assert(cache_size_ratio_percent <= 99);
-//    auto max_cache_size =
-//        max_memory_for_search * cache_size_ratio_percent / 100;
-// for 32bit os
+    // for 32bit os
     auto max_cache_size = max_memory_for_search / 100 * cache_size_ratio_percent;
 
     auto max_cache_count =

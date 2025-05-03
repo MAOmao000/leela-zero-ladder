@@ -83,7 +83,7 @@ public:
     static void dump_training(int winner_color,
                               const std::string& out_filename);
     static void dump_debug(const std::string& out_filename);
-    static void record(Network& network, const GameState& state,
+    static void record(Network& network, GameState& state,
                        const UCTNode& node);
 
     static void dump_supervised(const std::string& sgf_file,

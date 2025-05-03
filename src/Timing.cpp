@@ -32,8 +32,8 @@
 #include "Timing.h"
 
 int Time::timediff_centis(const Time start, const Time end) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>
-        (end.m_time - start.m_time).count() / 10;
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>
+        (end.m_time - start.m_time).count() / 10);
 }
 
 double Time::timediff_seconds(const Time start, const Time end) {

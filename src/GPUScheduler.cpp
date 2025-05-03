@@ -94,6 +94,7 @@ void GPUScheduler<net_t>::initialize(
     const std::string &model_hash)
 {
     m_net_type = net_type;
+    m_waittime = cfg_batch_wait_time;
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the
@@ -430,7 +431,7 @@ void GPUScheduler<net_t>::push_weights(
 }
 
 template <typename net_t>
-void GPUScheduler<net_t>::forward(
+bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
     std::vector<float>& output_val)
@@ -441,16 +442,17 @@ void GPUScheduler<net_t>::forward(
     {
         std::unique_lock<std::mutex> lk(m_mutex);
         m_forward_queue.emplace_back(entry);
-        if (m_single_eval_in_progress.load()) {
+        if (cfg_backend == backend_t::OPENCL && m_single_eval_in_progress.load()) {
             m_waittime += 2;
         }
     }
     m_cv.notify_one();
     entry->cv.wait(lk);
 
-    if (cfg_use_drain_resume && m_draining) {
-        throw NetworkHaltException();
+    if (m_draining) {
+        return false;
     }
+    return true;
 }
 
 #ifndef NDEBUG
@@ -504,24 +506,22 @@ void GPUScheduler<net_t>::batch_worker(
                 }
             );
             if (!m_forward_queue.empty()) {
-                if (timeout
-                    && m_single_eval_in_progress.exchange(true) == false) {
+                if (timeout) {
                     if (cfg_backend == backend_t::OPENCL) {
-                        count = 1;
-                    } else {
-                        count = m_forward_queue.size();
-                    }
-                    // Waited long enough but couldn't form a batch.
-                    // Check if there is any other single eval in progress,
-                    // and if not, do one from this thread.
-                    if (m_waittime > 1) {
-                        if (cfg_backend == backend_t::OPENCL) {
-                            m_waittime--;
-                        } else if (m_waittime > (int)count) {
-                            m_waittime -= count;
+                        if (m_single_eval_in_progress.exchange(true) == false) {
+                            // Waited long enough but couldn't form a batch.
+                            // Check if there is any other single eval in progress,
+                            // and if not, do one from this thread.
+                            if (m_waittime > 1) {
+                                m_waittime--;
+                            }
+                            count = 1;
+                            break;
                         }
+                    } else {
+                        count = std::min(cfg_batch_size, m_forward_queue.size());
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -542,7 +542,7 @@ void GPUScheduler<net_t>::batch_worker(
             return;
         }
 #ifndef NDEBUG
-        if (count < cfg_batch_size) {
+        if (cfg_backend == backend_t::OPENCL && count == 1) {
             batch_stats.single_evals++;
         } else {
             batch_stats.batch_evals++;
@@ -564,25 +564,27 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
-        // run the NN evaluation
-        if (cfg_backend == backend_t::OPENCL) {
-            m_networks[gnum]->forward(
-                batch_input,
-                batch_output_pol,
-                batch_output_val,
-                context,
-                (const int)count
-            );
+        if (!m_draining) {
+            // run the NN evaluation
+            if (cfg_backend == backend_t::OPENCL) {
+                m_networks[gnum]->forward(
+                    batch_input,
+                    batch_output_pol,
+                    batch_output_val,
+                    context,
+                    (const int)count
+                );
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
-        } else {
-            m_backend[gnum]->forward(
-                batch_input,
-                batch_output_pol,
-                batch_output_val,
-                tid,
-                cfg_batch_size
-            );
+            } else {
+                m_backend[gnum]->forward(
+                    batch_input,
+                    batch_output_pol,
+                    batch_output_val,
+                    static_cast<int>(tid),
+                    cfg_batch_size
+                );
 #endif
+            }
         }
         // Get output and copy back
         index = 0;
@@ -600,7 +602,7 @@ void GPUScheduler<net_t>::batch_worker(
             x->cv.notify_all();
             index++;
         }
-        if (count < cfg_batch_size) {
+        if (cfg_backend == backend_t::OPENCL && count < cfg_batch_size) {
             m_single_eval_in_progress.exchange(false);
         }
     }
@@ -609,34 +611,13 @@ void GPUScheduler<net_t>::batch_worker(
 template <typename net_t>
 void GPUScheduler<net_t>::drain()
 {
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
     m_draining = true;
-    std::list<std::shared_ptr<ForwardQueueEntry>> fq;
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        std::move(
-            m_forward_queue.begin(),
-            m_forward_queue.end(),
-            std::back_inserter(fq)
-        );
-        m_forward_queue.clear();
-    }
-    for (auto& x : fq) {
-        {
-            // dummy lock/unlock to make sure thread in forward() is sleeping
-            std::unique_lock<std::mutex> lk(x->mutex);
-        }
-        x->cv.notify_all();
-    }
 }
 
 template <typename net_t>
 void GPUScheduler<net_t>::resume()
 {
     // UCTNode::think() should wait for all child threads to complete before resuming.
-    assert(m_forward_queue.empty());
     m_draining = false;
 }
 

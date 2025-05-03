@@ -469,7 +469,7 @@ void batchnorm_no_relu(const size_t channels,
     }
 }
 
-void CPUPipe::forward(const std::vector<float>& input,
+bool CPUPipe::forward(const std::vector<float>& input,
                       std::vector<float>& output_pol,
                       std::vector<float>& output_val) {
     const auto lambda_Sig = [](const auto val) { return 1.f / (1.f + std::exp(-val)); };
@@ -558,6 +558,7 @@ void CPUPipe::forward(const std::vector<float>& input,
                 output_pol);
     convolve<1>(Network::OUTPUTS_VALUE, conv_out, m_conv_val_w, m_conv_val_b,
                 output_val);
+    return true;
 }
 
 void CPUPipe::push_weights(const unsigned int /*filter_size*/,

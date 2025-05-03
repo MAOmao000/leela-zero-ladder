@@ -556,7 +556,7 @@ void Backend<net_t>::initialize(
     }
 
     m_net_type = net_type;
-    m_num_worker_threads = num_worker_threads;
+    m_num_worker_threads = static_cast<int>(num_worker_threads);
     m_model_hash = model_hash;
 
     if (cfg_backend != backend_t::TENSORRT) {

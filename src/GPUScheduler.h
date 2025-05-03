@@ -87,7 +87,7 @@ public:
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights
     ) override;
-    void forward(
+    bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
         std::vector<float>& output_val

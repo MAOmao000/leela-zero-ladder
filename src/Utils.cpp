@@ -50,8 +50,6 @@
 
 Utils::ThreadPool thread_pool;
 
-//auto constexpr z_entries = 1000;
-//std::array<float, z_entries> z_lookup;
 std::vector<float> z_lookup;
 
 void Utils::create_z_table() {
@@ -59,7 +57,6 @@ void Utils::create_z_table() {
         boost::math::students_t dist(i);
         auto z =
             boost::math::quantile(boost::math::complement(dist, cfg_ci_alpha));
-        //z_lookup[i - 1] = z;
         z_lookup.emplace_back(float(z));
     }
 }

@@ -85,7 +85,7 @@ bool BackendTRT<net_t>::build(
     if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
-        config->setBuilderOptimizationLevel(5);
+        config->setBuilderOptimizationLevel(cfg_builder_opt_level);
     }
     // Typical runtime allocation is much less than the 1 GiB specified below
     config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
@@ -554,9 +554,10 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.name + ".act",
                     ActivationType::kRELU);
                 // value_conv = tf.reshape(value_conv, [-1, 1 * go.N * go.N])
-                int32_t const mmInputs = actValueLayer->getOutput(0)->getDimensions().d[1]
+                int32_t const mmInputs = static_cast<int32_t>(
+                    actValueLayer->getOutput(0)->getDimensions().d[1]
                     * actValueLayer->getOutput(0)->getDimensions().d[2]
-                    * actValueLayer->getOutput(0)->getDimensions().d[3]; 
+                    * actValueLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actValueLayer->getOutput(0));
                 inputReshape->setReshapeDimensions(Dims{2, {
                     static_cast<int32_t>(batch_size), mmInputs}});
@@ -641,9 +642,10 @@ void BackendTRT<net_t>::constructNetwork(
                     layer.name + ".act",
                     ActivationType::kRELU);
                 // policy_conv = tf.reshape(policy_conv, [-1, 2 * go.N * go.N])
-                int32_t const mmInputs = actPolicyLayer->getOutput(0)->getDimensions().d[1]
+                int32_t const mmInputs = static_cast<int32_t>(
+                    actPolicyLayer->getOutput(0)->getDimensions().d[1]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[2]
-                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]; 
+                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
                 inputReshape->setReshapeDimensions(Dims{2, {
                     static_cast<int32_t>(batch_size), mmInputs}});
@@ -1002,7 +1004,6 @@ void BackendTRT<net_t>::push_convolve(
         return;
     }
     push_weights_col_major(layer, ip1_w, NUM_INTERSECTIONS, channels, 1, true);
-    //push_weights(layer, ip1_w, true);
     push_weights(layer, ip1_b, true);
     push_weights(layer, ip2_w, true);
     push_weights(layer, ip2_b, true);
