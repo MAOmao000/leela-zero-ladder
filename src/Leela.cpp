@@ -248,8 +248,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-        ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
-                      "Wait time milliseconds for full batch.")
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
@@ -413,10 +411,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_OPENCL
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
-    }
-
-    if (vm.count("batchwait")) {
-        cfg_batch_wait_time = vm["batchwait"].as<int>();
     }
 
     if (vm.count("full-tuner")) {

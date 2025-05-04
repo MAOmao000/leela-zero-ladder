@@ -115,7 +115,7 @@ float Network::benchmark_time(const int centiseconds) {
 
     const Time start;
     for (auto i = size_t{0}; i < cpus; i++) {
-        tg.add_task([this, &runcount, start, centiseconds, state, &result]() {
+        tg.add_task([this, &runcount, &result, start, centiseconds, state]() {
             while (true) {
                 runcount++;
                 get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
@@ -1070,7 +1070,8 @@ bool Network::get_output(
     Network::Netresult& result,
     const int symmetry,
     const bool read_cache, const bool write_cache,
-    const bool force_selfcheck) {
+    bool force_selfcheck) {
+
     if (state->board.get_boardsize() != BOARD_SIZE) {
         return false;
     }
@@ -1088,6 +1089,9 @@ bool Network::get_output(
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
         sym_tbl = symmetry;
         ret = get_output_internal(state, symmetry, result);
+        if (!ret) {
+            return false;
+        }
     } else if (ensemble == AVERAGE) {
         assert(symmetry == -1);
         sym_tbl = 0;
@@ -1107,11 +1111,17 @@ bool Network::get_output(
                     tmpresult.policy[idx] / static_cast<float>(NUM_SYMMETRIES);
             }
         }
+        if (!ret) {
+            return false;
+        }
     } else {
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         sym_tbl = Random::get_Rng().randfix<NUM_SYMMETRIES>();
         ret = get_output_internal(state, sym_tbl, result);
+        if (!ret) {
+            return false;
+        }
 #ifdef USE_OPENCL_SELFCHECK
         // Both implementations are available, self-check the OpenCL driver by
         // running both with a probability of 1/2000.
@@ -1121,9 +1131,11 @@ bool Network::get_output(
             && (force_selfcheck
                 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)) {
             Netresult result_ref;
-            if (get_output_internal(state, sym_tbl, result_ref, true)) {
-                compare_net_outputs(result, result_ref);
+            ret = get_output_internal(state, sym_tbl, result_ref, true);
+            if (!ret) {
+                return false;
             }
+            compare_net_outputs(result, result_ref);
         }
 #else
         (void)force_selfcheck;

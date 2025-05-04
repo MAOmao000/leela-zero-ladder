@@ -81,6 +81,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     NNCache::Netresult raw_netlist;
     if (!network.get_output(
         &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist)) {
+        expand_cancel();
         return false;
     }
 

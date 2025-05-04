@@ -62,7 +62,6 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
-int cfg_batch_wait_time;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -86,9 +85,9 @@ bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
 #ifdef USE_TENSOR_RT
 trtLog::Logger cfg_logger{};
-#endif
 int cfg_builder_opt_level;
 bool cfg_cache_plan;
+#endif
 #ifdef USE_HALF
 precision_t cfg_precision;
 #endif
@@ -350,7 +349,6 @@ void GTP::setup_default_parameters() {
     cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
-    cfg_batch_wait_time = 20;   // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -367,7 +365,7 @@ void GTP::setup_default_parameters() {
     cfg_sgemm_exhaustive = false;        // --full-tuner
     cfg_tune_only = false;               // --tune-only
 #ifdef USE_TENSOR_RT
-    cfg_builder_opt_level = 2;           // --builder_opt_level
+    cfg_builder_opt_level = 2;           // --builder_opt_level [0-5]
     cfg_cache_plan = true;               // --trt-cache
     cfg_backend = backend_t::TENSORRT;   // --backend
 #else
@@ -414,17 +412,17 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;            // --cpu-only
 #endif
 
-    cfg_ladder_defense = 9;            // --ladder_defense
-    cfg_ladder_offense = 8;            // --ladder_offense
-    cfg_defense_stones = 4;            // --defense_stones
-    cfg_offense_stones = 4;            // --offense_stones
-    cfg_ladder_check_nodes = 10;       // --ladder_check_nodes
-    cfg_ladder_penalty_winrate = 0.9f; // --ladder_penalty_winrate
-    cfg_ladder_min_policy = 0.005f;    // --ladder_min_policy
-    cfg_ladder_defense_root = 0;       // --ladder_defense_root
-    cfg_ladder_offense_root = 0;       // --ladder_offense_root
-    cfg_cut_policy = 0.01f;            // --cut_policy
-    cfg_play_style = style_t::STABLE;  // --play_style
+    cfg_ladder_defense = 9;             // --ladder_defense
+    cfg_ladder_offense = 8;             // --ladder_offense
+    cfg_defense_stones = 4;             // --defense_stones
+    cfg_offense_stones = 4;             // --offense_stones
+    cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
+    cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
+    cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
+    cfg_ladder_defense_root = 0;        // --ladder_defense_root
+    cfg_ladder_offense_root = 0;        // --ladder_offense_root
+    cfg_cut_policy = 0.01f;             // --cut_policy
+    cfg_play_style = style_t::STABLE;   // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -918,26 +916,29 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         cmdstream >> tmp; // eat heatmap
         cmdstream >> symmetry;
 
+        bool ret;
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
-                                  Network::IDENTITY_SYMMETRY, false);
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                        Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
-                                      false);
-                Network::show_heatmap(&game, vec, false);
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, s,
+                                            false);
+                if (ret) {
+                    Network::show_heatmap(&game, vec, false);
+                }
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
-                                  false);
+            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, -1,
+                                        false);
         } else {
-            s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
-                                  std::stoi(symmetry), false);
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
+                                        std::stoi(symmetry), false);
         }
 
-        if (symmetry != "all") {
+        if (symmetry != "all" && ret) {
             Network::show_heatmap(&game, vec, false);
         }
 

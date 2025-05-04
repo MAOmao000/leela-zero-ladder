@@ -169,8 +169,10 @@ void Training::record(Network& network, GameState& state,
     step.planes = get_planes(&state);
 
     NNCache::Netresult result;
-    network.get_output(&state, Network::Ensemble::DIRECT, result,
-                       Network::IDENTITY_SYMMETRY);
+    if (!network.get_output(&state, Network::Ensemble::DIRECT, result,
+                            Network::IDENTITY_SYMMETRY)) {
+        return;
+    }
     step.net_winrate = result.winrate;
 
     const auto& best_node = root.get_best_root_child(step.to_move);

@@ -160,7 +160,7 @@ void OpenCL_Network<net_t>::add_weights(const size_t layer, const size_t size,
 }
 
 template <typename net_t>
-bool OpenCL_Network<net_t>::forward(const std::vector<float>& input,
+void OpenCL_Network<net_t>::forward(const std::vector<float>& input,
                                     std::vector<float>& output_pol,
                                     std::vector<float>& output_val,
                                     OpenCLContext& opencl_context,
@@ -406,7 +406,6 @@ bool OpenCL_Network<net_t>::forward(const std::vector<float>& input,
                                 pinnedOutBufferHost_pol);
     queue.enqueueUnmapMemObject(opencl_context.m_pinnedOutBuffer_val,
                                 pinnedOutBufferHost_val);
-    return true;
 
 }
 

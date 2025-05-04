@@ -72,10 +72,10 @@ public:
 
     virtual ~Network() = default;
 
-    bool get_output(const GameState* state, Ensemble ensemble,
+    bool get_output(const GameState* state, const Ensemble ensemble,
                     Network::Netresult& result,
-                    int symmetry = -1, bool read_cache = true,
-                    bool write_cache = true, bool force_selfcheck = false);
+                    const int symmetry = -1, const bool read_cache = true,
+                    const bool write_cache = true, bool force_selfcheck = false);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -136,8 +136,10 @@ private:
     static void winograd_sgemm(const std::vector<float>& U,
                                const std::vector<float>& V,
                                std::vector<float>& M, int C, int K);
-    bool get_output_internal(const GameState* state, int symmetry,
-                             Network::Netresult& result, bool selfcheck = false);
+    bool get_output_internal(const GameState* state,
+                             int symmetry,
+                             Network::Netresult& result,
+                             bool selfcheck = false);
     void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,

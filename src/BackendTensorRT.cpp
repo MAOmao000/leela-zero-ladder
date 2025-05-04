@@ -645,7 +645,7 @@ void BackendTRT<net_t>::constructNetwork(
                 int32_t const mmInputs = static_cast<int32_t>(
                     actPolicyLayer->getOutput(0)->getDimensions().d[1]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[2]
-                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]); 
+                    * actPolicyLayer->getOutput(0)->getDimensions().d[3]);
                 auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
                 inputReshape->setReshapeDimensions(Dims{2, {
                     static_cast<int32_t>(batch_size), mmInputs}});
