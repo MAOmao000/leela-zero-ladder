@@ -448,7 +448,7 @@ bool GPUScheduler<net_t>::forward(
     m_cv.notify_one();
     entry->cv.wait(lk);
 
-    if (m_draining) {
+    if (m_draining.load()) {
         return false;
     }
     return true;
@@ -508,20 +508,20 @@ void GPUScheduler<net_t>::batch_worker(
                 if (cfg_backend == backend_t::OPENCL) {
                     if (timeout
                         && m_single_eval_in_progress.exchange(true) == false) {
+                        // Waited long enough but couldn't form a batch.
+                        // Check if there is any other single eval in progress,
+                        // and if not, do one from this thread.
+                        if (m_waittime > 1) {
+                            m_waittime--;
+                        }
                         count = 1;
+                        break;
                     }
-                    // Waited long enough but couldn't form a batch.
-                    // Check if there is any other single eval in progress,
-                    // and if not, do one from this thread.
-                    if (m_waittime > 1) {
-                        m_waittime--;
-                    }
-                    break;
                 } else {
                     if (timeout) {
                         count = std::min(cfg_batch_size, m_forward_queue.size());
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -564,7 +564,7 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
-        if (!m_draining) {
+        if (!m_draining.load()) {
             // run the NN evaluation
             if (cfg_backend == backend_t::OPENCL) {
                 m_networks[gnum]->forward(
@@ -611,35 +611,16 @@ void GPUScheduler<net_t>::batch_worker(
 template <typename net_t>
 void GPUScheduler<net_t>::drain()
 {
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
-    m_draining = true;
-    std::list<std::shared_ptr<ForwardQueueEntry>> fq;
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        std::move(
-            m_forward_queue.begin(),
-            m_forward_queue.end(),
-            std::back_inserter(fq)
-        );
-        m_forward_queue.clear();
-    }
-    for (auto& x : fq) {
-        {
-            // dummy lock/unlock to make sure thread in forward() is sleeping
-            std::unique_lock<std::mutex> lk(x->mutex);
-        }
-        x->cv.notify_all();
-    }
+    m_draining.exchange(true);
 }
 
 template <typename net_t>
 void GPUScheduler<net_t>::resume()
 {
     // UCTNode::think() should wait for all child threads to complete before resuming.
-    assert(m_forward_queue.empty());
-    m_draining = false;
+    m_draining.exchange(false);
+    std::unique_lock<std::mutex> lk(m_mutex);
+    m_forward_queue.clear();
 }
 
 template class GPUScheduler<float>;
