@@ -97,7 +97,7 @@ public:
         const size_t tid = -1
     );
     void wait_time_reset() override {
-        m_waittime = 10;
+        m_waittime = 20;
     }
 
 private:
@@ -132,8 +132,8 @@ private:
     );
 
     std::atomic<bool> m_draining{false};
-    // start with 10 milliseconds : lock protected
-    int m_waittime{10};
+    // start with 20 milliseconds : lock protected
+    int m_waittime{20};
     // set to true when single (non-batch) eval is in progress
     std::atomic<bool> m_single_eval_in_progress{false};
     std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
