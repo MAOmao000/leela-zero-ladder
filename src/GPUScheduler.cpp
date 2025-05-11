@@ -435,6 +435,9 @@ bool GPUScheduler<net_t>::forward(
     std::vector<float>& output_pol,
     std::vector<float>& output_val)
 {
+    if (m_draining.load()) {
+        return false;
+    }
     auto entry =
         std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
     std::unique_lock<std::mutex> lk(entry->mutex);
@@ -448,7 +451,7 @@ bool GPUScheduler<net_t>::forward(
     m_cv.notify_one();
     entry->cv.wait(lk);
 
-    if (m_draining.load()) {
+    if (output_pol[0] == -1.0f) {
         return false;
     }
     return true;
@@ -498,12 +501,21 @@ void GPUScheduler<net_t>::batch_worker(
                 count = cfg_batch_size;
                 break;
             }
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+            bool timeout = !m_cv.wait_for(
+                lk, std::chrono::milliseconds(cfg_batch_wait_time), [this]() {
+                    return !m_running
+                           || m_forward_queue.size() >= cfg_batch_size;
+                }
+            );
+#else
             bool timeout = !m_cv.wait_for(
                 lk, std::chrono::milliseconds(m_waittime), [this]() {
                     return !m_running
                            || m_forward_queue.size() >= cfg_batch_size;
                 }
             );
+#endif
             if (!m_forward_queue.empty()) {
                 if (cfg_backend == backend_t::OPENCL) {
                     if (timeout
@@ -533,6 +545,9 @@ void GPUScheduler<net_t>::batch_worker(
         return inputs;
     };
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+    const auto dummy_input = std::vector<float>(in_size);
+#endif
     auto batch_output_pol = std::vector<float>(m_out_pol_size * cfg_batch_size);
     auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
     while (true) {
@@ -564,6 +579,15 @@ void GPUScheduler<net_t>::batch_worker(
             );
             index++;
         }
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+        for (auto i = index; i < cfg_batch_size; i++) {
+            std::copy(
+                begin(dummy_input),
+                end(dummy_input),
+                begin(batch_input) + in_size * i
+            );
+        }
+#endif
         if (!m_draining.load()) {
             // run the NN evaluation
             if (cfg_backend == backend_t::OPENCL) {
@@ -584,6 +608,10 @@ void GPUScheduler<net_t>::batch_worker(
                     cfg_batch_size
                 );
 #endif
+            }
+        } else {
+            for (auto i = 0; i < index; i++) {
+                batch_output_pol[m_out_pol_size * i] = -1.0f;
             }
         }
         // Get output and copy back
@@ -611,16 +639,22 @@ void GPUScheduler<net_t>::batch_worker(
 template <typename net_t>
 void GPUScheduler<net_t>::drain()
 {
+    // When signaled to drain requests, this method picks up all pending
+    // requests and wakes them up.  Throws exception once the woken up request
+    // sees m_draining.
     m_draining.exchange(true);
+
 }
 
 template <typename net_t>
 void GPUScheduler<net_t>::resume()
 {
+    {
+        std::unique_lock<std::mutex> lk(m_mutex);
+        m_forward_queue.clear();
+    }
     // UCTNode::think() should wait for all child threads to complete before resuming.
     m_draining.exchange(false);
-    std::unique_lock<std::mutex> lk(m_mutex);
-    m_forward_queue.clear();
 }
 
 template class GPUScheduler<float>;
