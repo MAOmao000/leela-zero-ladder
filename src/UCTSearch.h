@@ -53,6 +53,9 @@ public:
     float eval() const {
         return m_eval;
     }
+    void set_valid(const bool valid = false) {
+        m_valid = valid;
+    }
     static SearchResult from_eval(const float eval) {
         return SearchResult(eval);
     }

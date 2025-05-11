@@ -247,6 +247,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
         const auto color = currstate.get_to_move();
         new_node = false;
         currnode->virtual_loss();
+        result.set_valid();
         if (currnode->expandable()) {
             if (currstate.get_passes() >= 2) {
                 auto score = currstate.final_score();
