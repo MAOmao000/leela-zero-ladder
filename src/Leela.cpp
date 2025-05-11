@@ -138,10 +138,10 @@ static void calculate_thread_count_gpu(
         }
         if (cfg_backend == backend_t::OPENCL) {
             cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count * 2);
+                std::min(cfg_num_threads, cfg_batch_size * gpu_count * 2);
         } else {
             cfg_num_threads =
-                std::min(cfg_max_threads, cfg_batch_size * gpu_count);
+                std::min(cfg_num_threads, cfg_batch_size * gpu_count);
         }
     }
     if (cfg_num_threads < cfg_batch_size) {
@@ -248,6 +248,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+        ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
+                      "Wait time milliseconds for full batch.")
+#endif
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
@@ -412,6 +416,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("gpu")) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
+
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+    if (vm.count("batchwait")) {
+        cfg_batch_wait_time = vm["batchwait"].as<int>();
+    }
+#endif
 
     if (vm.count("full-tuner")) {
         cfg_sgemm_exhaustive = true;

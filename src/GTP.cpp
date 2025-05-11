@@ -62,6 +62,9 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+int cfg_batch_wait_time;
+#endif
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -349,6 +352,9 @@ void GTP::setup_default_parameters() {
     cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+    cfg_batch_wait_time = 20;   // --batchwait
+#endif
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
