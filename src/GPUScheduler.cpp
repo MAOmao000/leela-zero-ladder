@@ -610,7 +610,7 @@ void GPUScheduler<net_t>::batch_worker(
 #endif
             }
         } else {
-            for (auto i = 0; i < index; i++) {
+            for (size_t i = 0; i < index; i++) {
                 batch_output_pol[m_out_pol_size * i] = -1.0f;
             }
         }
