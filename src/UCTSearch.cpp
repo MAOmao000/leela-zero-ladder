@@ -118,6 +118,54 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
     set_visit_limit(cfg_max_visits);
 
     m_root = std::make_unique<UCTNode>(FastBoard::PASS, 0.0f);
+
+    auto analysis = [this]() {
+        while (true) {
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                m_cv.wait(lock, [this]() {
+                    return m_run.load() || m_kill.load();
+                });
+            }
+            if (m_kill.load()) {
+                return;
+            }
+            m_numanalysis.store(0);
+            while (true) {
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_cv.wait_for(
+                        lock, std::chrono::milliseconds(
+                            cfg_analyze_tags.interval_centis() * 10), [this]() {
+                                return !m_run.load();
+                    });
+                }
+                if (m_run.load()) {
+                    if (output_analysis(m_rootstate, *m_root)) {
+                        m_numanalysis++;
+                    }
+                } else {
+                    break;
+                }
+            }
+            {
+                std::lock_guard<std::mutex> lock(m_mutex_stop);
+                m_analysis_stop = true;
+            }
+            m_cv_analysis_stop.notify_one();
+        }
+    };
+    m_analysis = std::thread(analysis);
+}
+
+UCTSearch::~UCTSearch() {
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_run.store(true);
+        m_kill.store(true);
+    }
+    m_cv.notify_one();
+    m_analysis.join();
 }
 
 bool UCTSearch::advance_to_new_rootstate() {
@@ -333,12 +381,12 @@ void UCTSearch::dump_stats(const FastState& state, UCTNode& parent) {
     tree_stats(parent);
 }
 
-void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
+int UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
     // We need to make a copy of the data before sorting
     auto sortable_data = std::vector<OutputAnalysisData>();
 
     if (!parent.has_children()) {
-        return;
+        return 0;
     }
 
     const auto color = state.get_to_move();
@@ -371,6 +419,9 @@ void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
         sortable_data.emplace_back(move, visits, move_eval, policy, pv, lcb,
                                    lcb_ratio_exceeded);
     }
+    if (sortable_data.size() <= 0) {
+        return 0;
+    }
     // Sort array to decide order
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));
 
@@ -384,6 +435,7 @@ void UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
         i++;
     }
     gtp_printf_raw("\n");
+    return i;
 }
 
 void UCTSearch::tree_stats(const UCTNode& node) {
@@ -642,7 +694,12 @@ std::string UCTSearch::get_analysis(const int playouts) {
 }
 
 bool UCTSearch::is_running() const {
-    return m_run && UCTNodePointer::get_tree_size() < cfg_max_tree_size;
+    return m_run.load() && UCTNodePointer::get_tree_size() < cfg_max_tree_size;
+}
+
+void UCTSearch::set_running(bool runnung) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_run.store(runnung);
 }
 
 int UCTSearch::est_playouts_left(const int elapsed_centis,
@@ -750,13 +807,43 @@ bool UCTSearch::stop_thinking(const int elapsed_centis,
 }
 
 void UCTWorker::operator()() {
-    do {
+    std::chrono::system_clock::time_point start_time, end_time;
+    int lagtime = 0;
+    while(true) {
+        start_time = std::chrono::system_clock::now();
         auto currstate = std::make_unique<GameState>(m_rootstate);
         auto result = m_search->play_simulation(*currstate, m_root);
         if (result.valid()) {
             m_search->increment_playouts();
         }
-    } while (m_search->is_running());
+        if (!m_search->is_running()) {
+            break;
+        }
+        if (m_start) {
+            Time elapsed;
+            int elapsed_centis = Time::timediff_centis(*m_start, elapsed);
+            if (m_search->stop_thinking(elapsed_centis, m_time_for_move - lagtime) ||
+                !m_search->have_alternate_moves(elapsed_centis, m_time_for_move - lagtime)) {
+                m_search->set_running(false);
+                break;
+            }
+        } else {
+            if (Utils::input_pending() || m_search->stop_thinking(0, 1)) {
+                m_search->set_running(false);
+                break;
+            }
+        }
+        end_time = std::chrono::system_clock::now();
+        lagtime = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+            end_time - start_time).count() / 10000);
+        if (lagtime > m_time_for_move / 2) {
+            lagtime = m_time_for_move / 2;
+        }
+    }
+#ifdef USE_OPENCL
+    m_network.drain_evals();
+#endif
 }
 
 void UCTSearch::increment_playouts() {
@@ -783,53 +870,34 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     // play something legal and decent even in time trouble)
     m_root->prepare_root_node(m_network, color, m_nodes, m_rootstate);
 
-    m_run = true;
-    int cpus = static_cast<int>(cfg_num_threads);
-    ThreadGroup tg(thread_pool);
-    for (int i = 0; i < cpus; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_run.store(true);
     }
 
-    auto keeprunning = true;
-    auto last_update = 0;
-    auto last_output = 0;
-    do {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    ThreadGroup tg(thread_pool);
+    for (auto i = size_t{0}; i < cfg_num_threads; i++) {
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network,
+            &start, time_for_move));
+    }
 
-        Time elapsed;
-        int elapsed_centis = Time::timediff_centis(start, elapsed);
-
-        if (cfg_analyze_tags.interval_centis()
-            && elapsed_centis - last_output
-                   > cfg_analyze_tags.interval_centis()) {
-            last_output = elapsed_centis;
+    if (cfg_analyze_tags.interval_centis()) {
+        m_analysis_stop = false;
+        m_cv.notify_one();
+        tg.wait_all();
+        m_cv.notify_one();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
+        }
+        if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
         }
-
-        // output some stats every few seconds
-        // check if we should still search
-        if (!cfg_quiet && elapsed_centis - last_update > 250) {
-            last_update = elapsed_centis;
-            myprintf("%s\n", get_analysis(m_playouts.load()).c_str());
-        }
-        keeprunning = is_running();
-        keeprunning &= !stop_thinking(elapsed_centis, time_for_move);
-        keeprunning &= have_alternate_moves(elapsed_centis, time_for_move);
-    } while (keeprunning);
-
-    // Make sure to post at least once.
-    if (cfg_analyze_tags.interval_centis() && last_output == 0) {
-        output_analysis(m_rootstate, *m_root);
+    } else {
+        tg.wait_all();
     }
-
-    // Stop the search.
-    m_run = false;
 #ifdef USE_OPENCL
-    m_network.drain_evals();
-    tg.wait_all();
     m_network.resume_evals();
-#else
-    tg.wait_all();
 #endif
 
     // Reactivate all pruned root children.
@@ -893,42 +961,32 @@ void UCTSearch::ponder() {
     m_root->prepare_root_node(m_network, m_rootstate.board.get_to_move(),
                               m_nodes, m_rootstate);
 
-    m_run = true;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_run.store(true);
+    }
+
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network));
     }
-    Time start;
-    auto keeprunning = true;
-    auto last_output = 0;
-    do {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        if (cfg_analyze_tags.interval_centis()) {
-            Time elapsed;
-            int elapsed_centis = Time::timediff_centis(start, elapsed);
-            if (elapsed_centis - last_output
-                > cfg_analyze_tags.interval_centis()) {
-                last_output = elapsed_centis;
-                output_analysis(m_rootstate, *m_root);
-            }
+    if (cfg_analyze_tags.interval_centis()) {
+        m_analysis_stop = false;
+        m_cv.notify_one();
+        tg.wait_all();
+        m_cv.notify_one();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
         }
-        keeprunning = is_running();
-        keeprunning &= !stop_thinking(0, 1);
-    } while (!Utils::input_pending() && keeprunning);
-
-    // Make sure to post at least once.
-    if (cfg_analyze_tags.interval_centis() && last_output == 0) {
-        output_analysis(m_rootstate, *m_root);
+        if (!m_numanalysis.load()) {
+            output_analysis(m_rootstate, *m_root);
+        }
+    } else {
+        tg.wait_all();
     }
-
-    // Stop the search.
-    m_run = false;
 #ifdef USE_OPENCL
-    m_network.drain_evals();
-    tg.wait_all();
     m_network.resume_evals();
-#else
-    tg.wait_all();
 #endif
 
     // Display search info.

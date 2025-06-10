@@ -114,14 +114,18 @@ public:
         std::numeric_limits<int>::max() / 2;
 
     UCTSearch(GameState& g, Network& network);
+    ~UCTSearch();
     int think(int color, passflag_t passflag = NORMAL);
     void set_playout_limit(int playouts);
     void set_visit_limit(int visits);
     void ponder();
     bool is_running() const;
+    void set_running(bool runnung);
     void increment_playouts();
     std::string explain_last_think() const;
     SearchResult play_simulation(GameState& currstate, UCTNode* node);
+    bool have_alternate_moves(int elapsed_centis, int time_for_move);
+    bool stop_thinking(int elapsed_centis = 0, int time_for_move = 0) const;
 
 private:
     float get_min_psa_ratio() const;
@@ -130,22 +134,22 @@ private:
     std::string get_pv(FastState& state, UCTNode& parent);
     std::string get_analysis(int playouts);
     bool should_resign(passflag_t passflag, float besteval);
-    bool have_alternate_moves(int elapsed_centis, int time_for_move);
     int est_playouts_left(int elapsed_centis, int time_for_move) const;
     size_t prune_noncontenders(int color, int elapsed_centis = 0,
                                int time_for_move = 0, bool prune = true);
-    bool stop_thinking(int elapsed_centis = 0, int time_for_move = 0) const;
     int get_best_move(passflag_t passflag);
     void update_root();
     bool advance_to_new_rootstate();
-    void output_analysis(const FastState& state, const UCTNode& parent);
+    int output_analysis(const FastState& state, const UCTNode& parent);
 
     GameState& m_rootstate;
     std::unique_ptr<GameState> m_last_rootstate;
     std::unique_ptr<UCTNode> m_root;
     std::atomic<int> m_nodes{0};
     std::atomic<int> m_playouts{0};
+    std::atomic<int> m_numanalysis{0};
     std::atomic<bool> m_run{false};
+    std::atomic<bool> m_kill{false};
     int m_maxplayouts;
     int m_maxvisits;
     std::string m_think_output;
@@ -153,18 +157,30 @@ private:
     std::list<Utils::ThreadGroup> m_delete_futures;
 
     Network& m_network;
+
+    std::mutex m_mutex;
+    std::mutex m_mutex_stop;
+    std::condition_variable m_cv;
+    std::condition_variable m_cv_analysis_stop;
+    bool m_analysis_stop{false};
+    std::thread m_analysis;
 };
 
 class UCTWorker {
 public:
-    UCTWorker(GameState& state, UCTSearch* const search, UCTNode* const root)
-        : m_rootstate(state), m_search(search), m_root(root) {}
+    UCTWorker(GameState& state, UCTSearch* const search, UCTNode* const root,
+        Network& network, Time* const start = nullptr, int const time_for_move = 0)
+        : m_rootstate(state), m_search(search), m_root(root), m_network(network),
+            m_start(start), m_time_for_move(time_for_move) {}
     void operator()();
 
 private:
     GameState& m_rootstate;
     UCTSearch* m_search;
     UCTNode* m_root;
+    Network& m_network;
+    Time* m_start;
+    int m_time_for_move;
 };
 
 #endif
