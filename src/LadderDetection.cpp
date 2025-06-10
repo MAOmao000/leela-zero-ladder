@@ -30,6 +30,8 @@ int IsLadderEscape(
     int moveListAlive[stackSize];
     std::array<int, stackSize * 2> buf;
 
+    int capture_stones = 0;
+    int base_stones = state->board.get_string_count(str_vtx);
     int max_depth = 0;
     int dead_depth = 0;
     bool returnValue = ALIVE;
@@ -55,7 +57,11 @@ int IsLadderEscape(
             } else {
                 if (dead_depth > 0) {
                     // Unable to escape from ladder.
-                    return -dead_depth;
+                    if ((capture_stones - base_stones) * 2 > dead_depth) {
+                        return (capture_stones - base_stones) * -2;
+                    } else {
+                        return -dead_depth;
+                    }
                 } else {
                     return 0;
                 }
@@ -82,6 +88,9 @@ int IsLadderEscape(
                 if (stackIdx > dead_depth) {
                     // Escape stones are captured.
                     dead_depth = stackIdx;
+                    state->undo_move();
+                    capture_stones = state->board.get_string_count(str_vtx);
+                    state->forward_move();
                 }
                 returnedFromDeeper = true;
                 stackIdx--;
@@ -164,12 +173,13 @@ int IsLadderEscape(
                         auto capture_liberty_pos =
                             state->board.get_liberty_pos(1, escape_liberty_pos[0]);
                         if (state->is_move_legal(opp, capture_liberty_pos[0])) {
-                            state->undo_move();
                             returnValue = DEAD;
                             if (stackIdx + 1 > dead_depth) {
                                 // The only escape route is impossible to move.
                                 dead_depth = stackIdx + 1;
+                                capture_stones = state->board.get_string_count(str_vtx);
                             }
+                            state->undo_move();
                             returnedFromDeeper = true;
                             stackIdx--;
                             continue;
@@ -197,6 +207,7 @@ int IsLadderEscape(
                         if (stackIdx + 1 > dead_depth) {
                             // Upper bound liberties <= 1.
                             dead_depth = stackIdx + 1;
+                            capture_stones = state->board.get_string_count(str_vtx);
                         }
                         returnedFromDeeper = true;
                         stackIdx--;
@@ -210,6 +221,7 @@ int IsLadderEscape(
                     if (stackIdx + 1 > dead_depth) {
                         // Nothing escape routes.
                         dead_depth = stackIdx + 1;
+                        capture_stones = state->board.get_string_count(str_vtx);
                     }
                     returnedFromDeeper = true;
                     stackIdx--;
@@ -224,6 +236,7 @@ int IsLadderEscape(
                     if (stackIdx + 1 > dead_depth) {
                         // Escape route is less than one.
                         dead_depth = stackIdx + 1;
+                        capture_stones = state->board.get_string_count(str_vtx);
                     }
                     returnedFromDeeper = true;
                     stackIdx--;
@@ -300,6 +313,7 @@ int IsLadderEscape(
                         if (stackIdx + 5 > dead_depth) {
                             // Both chase routes can be captured.
                             dead_depth = stackIdx + 5;
+                            capture_stones = state->board.get_string_count(str_vtx) + 2;
                         }
                         returnedFromDeeper = true;
                         stackIdx--;
@@ -355,6 +369,7 @@ int IsLadderEscape(
                                     // Either route will result in a Ko state and
                                     // the escape move will have no way to escape.
                                     dead_depth = stackIdx + 1;
+                                    capture_stones = state->board.get_string_count(str_vtx);
                                 }
                                 returnedFromDeeper = true;
                                 stackIdx--;
@@ -454,6 +469,7 @@ int IsLadderEscape(
                     if (stackIdx + 1 > dead_depth) {
                         // No move to alive.
                         dead_depth = stackIdx + 1;
+                        capture_stones = state->board.get_string_count(str_vtx);
                     }
                 }
             } else {
@@ -471,6 +487,7 @@ int IsLadderEscape(
                             if (stackIdx + 1 > dead_depth) {
                                 // It can be captured via another route.
                                 dead_depth = stackIdx + 1;
+                                capture_stones = state->board.get_string_count(str_vtx);
                             }
                         }
                     }
@@ -492,6 +509,7 @@ int IsLadderEscape(
                     if (stackIdx + 1 > dead_depth) {
                         // Escape move to the place is illegal.
                         dead_depth = stackIdx + 1;
+                        capture_stones = state->board.get_string_count(str_vtx);
                     }
                 }
             } else {
@@ -544,7 +562,7 @@ int IsLadderChase(
             }
         }
     }
-    auto max_depth = 0;
+    int max_depth = 0;
     for (auto opp_i = 0; opp_i < opponent_num; opp_i++) {
         auto ladder_counter = 0;
         auto current_move = str_vtx[opp_i];
@@ -615,32 +633,17 @@ void LadderDetection(
             state->board.get_liberties(vertex) == 2 &&
             stone_count > capture_count) {
 
-            auto ladder_counter = 0;
-            auto current_move = vertex;
-            for (int i = base_state->get_movenum() - 1; i >= 0; i -= 2) {
-                auto prev_state = base_state->get_game_history()[i];
-                auto prev_move = prev_state->get_last_move();
-                if (state->board.get_parent_stone(prev_move)
-                        != state->board.get_parent_stone(current_move)) {
-                    continue;
-                }
-                if (prev_state->board.get_liberties(prev_move) == 2) {
-                    ladder_counter++;
-                    current_move = prev_move;
-                } else {
-                    break;
-                }
-            }
-
             if (stone_count >= cfg_defense_stones) {
                 auto depth = IsLadderEscape(state.get(), vertex);
-                if (depth < 0) {
+                if (depth < 0 && -depth / 2 + stone_count > capture_count) {
+#ifndef NDEBUG
                     auto move_string = state->move_to_text(vertex);
                     myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
                         move_string.c_str(),
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                         depth, policy[i]);
-                    ladder_pos[i] = depth - ladder_counter * 2;
+#endif
+                    ladder_pos[i] = depth;
                     state->undo_move();
                     continue;
                 }
@@ -652,11 +655,13 @@ void LadderDetection(
         }
         auto depth = IsLadderChase(state.get(), vertex, base_state);
         if (depth > 0) {
+#ifndef NDEBUG
             auto move_string = state->move_to_text(vertex);
             myprintf("shouldn't chase. %s(%s) depth count:%d\n",
                 move_string.c_str(),
                 turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                 depth);
+#endif
             ladder_pos[i] = depth;
         }
         state->undo_move();
