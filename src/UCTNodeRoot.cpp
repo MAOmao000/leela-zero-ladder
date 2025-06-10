@@ -196,29 +196,16 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
                 state->board.get_liberties(child->m_move) == 2 &&
                 stone_count > capture_count) {
 
-                auto ladder_counter = 0;
-                auto current_move = child->m_move;
-                for (int i = base_state.get_movenum() - 1; i >= 0; i -= 2) {
-                    auto prev_state = base_state.get_game_history()[i];
-                    auto prev_move = prev_state->get_last_move();
-                    if (state->board.get_parent_stone(prev_move)
-                        != state->board.get_parent_stone(current_move)) {
-                        continue;
-                    }
-                    if (prev_state->board.get_liberties(prev_move) == 2) {
-                        ladder_counter++;
-                        current_move = prev_move;
-                    } else {
-                        break;
-                    }
-                }
-
                 if (stone_count >= cfg_defense_stones) {
                     auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                    if (depth < 0 &&
+                        -depth / 2 + stone_count > capture_count &&
+                        -depth >= cfg_ladder_defense_root) {
+#ifndef NDEBUG
                         auto check_vertex = state->move_to_text(child->m_move);
                         Utils::myprintf("can't escape. %s depth count:%d\n",
                             check_vertex.c_str(), -depth);
+#endif
                         state->undo_move();
                         continue;
                     }
@@ -227,9 +214,11 @@ UCTNode* UCTNode::get_nopass_child(GameState& base_state) {
             if (cfg_ladder_offense_root > 0 && !capture_count) {
                 auto depth = IsLadderChase(state.get(), child->m_move, &base_state);
                 if (depth >= cfg_ladder_offense_root) {
+#ifndef NDEBUG
                     auto check_vertex = state->move_to_text(child->m_move);
                     Utils::myprintf("shouldn't chase. %s depth count:%d\n",
                         check_vertex.c_str(), depth);
+#endif
                     state->undo_move();
                     continue;
                 }
@@ -317,29 +306,16 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
                 state->board.get_liberties(child->m_move) == 2 &&
                 stone_count > capture_count) {
 
-                auto ladder_counter = 0;
-                auto current_move = child->m_move;
-                for (int i = base_state.get_movenum() - 1; i >= 0; i -= 2) {
-                    auto prev_state = base_state.get_game_history()[i];
-                    auto prev_move = prev_state->get_last_move();
-                    if (state->board.get_parent_stone(prev_move)
-                        != state->board.get_parent_stone(current_move)) {
-                        continue;
-                    }
-                    if (prev_state->board.get_liberties(prev_move) == 2) {
-                        ladder_counter++;
-                        current_move = prev_move;
-                    } else {
-                        break;
-                    }
-                }
-
                 if (stone_count >= cfg_defense_stones) {
                     auto depth = IsLadderEscape(state.get(), child->m_move);
-                    if (depth < 0 && ladder_counter * 2 - depth >= cfg_ladder_defense_root) {
+                    if (depth < 0 &&
+                        -depth / 2 + stone_count > capture_count &&
+                        -depth >= cfg_ladder_defense_root) {
+#ifndef NDEBUG
                         auto check_vertex = state->move_to_text(child->m_move);
                         Utils::myprintf("can't escape. %s depth count:%d\n",
                             check_vertex.c_str(), -depth);
+#endif
                         state->undo_move();
                         continue;
                     }
@@ -348,9 +324,11 @@ UCTNode* UCTNode::get_noladder_child(GameState& base_state) {
             if (cfg_ladder_offense_root > 0 && !capture_count) {
                 auto depth = IsLadderChase(state.get(), child->m_move, &base_state);
                 if (depth >= cfg_ladder_offense_root) {
+#ifndef NDEBUG
                     auto check_vertex = state->move_to_text(child->m_move);
                     Utils::myprintf("shouldn't chase. %s depth count:%d\n",
                         check_vertex.c_str(), depth);
+#endif
                     state->undo_move();
                     continue;
                 }
