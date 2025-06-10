@@ -544,6 +544,24 @@ void GPUScheduler<net_t>::batch_worker(
         m_forward_queue.erase(begin(m_forward_queue), end);
         return inputs;
     };
+    // Returns the batch picked up from the queue (m_forward_queue)
+    auto trt_pickup_task = [this]() {
+        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
+        std::unique_lock<std::mutex> lk(m_mutex);
+        m_cv.wait(lk, [this] {
+            return !m_forward_queue.empty() || !m_running;
+        });
+        if (!m_running) {
+            return inputs;
+        }
+        auto count = std::min(cfg_batch_size, m_forward_queue.size());
+        // Move 'count' evals from shared queue to local list.
+        auto end = begin(m_forward_queue);
+        std::advance(end, count);
+        std::move(begin(m_forward_queue), end, std::back_inserter(inputs));
+        m_forward_queue.erase(begin(m_forward_queue), end);
+        return inputs;
+    };
     auto batch_input = std::vector<float>(in_size * cfg_batch_size);
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     const auto dummy_input = std::vector<float>(in_size);
@@ -551,11 +569,16 @@ void GPUScheduler<net_t>::batch_worker(
     auto batch_output_pol = std::vector<float>(m_out_pol_size * cfg_batch_size);
     auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
     while (true) {
-        auto inputs = pickup_task();
-        auto count = inputs.size();
+        std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
+        if (cfg_backend == backend_t::TENSORRT) {
+            inputs = trt_pickup_task();
+        } else {
+            inputs = pickup_task();
+        }
         if (!m_running) {
             return;
         }
+        auto count = inputs.size();
 #ifndef NDEBUG
         if (cfg_backend == backend_t::OPENCL && count < cfg_batch_size) {
             batch_stats.single_evals++;
@@ -563,7 +586,7 @@ void GPUScheduler<net_t>::batch_worker(
             batch_stats.batch_evals++;
         }
 #endif
-        if (cfg_backend == backend_t::OPENCL) {
+        if (cfg_backend == backend_t::TENSORRT || cfg_backend == backend_t::OPENCL) {
             // prepare input for forward() call
             batch_input.resize(in_size * count);
             batch_output_pol.resize(m_out_pol_size * count);
@@ -580,12 +603,14 @@ void GPUScheduler<net_t>::batch_worker(
             index++;
         }
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
-        for (auto i = index; i < cfg_batch_size; i++) {
-            std::copy(
-                begin(dummy_input),
-                end(dummy_input),
-                begin(batch_input) + in_size * i
-            );
+        if (cfg_backend == backend_t::CUDNN || cfg_backend == backend_t::CUDNNGRAPH) {
+            for (auto i = index; i < cfg_batch_size; i++) {
+                std::copy(
+                    begin(dummy_input),
+                    end(dummy_input),
+                    begin(batch_input) + in_size * i
+                );
+            }
         }
 #endif
         if (!m_draining.load()) {
@@ -599,6 +624,14 @@ void GPUScheduler<net_t>::batch_worker(
                     (const int)count
                 );
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+            } else if (cfg_backend == backend_t::TENSORRT) {
+                m_backend[gnum]->forward(
+                    batch_input,
+                    batch_output_pol,
+                    batch_output_val,
+                    static_cast<int>(tid),
+                    static_cast<int>(count)
+                );
             } else {
                 m_backend[gnum]->forward(
                     batch_input,
@@ -643,7 +676,7 @@ void GPUScheduler<net_t>::drain()
     // requests and wakes them up.  Throws exception once the woken up request
     // sees m_draining.
     m_draining.exchange(true);
-
+    m_cv.notify_all();
 }
 
 template <typename net_t>
