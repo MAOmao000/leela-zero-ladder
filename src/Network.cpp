@@ -1438,9 +1438,13 @@ void Network::nncache_clear() {
 }
 
 void Network::drain_evals() {
-    m_forward->drain();
+    if (!cfg_cpu_only) {
+        m_forward->drain();
+    }
 }
 
 void Network::resume_evals() {
-    m_forward->resume();
+    if (!cfg_cpu_only) {
+        m_forward->resume();
+    }
 }
