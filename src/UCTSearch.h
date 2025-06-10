@@ -169,18 +169,27 @@ private:
 class UCTWorker {
 public:
     UCTWorker(GameState& state, UCTSearch* const search, UCTNode* const root,
-        Network& network, Time* const start = nullptr, int const time_for_move = 0)
-        : m_rootstate(state), m_search(search), m_root(root), m_network(network),
-            m_start(start), m_time_for_move(time_for_move) {}
+#ifdef USE_OPENCL
+        Network& network,
+#endif
+        Time* const start = nullptr, int const time_for_move = 0)
+        : m_rootstate(state), m_search(search), m_root(root),
+            m_start(start), m_time_for_move(time_for_move)
+#ifdef USE_OPENCL
+            , m_network(network) 
+#endif
+        {}
     void operator()();
 
 private:
     GameState& m_rootstate;
     UCTSearch* m_search;
     UCTNode* m_root;
-    Network& m_network;
     Time* m_start;
     int m_time_for_move;
+#ifdef USE_OPENCL
+    Network& m_network;
+#endif
 };
 
 #endif

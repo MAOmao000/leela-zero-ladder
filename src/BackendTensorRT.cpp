@@ -79,7 +79,7 @@ bool BackendTRT<net_t>::build(
     auto ext_i = filename.find_last_of(".");
     std::string weightsfile = filename.substr(0, ext_i);
     network->setName(weightsfile.c_str());
-    constructNetwork(network, tune_desc, batch_size);
+    constructNetwork(network, tune_desc);
 
     {
         for (auto i = 0; i < num_worker_threads; i++) {
@@ -366,8 +366,7 @@ bool BackendTRT<net_t>::build(
 template <typename net_t>
 void BackendTRT<net_t>::constructNetwork(
     TrtUniquePtr<INetworkDefinition>& network,
-    std::string& tune_desc,
-    const int64_t batch_size) {
+    std::string& tune_desc) {
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
@@ -381,8 +380,7 @@ void BackendTRT<net_t>::constructNetwork(
             network,
             this->m_layers[1].channels,
             1,
-            1,
-            batch_size);
+            1);
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
         auto inShapeLayer = network->addShape(*batchSizeTensor);
@@ -403,8 +401,7 @@ void BackendTRT<net_t>::constructNetwork(
                 network,
                 layer.channels,
                 BOARD_SIZE,
-                BOARD_SIZE,
-                batch_size);
+                BOARD_SIZE);
             auto conv_weights = begin(layer.weights);
             auto conv_biases = begin(layer.weights) + 1;
             auto initialConvLayer = buildConvLayer(
@@ -762,8 +759,7 @@ ITensor* BackendTRT<net_t>::initInputs(
     TrtUniquePtr<INetworkDefinition>& network,
     const int channels,
     const int rows,
-    const int cols,
-    const int64_t batch_size) {
+    const int cols) {
 
     ITensor* inputFeature;
 
