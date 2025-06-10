@@ -353,7 +353,7 @@ void GTP::setup_default_parameters() {
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
-    cfg_batch_wait_time = 20;   // --batchwait
+    cfg_batch_wait_time = 6;    // --batchwait
 #endif
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
@@ -372,7 +372,7 @@ void GTP::setup_default_parameters() {
     cfg_tune_only = false;               // --tune-only
 #ifdef USE_TENSOR_RT
     cfg_builder_opt_level = 2;           // --builder_opt_level [0-5]
-    cfg_cache_plan = true;               // --trt-cache
+    cfg_cache_plan = true;               // --trt_cache
     cfg_backend = backend_t::TENSORRT;   // --backend
 #else
 #ifdef USE_CUDNN
@@ -418,7 +418,7 @@ void GTP::setup_default_parameters() {
     cfg_cpu_only = false;            // --cpu-only
 #endif
 
-    cfg_ladder_defense = 9;             // --ladder_defense
+    cfg_ladder_defense = 11;            // --ladder_defense
     cfg_ladder_offense = 8;             // --ladder_offense
     cfg_defense_stones = 4;             // --defense_stones
     cfg_offense_stones = 4;             // --offense_stones

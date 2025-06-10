@@ -208,7 +208,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #ifdef USE_TENSOR_RT
         ("builder_opt_level", po::value<int>()->default_value(cfg_builder_opt_level),
                       "Builder optimization level.")
-        ("trt-cache", po::value<std::string>()->default_value("plan"),
+        ("trt_cache", po::value<std::string>()->default_value("plan"),
                       "Which to use: plan cache or timing cache? (plan/timing)")
 #endif
 #ifdef USE_CUDNN
@@ -476,13 +476,13 @@ static void parse_commandline(const int argc, const char* const argv[]) {
             cfg_builder_opt_level = vm["builder_opt_level"].as<int>();
         }
 
-        auto trt_cache = vm["trt-cache"].as<std::string>();
+        auto trt_cache = vm["trt_cache"].as<std::string>();
         if ("plan" == trt_cache) {
             cfg_cache_plan = true;
         } else if ("timing" == trt_cache) {
             cfg_cache_plan = false;
         } else {
-            printf("Unexpected option for --trt-cache, expecting plan/timing.\n");
+            printf("Unexpected option for --trt_cache, expecting plan/timing.\n");
             exit(EXIT_FAILURE);
         }
 #endif

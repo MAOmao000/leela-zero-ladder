@@ -69,7 +69,7 @@ bool BackendTRT<net_t>::build(
         usingFP16 = true;
     }
 
-    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(0U));
+    auto network = TrtUniquePtr<INetworkDefinition>(builder->createNetworkV2(0));
     if (!network) {
         std::cerr << "TensorRT backend: failed to create network definition" << std::endl;
         return false;
@@ -79,14 +79,41 @@ bool BackendTRT<net_t>::build(
     auto ext_i = filename.find_last_of(".");
     std::string weightsfile = filename.substr(0, ext_i);
     network->setName(weightsfile.c_str());
-
     constructNetwork(network, tune_desc, batch_size);
+
+    {
+        for (auto i = 0; i < num_worker_threads; i++) {
+            auto profile = builder->createOptimizationProfile();
+            if (!profile) {
+                std::cerr << "TensorRT backend: failed to create optimization profile" << std::endl;
+                return false;
+            }
+            profile->setDimensions("InputFeature", OptProfileSelector::kMIN,
+                Dims4(1, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            profile->setDimensions("InputFeature", OptProfileSelector::kOPT,
+                Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            profile->setDimensions("InputFeature", OptProfileSelector::kMAX,
+                Dims4(batch_size, this->m_layers[0].channels, BOARD_SIZE, BOARD_SIZE));
+            if (this->m_net_type == NetworkType::MINIGO_SE) {
+                profile->setDimensions("BatchSize", OptProfileSelector::kMIN,
+                    Dims4(1, this->m_layers[1].channels, 1, 1));
+                profile->setDimensions("BatchSize", OptProfileSelector::kOPT,
+                    Dims4(batch_size, this->m_layers[1].channels, 1, 1));
+                profile->setDimensions("BatchSize", OptProfileSelector::kMAX,
+                    Dims4(batch_size, this->m_layers[1].channels, 1, 1));
+            }
+            config->addOptimizationProfile(profile);
+        }
+    }
 
     if (this->m_device_prop.major >= 8) {
         // This is to avoid tactics that have shape switching overhead
         config->setTacticSources(1U << static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS));
         config->setBuilderOptimizationLevel(cfg_builder_opt_level);
     }
+    // So that there are no concurrent kernel executions probably from other parts of code while profiling
+    // See CUDA Runtime API document for more details related to NULL stream and synchronization behaviors
+    config->setProfileStream(cudaStreamPerThread);
     // Typical runtime allocation is much less than the 1 GiB specified below
     config->setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, 1U << 30);
 
@@ -281,6 +308,7 @@ bool BackendTRT<net_t>::build(
             std::cerr << "createInferRuntime error: " << std::endl;
             return false;
         }
+        runtime->setErrorRecorder(&trtErrorRecorder);
         std::unique_ptr<ICudaEngine> engine
             = std::unique_ptr<ICudaEngine>(
                 runtime->deserializeCudaEngine(plan.data(), plan.size()));
@@ -296,7 +324,9 @@ bool BackendTRT<net_t>::build(
             auto dims = engine->getTensorShape(name);
             std::string_view name_str{name};
             size_t size_byte;
-            if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
+            if (name_str == "BatchSize") {
+                size_byte = sizeof(int32_t);
+            } else if (engine->getTensorIOMode(name) == TensorIOMode::kOUTPUT) {
                 size_byte = sizeof(float);
             } else {
                 size_byte = sizeof(net_t);
@@ -307,6 +337,15 @@ bool BackendTRT<net_t>::build(
                 batch_size * size_byte,
                 std::multiplies<size_t>());
             checkCUDA(cudaMalloc(&buffer, bytes));
+            if (name_str == "BatchSize") {
+                auto input_batch
+                    = std::vector<int32_t>(batch_size * this->m_layers[1].channels, 0);
+                checkCUDA(cudaMemcpy(
+                    buffer,
+                    (int32_t*)&input_batch[0],
+                    bytes,
+                    cudaMemcpyHostToDevice));
+            }
             context->mBuffers.emplace(std::make_pair(name, buffer));
             if (engine->getTensorIOMode(name) == TensorIOMode::kINPUT) {
                 context->mContext->setInputTensorAddress(name, buffer);
@@ -315,9 +354,11 @@ bool BackendTRT<net_t>::build(
             }
         }
         context->m_buffers_allocated = true;
+        context->mContext->setOptimizationProfileAsync(i, cudaStreamPerThread);
         mRuntime.emplace_back(std::move(runtime));
         mEngine.emplace_back(std::move(engine));
         this->m_context.emplace_back(std::move(context));
+        trtErrorRecorder.clear();
     }
     return true;
 }
@@ -332,6 +373,25 @@ void BackendTRT<net_t>::constructNetwork(
     ITensor* outputConv = nullptr;
     ILayer* outPolicyLayer = nullptr;
     ILayer* outValueLayer = nullptr;
+    ILayer* shapeLayer = nullptr;
+
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
+        auto batchSizeTensor = initInputs(
+            "BatchSize",
+            network,
+            this->m_layers[1].channels,
+            1,
+            1,
+            batch_size);
+
+        // See. https://github.com/NVIDIA/TensorRT/issues/2282
+        auto inShapeLayer = network->addShape(*batchSizeTensor);
+        auto castLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
+
+        shapeLayer = network->addUnary(
+            *castLayer->getOutput(0),
+            UnaryOperation::kABS);
+    }
 
     for (auto iter = std::begin(this->m_layers);
          iter != std::end(this->m_layers); iter++) {
@@ -483,16 +543,18 @@ void BackendTRT<net_t>::constructNetwork(
             auto gammaLayer = network->addSlice(
                 *fourthMatMulLayer->getOutput(0),
                 {4 ,{0, 0, 0, 0}},
-                {4 ,{batch_size, layer.channels, 1, 1}},
+                {4 ,{0, layer.channels, 1, 1}},
                 {4 ,{1, 1, 1, 1}}
             );
+            gammaLayer->setInput(2, *shapeLayer->getOutput(0));
             // gamma, bias = tf.split(fc2, 2, axis=3)
             auto biasLayer = network->addSlice(
                 *fourthMatMulLayer->getOutput(0),
                 {4 ,{0, layer.channels, 0, 0}},
-                {4 ,{batch_size, layer.channels, 1, 1}},
+                {4 ,{0, layer.channels, 1, 1}},
                 {4 ,{1, 1, 1, 1}}
             );
+            biasLayer->setInput(2, *shapeLayer->getOutput(0));
             // sig = tf.nn.sigmoid(gamma)
             auto sigLayer = buildActivationLayer(
                 gammaLayer->getOutput(0),
@@ -559,8 +621,9 @@ void BackendTRT<net_t>::constructNetwork(
                     * actValueLayer->getOutput(0)->getDimensions().d[2]
                     * actValueLayer->getOutput(0)->getDimensions().d[3]); 
                 auto inputReshape = network->addShuffle(*actValueLayer->getOutput(0));
-                inputReshape->setReshapeDimensions(Dims{2, {
-                    static_cast<int32_t>(batch_size), mmInputs}});
+                int32_t const variable_batch = static_cast<int32_t>(
+                    actValueLayer->getOutput(0)->getDimensions().d[0]);
+                inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
                 auto filter1Const =
                     network->addConstant(
                         Dims{2, {NUM_INTERSECTIONS, layer.channels}},
@@ -647,8 +710,9 @@ void BackendTRT<net_t>::constructNetwork(
                     * actPolicyLayer->getOutput(0)->getDimensions().d[2]
                     * actPolicyLayer->getOutput(0)->getDimensions().d[3]);
                 auto inputReshape = network->addShuffle(*actPolicyLayer->getOutput(0));
-                inputReshape->setReshapeDimensions(Dims{2, {
-                    static_cast<int32_t>(batch_size), mmInputs}});
+                int32_t const variable_batch = static_cast<int32_t>(
+                    actPolicyLayer->getOutput(0)->getDimensions().d[0]);
+                inputReshape->setReshapeDimensions(Dims{2, {variable_batch, mmInputs}});
                 // logits = tf.layers.dense(policy_conv, units=go.N * go.N + 1)
                 auto filterConst =
                     network->addConstant(
@@ -708,12 +772,12 @@ ITensor* BackendTRT<net_t>::initInputs(
         inputFeature = network->addInput(
             inputName,
             DataType::kFLOAT,
-            {4, {batch_size, channels, rows, cols}});
+            {4, {-1, channels, rows, cols}});
     } else {
         inputFeature = network->addInput(
             inputName,
             DataType::kHALF,
-            {4, {batch_size, channels, rows, cols}});
+            {4, {-1, channels, rows, cols}});
     }
     assert(inputFeature != nullptr);
     inputFeature->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
@@ -1063,6 +1127,24 @@ void BackendTRT<net_t>::forward_activations(
             cudaStreamPerThread)
         );
     }
+    cudnn_context.mContext->setInputShape(
+        "InputFeature",
+        Dims4(
+            batch_size,
+            this->m_layers[0].channels,
+            BOARD_SIZE,
+            BOARD_SIZE)
+    );
+    if (this->m_net_type == NetworkType::MINIGO_SE) {
+        cudnn_context.mContext->setInputShape(
+            "BatchSize",
+            Dims4(
+                batch_size,
+                this->m_layers[1].channels,
+                1,
+                1)
+        );
+    }
     ASSERT(cudnn_context.mContext->enqueueV3(cudaStreamPerThread));
     search = cudnn_context.mBuffers.find("OutputPolicy");
     assert(search != cudnn_context.mBuffers.end());
@@ -1084,6 +1166,7 @@ void BackendTRT<net_t>::forward_activations(
     );
     // Asynchronously enqueue the inference work
     cudaStreamSynchronize(cudaStreamPerThread);
+    trtErrorRecorder.clear();
 }
 
 template class BackendTRT<float>;

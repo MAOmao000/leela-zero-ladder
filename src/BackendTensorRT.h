@@ -73,6 +73,59 @@ inline std::string readFileBinary(
     return str;
 }
 
+// Error Recorder for TensorRT
+class TRTErrorRecorder : public nvinfer1::IErrorRecorder {
+    mutable std::mutex mutex;
+    std::vector<std::pair<nvinfer1::ErrorCode,std::string>> errors;
+    std::atomic<int32_t> refCount;
+
+public:
+    TRTErrorRecorder()
+        :mutex(),
+         errors(),
+         refCount(0)
+    {}
+    void clear() noexcept override {
+        std::lock_guard<std::mutex> lock(mutex);
+        errors.clear();
+    }
+    int32_t getNbErrors() const noexcept override {
+        std::lock_guard<std::mutex> lock(mutex);
+        return (int32_t)errors.size();
+    }
+    nvinfer1::ErrorCode getErrorCode(int32_t errorIdx) const noexcept override {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (errorIdx < 0 || static_cast<size_t>(errorIdx) >= errors.size())
+            return nvinfer1::ErrorCode::kINVALID_ARGUMENT;
+        return errors[errorIdx].first;
+    }
+    IErrorRecorder::ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept override {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (errorIdx < 0 || static_cast<size_t>(errorIdx) >= errors.size())
+            return "";
+        return errors[errorIdx].second.c_str();
+    }
+    bool hasOverflowed() const noexcept override {
+        return false;
+    }
+    bool empty() const noexcept {
+        std::lock_guard<std::mutex> lock(mutex);
+        return errors.size() <= 0;
+    }
+    bool reportError(nvinfer1::ErrorCode val, nvinfer1::IErrorRecorder::ErrorDesc desc) noexcept override {
+        std::lock_guard<std::mutex> lock(mutex);
+        errors.push_back(std::make_pair(val, std::string(desc)));
+        std::cerr << "TensorRT error : " << std::string(desc) << std::endl;
+        return false;
+    }
+    nvinfer1::IErrorRecorder::RefCount incRefCount() noexcept override {
+        return ++refCount;
+    }
+    nvinfer1::IErrorRecorder::RefCount decRefCount() noexcept override {
+        return --refCount;
+    }
+};
+
 template <typename T>
 using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
 
@@ -215,5 +268,6 @@ private:
 
     std::vector<std::unique_ptr<nvinfer1::IRuntime>> mRuntime;
     std::vector<std::unique_ptr<nvinfer1::ICudaEngine>> mEngine;
+    TRTErrorRecorder trtErrorRecorder;
 };
 #endif
