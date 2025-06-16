@@ -593,7 +593,8 @@ void BackendTRT<net_t>::constructNetwork(
                 auto ip1_val_bias = begin(layer.weights)   + 3;
                 auto ip2_val_weight = begin(layer.weights) + 4;
                 auto ip2_val_bias = begin(layer.weights)   + 5;
-                //outValueLayer = buildConvLayer(
+                // value_conv = tf.layers.conv2d(shared_output, filters=1, kernel_size=1, padding='same', use_bias=False)
+                // value_conv = tf.layers.batch_normalization(value_conv, axis=1, momentum=.95, epsilon=1e-5, center=False, scale=False, fused=True, training=False)
                 auto valueConvLayer = buildConvLayer(
                     outputConv,
                     layer.filter_size,
@@ -949,10 +950,7 @@ void BackendTRT<net_t>::push_input_convolution(
     const unsigned int channels,
     const unsigned int outputs,
     const std::vector<float>& weights,
-    const std::vector<float>& biases,
-    const float scale) {  // Dummy arguments for inheritance usage
-
-    (void)scale;
+    const std::vector<float>& biases) {
 
     size_t layer = get_layer_count();
 
@@ -974,14 +972,7 @@ void BackendTRT<net_t>::push_residual(
     const std::vector<float>& weights_1,
     const std::vector<float>& biases_1,
     const std::vector<float>& weights_2,
-    const std::vector<float>& biases_2,
-    const float scale_1,   // Dummy arguments for inheritance usage
-    const float scale_2,   // Dummy arguments for inheritance usage
-    const float scale_3) { // Dummy arguments for inheritance usage
-
-    (void)scale_1;
-    (void)scale_2;
-    (void)scale_3;
+    const std::vector<float>& biases_2) {
 
     size_t layer = get_layer_count();
 
@@ -1009,14 +1000,7 @@ void BackendTRT<net_t>::push_residual_se(
     const std::vector<float>& se_fc1_w,
     const std::vector<float>& se_fc1_b,
     const std::vector<float>& se_fc2_w,
-    const std::vector<float>& se_fc2_b,
-    const float scale_1,   // Dummy arguments for inheritance usage
-    const float scale_2,   // Dummy arguments for inheritance usage
-    const float scale_3) { // Dummy arguments for inheritance usage
-
-    (void)scale_1;
-    (void)scale_2;
-    (void)scale_3;
+    const std::vector<float>& se_fc2_b) {
 
     size_t layer = get_layer_count();
 

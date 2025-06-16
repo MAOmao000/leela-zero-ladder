@@ -39,8 +39,7 @@ public:
         const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& biases,
-        const float scale
+        const std::vector<float>& biases
     ) override;
 
     void push_residual(
@@ -50,10 +49,7 @@ public:
         const std::vector<float>& weights_1,
         const std::vector<float>& biases_1,
         const std::vector<float>& weights_2,
-        const std::vector<float>& biases_2,
-        const float scale_1,
-        const float scale_2,
-        const float scale_3
+        const std::vector<float>& biases_2
     ) override;
 
     void push_residual_se(
@@ -67,10 +63,7 @@ public:
         const std::vector<float>& se_fc1_w,
         const std::vector<float>& se_fc1_b,
         const std::vector<float>& se_fc2_w,
-        const std::vector<float>& se_fc2_b,
-        const float scale_1,
-        const float scale_2,
-        const float scale_3
+        const std::vector<float>& se_fc2_b
     ) override;
 
     void push_convolve(
@@ -104,7 +97,7 @@ private:
         const void *biases,
         void *workspace,
         const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha,
+        const float alpha = 1.0f,
         const float alpha2 = 1.0f
     );
 
@@ -117,7 +110,7 @@ private:
         const void *biases,
         void *workspace,
         const std::shared_ptr<conv_descriptor>& conv_desc,
-        const float alpha,
+        const float alpha = 1.0f,
         const float alpha2 = 1.0f
     );
 

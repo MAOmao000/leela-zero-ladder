@@ -226,14 +226,12 @@ void GPUScheduler<net_t>::push_input_convolution(
 {
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     for (const auto& backend : m_backend) {
-        float scale = 1.0f;
         backend->push_input_convolution(
             filter_size,
             channels,
             outputs,
             weights->m_conv_weights[weight_index],
-            weights->m_batchnorm_means[weight_index],
-            scale
+            weights->m_batchnorm_means[weight_index]
         );
     }
 #else
@@ -255,11 +253,6 @@ void GPUScheduler<net_t>::push_residual(
 {
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     for (const auto& backend : m_backend) {
-        /* Convolution alpha */
-        float scale_1 = 1.0f;
-        float scale_2 = 1.0f;
-        /* Residual add alpha */
-        float scale_3 = 1.0f;
         backend->push_residual(
             filter_size,
             channels,
@@ -267,10 +260,7 @@ void GPUScheduler<net_t>::push_residual(
             weights->m_conv_weights[weight_index],
             weights->m_batchnorm_means[weight_index],
             weights->m_conv_weights[weight_index + 1],
-            weights->m_batchnorm_means[weight_index + 1],
-            scale_1,
-            scale_2,
-            scale_3
+            weights->m_batchnorm_means[weight_index + 1]
         );
     }
 #else
@@ -292,11 +282,6 @@ void GPUScheduler<net_t>::push_residual_se(
 {
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     for (const auto& backend : m_backend) {
-        /* Convolution alpha */
-        float scale_1 = 1.0f;
-        float scale_2 = 1.0f;
-        /* Residual add alpha */
-        float scale_3 = 1.0f;
         backend->push_residual_se(
             filter_size,
             channels,
@@ -308,10 +293,7 @@ void GPUScheduler<net_t>::push_residual_se(
             weights->m_se_weights[weight_index - 1],
             weights->m_se_biases[weight_index - 1],
             weights->m_se_weights[weight_index],
-            weights->m_se_biases[weight_index],
-            scale_1,
-            scale_2,
-            scale_3
+            weights->m_se_biases[weight_index]
         );
     }
 #else
@@ -537,6 +519,9 @@ void GPUScheduler<net_t>::batch_worker(
                 }
             }
         }
+        if (!m_running) {
+            return inputs;
+        }
         // Move 'count' evals from shared queue to local list.
         auto end = begin(m_forward_queue);
         std::advance(end, count);
@@ -570,7 +555,11 @@ void GPUScheduler<net_t>::batch_worker(
     auto batch_output_val = std::vector<float>(m_out_val_size * cfg_batch_size);
     while (true) {
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
+#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT && !cfg_batch_wait_time) {
+#else
         if (cfg_backend == backend_t::TENSORRT) {
+#endif
             inputs = trt_pickup_task();
         } else {
             inputs = pickup_task();

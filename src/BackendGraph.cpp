@@ -461,7 +461,8 @@ void BackendGraph<net_t>::push_weights_col_major(
     auto transposed_weights = std::vector<net_t>(weights.size());
     for (int i = 0; i < column; i++) {
         for (int j = 0; j < row; j++) {
-            transposed_weights[i * row + j] = (net_t)weights[i + j * column];
+            transposed_weights[i * row + j]
+                = static_cast<net_t>(weights[i + j * column]);
         }
     }
     void *device_mem;
@@ -482,8 +483,7 @@ void BackendGraph<net_t>::push_input_convolution(
     const unsigned int channels,
     const unsigned int outputs,
     const std::vector<float>& weights,
-    const std::vector<float>& biases,
-    const float scale) {
+    const std::vector<float>& biases) {
 
     size_t layer = get_layer_count();
 
@@ -505,10 +505,6 @@ void BackendGraph<net_t>::push_input_convolution(
     this->m_layers[layer].filter_size = filter_size;
     this->m_layers[layer].channels = channels;
 
-    this->m_layers[layer].scale_1 = 1.0f / scale;
-    this->m_layers[layer].scale_2 = 1.0f / scale;
-    this->m_layers[layer].scale_3 = 1.0f;
-
     for (auto i = 0; i < this->m_num_worker_threads; i++) {
         auto conv_desc = convolve_init(
             this->m_handle[i],
@@ -528,10 +524,7 @@ void BackendGraph<net_t>::push_residual(
     const std::vector<float>& weights_1,
     const std::vector<float>& biases_1,
     const std::vector<float>& weights_2,
-    const std::vector<float>& biases_2,
-    const float scale_1,
-    const float scale_2,
-    const float scale_3) {
+    const std::vector<float>& biases_2) {
 
     size_t layer = get_layer_count();
 
@@ -562,10 +555,6 @@ void BackendGraph<net_t>::push_residual(
     this->m_layers[layer].outputs = outputs;
     this->m_layers[layer].filter_size = filter_size;
     this->m_layers[layer].channels = channels;
-
-    this->m_layers[layer].scale_1 = 1.0f / scale_1;
-    this->m_layers[layer].scale_2 = 1.0f / scale_2;
-    this->m_layers[layer].scale_3 = 1.0f / scale_3;
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
@@ -605,10 +594,7 @@ void BackendGraph<net_t>::push_residual_se(
     const std::vector<float>& se_fc1_w,
     const std::vector<float>& se_fc1_b,
     const std::vector<float>& se_fc2_w,
-    const std::vector<float>& se_fc2_b,
-    const float scale_1,
-    const float scale_2,
-    const float scale_3) {
+    const std::vector<float>& se_fc2_b) {
 
     size_t layer = get_layer_count();
 
@@ -648,10 +634,6 @@ void BackendGraph<net_t>::push_residual_se(
     this->m_layers[layer].outputs = outputs;
     this->m_layers[layer].filter_size = filter_size;
     this->m_layers[layer].channels = channels;
-
-    this->m_layers[layer].scale_1 = 1.0f / scale_1;
-    this->m_layers[layer].scale_2 = 1.0f / scale_2;
-    this->m_layers[layer].scale_3 = 1.0f / scale_3;
 
     if (layer == 1) {
         for (auto i = 0; i < this->m_num_worker_threads; i++) {
@@ -1041,45 +1023,24 @@ void BackendGraph<net_t>::forward_activations(
                     workspace)
             );
             std::swap(TempBuffer, IdentityOutBuffer);
-            if (typeid(net_t) == typeid(float)) {
-                BE::squeeze_excitation_float(
-                    this->m_cublas_handles[tid],
-                    cudaStreamPerThread,
-                    cudnn_context,
-                    OutBuffer,         // *bufferIn1: first input
-                    IdentityOutBuffer, // *bufferIn2: second output
-                    TempBuffer,
-                    fc1_weights[0],
-                    fc1_biases[0],
-                    fc2_weights[0],
-                    fc2_biases[0],
-                    InBuffer,          // *bufferOut
-                    PoolBuffer,
-                    batch_size,
-                    layer.outputs,
-                    NUM_INTERSECTIONS,
-                    cfg_NCHW,
-                    has_tensor_cores());
-            } else {
-                BE::squeeze_excitation_half(
-                    this->m_cublas_handles[tid],
-                    cudaStreamPerThread,
-                    cudnn_context,
-                    OutBuffer,         // *bufferIn1: first input
-                    IdentityOutBuffer, // *bufferIn2: second output
-                    TempBuffer,
-                    fc1_weights[0],
-                    fc1_biases[0],
-                    fc2_weights[0],
-                    fc2_biases[0],
-                    InBuffer,          // *bufferOut
-                    PoolBuffer,
-                    batch_size,
-                    layer.outputs,
-                    NUM_INTERSECTIONS,
-                    cfg_NCHW,
-                    has_tensor_cores());
-            }
+            BE::squeeze_excitation<net_t>(
+                this->m_cublas_handles[tid],
+                cudaStreamPerThread,
+                cudnn_context,
+                OutBuffer,         // *bufferIn1: first input
+                IdentityOutBuffer, // *bufferIn2: second output
+                TempBuffer,
+                fc1_weights[0],
+                fc1_biases[0],
+                fc2_weights[0],
+                fc2_biases[0],
+                InBuffer,          // *bufferOut
+                PoolBuffer,
+                batch_size,
+                layer.outputs,
+                NUM_INTERSECTIONS,
+                cfg_NCHW,
+                has_tensor_cores());
             std::swap(InBuffer, OutBuffer);
             // output: OutBuffer
         } else {

@@ -275,9 +275,6 @@ public:
 #ifndef _WIN32
     std::vector<std::shared_ptr<conv_descriptor>> bias_desc;
 #endif
-    float scale_1{1.0f};
-    float scale_2{1.0f};
-    float scale_3{1.0f};
 #if defined(USE_TENSOR_RT)
     // Only TENSORRT backend are used.
     std::vector<int64_t> weights_size;
@@ -336,6 +333,67 @@ std::vector<net_t> NCHW_to_NHWC(const std::vector<float> &x,
         }
     }
     return x_out;
+}
+
+template <typename net_t>
+void squeeze_excitation(
+    cublasHandle_t cublas_handle,
+    cudaStream_t stream,
+    const BackendContext& cudnn_context,
+    const void *bufferIn1,   // residual input(before convolve)
+    const void *bufferIn2,   // residual output
+    void *TempBuffer,
+    const void *fc1_weights,
+    const void *fc1_biases,
+    const void *fc2_weights,
+    const void *fc2_biases,
+    void *bufferOut,
+    void *bufferPool,
+    const size_t batch_size,
+    const int channels,
+    const int spatial,
+    const bool isNCHW,
+    const bool isTensorCore) {
+
+    if (typeid(net_t) == typeid(float)) {
+        squeeze_excitation_float(
+            cublas_handle,
+            stream,
+            cudnn_context,
+            bufferIn1,   // residual input(before convolve)
+            bufferIn2,   // residual output
+            TempBuffer,
+            fc1_weights,
+            fc1_biases,
+            fc2_weights,
+            fc2_biases,
+            bufferOut,
+            bufferPool,
+            batch_size,
+            channels,
+            spatial,
+            isNCHW,
+            isTensorCore);
+    } else {
+        squeeze_excitation_half(
+            cublas_handle,
+            stream,
+            cudnn_context,
+            bufferIn1,   // residual input(before convolve)
+            bufferIn2,   // residual output
+            TempBuffer,
+            fc1_weights,
+            fc1_biases,
+            fc2_weights,
+            fc2_biases,
+            bufferOut,
+            bufferPool,
+            batch_size,
+            channels,
+            spatial,
+            isNCHW,
+            isTensorCore);
+    }
 }
 
 void squeeze_excitation_float(
@@ -413,8 +471,7 @@ public:
         const unsigned int channels,
         const unsigned int outputs,
         const std::vector<float>& weights,
-        const std::vector<float>& biases,
-        const float scale
+        const std::vector<float>& biases
     ) = 0;
 
     virtual void push_residual(
@@ -424,10 +481,7 @@ public:
         const std::vector<float>& weights_1,
         const std::vector<float>& biases_1,
         const std::vector<float>& weights_2,
-        const std::vector<float>& biases_2,
-        const float scale_1,
-        const float scale_2,
-        const float scale_3
+        const std::vector<float>& biases_2
     ) = 0;
 
     virtual void push_residual_se(
@@ -441,10 +495,7 @@ public:
         const std::vector<float>& se_fc1_w,
         const std::vector<float>& se_fc1_b,
         const std::vector<float>& se_fc2_w,
-        const std::vector<float>& se_fc2_b,
-        const float scale_1,
-        const float scale_2,
-        const float scale_3
+        const std::vector<float>& se_fc2_b
     ) = 0;
 
     virtual void push_convolve(
