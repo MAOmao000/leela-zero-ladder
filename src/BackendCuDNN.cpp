@@ -770,7 +770,7 @@ void BackendCuDNN<net_t>::forward_activations(
                 conv2_biases[0],
                 workspace,
                 this->m_layers[1].conv_desc[tid]);
-            BE::squeeze_excitation<net_t>(
+            squeeze_excitation<net_t>(
                 this->m_cublas_handles[tid],
                 cudaStreamPerThread,
                 cudnn_context,

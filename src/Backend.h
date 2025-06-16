@@ -335,67 +335,6 @@ std::vector<net_t> NCHW_to_NHWC(const std::vector<float> &x,
     return x_out;
 }
 
-template <typename net_t>
-void squeeze_excitation(
-    cublasHandle_t cublas_handle,
-    cudaStream_t stream,
-    const BackendContext& cudnn_context,
-    const void *bufferIn1,   // residual input(before convolve)
-    const void *bufferIn2,   // residual output
-    void *TempBuffer,
-    const void *fc1_weights,
-    const void *fc1_biases,
-    const void *fc2_weights,
-    const void *fc2_biases,
-    void *bufferOut,
-    void *bufferPool,
-    const size_t batch_size,
-    const int channels,
-    const int spatial,
-    const bool isNCHW,
-    const bool isTensorCore) {
-
-    if (typeid(net_t) == typeid(float)) {
-        squeeze_excitation_float(
-            cublas_handle,
-            stream,
-            cudnn_context,
-            bufferIn1,   // residual input(before convolve)
-            bufferIn2,   // residual output
-            TempBuffer,
-            fc1_weights,
-            fc1_biases,
-            fc2_weights,
-            fc2_biases,
-            bufferOut,
-            bufferPool,
-            batch_size,
-            channels,
-            spatial,
-            isNCHW,
-            isTensorCore);
-    } else {
-        squeeze_excitation_half(
-            cublas_handle,
-            stream,
-            cudnn_context,
-            bufferIn1,   // residual input(before convolve)
-            bufferIn2,   // residual output
-            TempBuffer,
-            fc1_weights,
-            fc1_biases,
-            fc2_weights,
-            fc2_biases,
-            bufferOut,
-            bufferPool,
-            batch_size,
-            channels,
-            spatial,
-            isNCHW,
-            isTensorCore);
-    }
-}
-
 void squeeze_excitation_float(
     cublasHandle_t cublas_handle,
     cudaStream_t stream,
@@ -433,6 +372,67 @@ void squeeze_excitation_half(
     const int spatial,
     const bool isNCHW,
     const bool isTensorCore);
+}
+
+template <typename net_t>
+void squeeze_excitation(
+    cublasHandle_t cublas_handle,
+    cudaStream_t stream,
+    const BackendContext& cudnn_context,
+    const void *bufferIn1,   // residual input(before convolve)
+    const void *bufferIn2,   // residual output
+    void *TempBuffer,
+    const void *fc1_weights,
+    const void *fc1_biases,
+    const void *fc2_weights,
+    const void *fc2_biases,
+    void *bufferOut,
+    void *bufferPool,
+    const size_t batch_size,
+    const int channels,
+    const int spatial,
+    const bool isNCHW,
+    const bool isTensorCore) {
+
+    if (typeid(net_t) == typeid(float)) {
+        BE::squeeze_excitation_float(
+            cublas_handle,
+            stream,
+            cudnn_context,
+            bufferIn1,   // residual input(before convolve)
+            bufferIn2,   // residual output
+            TempBuffer,
+            fc1_weights,
+            fc1_biases,
+            fc2_weights,
+            fc2_biases,
+            bufferOut,
+            bufferPool,
+            batch_size,
+            channels,
+            spatial,
+            isNCHW,
+            isTensorCore);
+    } else {
+        BE::squeeze_excitation_half(
+            cublas_handle,
+            stream,
+            cudnn_context,
+            bufferIn1,   // residual input(before convolve)
+            bufferIn2,   // residual output
+            TempBuffer,
+            fc1_weights,
+            fc1_biases,
+            fc2_weights,
+            fc2_biases,
+            bufferOut,
+            bufferPool,
+            batch_size,
+            channels,
+            spatial,
+            isNCHW,
+            isTensorCore);
+    }
 }
 
 #if defined(USE_TENSOR_RT)

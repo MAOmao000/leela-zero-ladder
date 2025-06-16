@@ -1023,7 +1023,7 @@ void BackendGraph<net_t>::forward_activations(
                     workspace)
             );
             std::swap(TempBuffer, IdentityOutBuffer);
-            BE::squeeze_excitation<net_t>(
+            squeeze_excitation<net_t>(
                 this->m_cublas_handles[tid],
                 cudaStreamPerThread,
                 cudnn_context,
