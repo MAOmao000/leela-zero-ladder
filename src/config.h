@@ -30,6 +30,10 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
+#ifndef NDEBUG
+#include <crtdbg.h>
+#endif
+
 /*
  * We need to check for input while we are thinking.
  * That code isn't portable, so select something appropriate for the system.
@@ -126,7 +130,7 @@ enum class NetworkType {
 
 static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
 static constexpr auto PROGRAM_VERSION_MAJOR = "2";
-static constexpr auto PROGRAM_VERSION_MINOR = "8";
+static constexpr auto PROGRAM_VERSION_MINOR = "9";
 
 /*
  * OpenBLAS limitation: the default configuration on some Linuxes
