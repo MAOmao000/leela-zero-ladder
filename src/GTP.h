@@ -35,6 +35,9 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#ifndef NDEBUG
+#include <boost/stacktrace.hpp>
+#endif
 
 #include "GameState.h"
 #include "Network.h"
