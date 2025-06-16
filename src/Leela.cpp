@@ -77,7 +77,11 @@ static void calculate_thread_count_cpu(
         }
         cfg_num_threads = num_threads;
     } else {
-        cfg_num_threads = std::max(cfg_max_threads - 2, size_t{1});
+        if (cfg_cpu_only) {
+            cfg_num_threads = std::max(cfg_max_threads - 2, size_t{1});
+        } else {
+            cfg_num_threads = std::max(cfg_max_threads, size_t{1});
+        }
     }
 }
 
