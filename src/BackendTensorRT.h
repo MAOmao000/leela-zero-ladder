@@ -214,7 +214,7 @@ private:
     );
 
     // Create full model using the TensorRT network definition API and build the engine.
-    void constructNetwork(
+    bool constructNetwork(
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
         std::string& tune_desc
     );
