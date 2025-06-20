@@ -62,6 +62,7 @@ bool cfg_gtp_mode;
 bool cfg_allow_pondering;
 size_t cfg_num_threads;
 size_t cfg_batch_size;
+size_t cfg_gpu_batch;
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
 int cfg_batch_wait_time;
 #endif
@@ -352,8 +353,9 @@ void GTP::setup_default_parameters() {
     cfg_num_threads = 1;        // -t, --threads
     // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
+    cfg_gpu_batch = 1;          // --gpu_batch
 #if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
-    cfg_batch_wait_time = 6;    // --batchwait
+    cfg_batch_wait_time = 11;   // --batchwait
 #endif
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
@@ -427,7 +429,7 @@ void GTP::setup_default_parameters() {
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root
-    cfg_cut_policy = 0.01f;             // --cut_policy
+    cfg_cut_policy = 0.005f;            // --cut_policy
     cfg_play_style = style_t::STABLE;   // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
