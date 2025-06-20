@@ -521,9 +521,6 @@ static void SHA256_Transform(SHA256_CTX* context, const sha2_word32* data) {
   context->state[5] += f;
   context->state[6] += g;
   context->state[7] += h;
-
-  /* Clean up */
-  a = b = c = d = e = f = g = h = T1 = 0;
 }
 
 #else /* SHA2_UNROLL_TRANSFORM */
@@ -601,9 +598,6 @@ static void SHA256_Transform(SHA256_CTX* context, const sha2_word32* data) {
   context->state[5] += f;
   context->state[6] += g;
   context->state[7] += h;
-
-  /* Clean up */
-  a = b = c = d = e = f = g = h = T1 = T2 = 0;
 }
 
 #endif /* SHA2_UNROLL_TRANSFORM */
@@ -627,7 +621,7 @@ static void SHA256_Update(SHA256_CTX* context, const sha2_byte *data, size_t len
     if (len >= freespace) {
       /* Fill the buffer completely and process it */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, freespace);
-      context->bitcount += freespace << 3;
+      context->bitcount += freespace & ~0xe0000000 << 3;
       len -= freespace;
       data += freespace;
       SHA256_Transform(context, (sha2_word32*)context->buffer);
@@ -635,8 +629,6 @@ static void SHA256_Update(SHA256_CTX* context, const sha2_byte *data, size_t len
       /* The buffer is not yet full */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, len);
       context->bitcount += len << 3;
-      /* Clean up: */
-      usedspace = freespace = 0;
       return;
     }
   }
@@ -652,8 +644,6 @@ static void SHA256_Update(SHA256_CTX* context, const sha2_byte *data, size_t len
     MEMCPY_BCOPY(context->buffer, data, len);
     context->bitcount += len << 3;
   }
-  /* Clean up: */
-  usedspace = freespace = 0;
 }
 
 static void SHA256_Final(sha2_byte digest[], SHA256_CTX* context) {
@@ -734,7 +724,6 @@ static void SHA256_Final(sha2_byte digest[], SHA256_CTX* context) {
 
   /* Clean up state data: */
   MEMSET_BZERO(context, sizeof(SHA256_CTX));
-  usedspace = 0;
 }
 
 static uint8_t *SHA256_End(SHA256_CTX* context, uint8_t buffer[SHA256_DIGEST_LENGTH]) {
@@ -861,9 +850,6 @@ static void SHA512_Transform(SHA512_CTX* context, const sha2_word64* data) {
   context->state[5] += f;
   context->state[6] += g;
   context->state[7] += h;
-
-  /* Clean up */
-  a = b = c = d = e = f = g = h = T1 = 0;
 }
 
 #else /* SHA2_UNROLL_TRANSFORM */
@@ -939,9 +925,6 @@ static void SHA512_Transform(SHA512_CTX* context, const sha2_word64* data) {
   context->state[5] += f;
   context->state[6] += g;
   context->state[7] += h;
-
-  /* Clean up */
-  a = b = c = d = e = f = g = h = T1 = T2 = 0;
 }
 
 #endif /* SHA2_UNROLL_TRANSFORM */
@@ -965,7 +948,7 @@ static void SHA512_Update(SHA512_CTX* context, const sha2_byte *data, size_t len
     if (len >= freespace) {
       /* Fill the buffer completely and process it */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, freespace);
-      ADDINC128(context->bitcount, freespace << 3);
+      ADDINC128(context->bitcount, freespace & ~0xe0000000 << 3);
       len -= freespace;
       data += freespace;
       SHA512_Transform(context, (sha2_word64*)context->buffer);
@@ -973,8 +956,6 @@ static void SHA512_Update(SHA512_CTX* context, const sha2_byte *data, size_t len
       /* The buffer is not yet full */
       MEMCPY_BCOPY(&context->buffer[usedspace], data, len);
       ADDINC128(context->bitcount, len << 3);
-      /* Clean up: */
-      usedspace = freespace = 0;
       return;
     }
   }
@@ -990,8 +971,6 @@ static void SHA512_Update(SHA512_CTX* context, const sha2_byte *data, size_t len
     MEMCPY_BCOPY(context->buffer, data, len);
     ADDINC128(context->bitcount, len << 3);
   }
-  /* Clean up: */
-  usedspace = freespace = 0;
 }
 
 static void SHA512_Last(SHA512_CTX* context) {

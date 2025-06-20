@@ -239,14 +239,14 @@ public:
 
 // Only CUDNN and CUDNNGRAPH backend are used.
 struct conv_descriptor {
-    cudnnTensorDescriptor_t input_descriptor;
-    cudnnTensorDescriptor_t output_descriptor;
-    cudnnTensorDescriptor_t bias_descriptor;
-    cudnnFilterDescriptor_t filter_descriptor;
-    cudnnActivationDescriptor_t activation_descriptor;
-    cudnnActivationDescriptor_t activation_identity_descriptor;
-    cudnnConvolutionDescriptor_t convolution_descriptor;
-    cudnnConvolutionFwdAlgo_t convolution_algorithm;
+    cudnnTensorDescriptor_t input_descriptor{};
+    cudnnTensorDescriptor_t output_descriptor{};
+    cudnnTensorDescriptor_t bias_descriptor{};
+    cudnnFilterDescriptor_t filter_descriptor{};
+    cudnnActivationDescriptor_t activation_descriptor{};
+    cudnnActivationDescriptor_t activation_identity_descriptor{};
+    cudnnConvolutionDescriptor_t convolution_descriptor{};
+    cudnnConvolutionFwdAlgo_t convolution_algorithm{};
     size_t workspace_size{0};
     // Only CUDNNGRAPH backend are used.
     cudnn_frontend::graph::Graph graph;
@@ -546,7 +546,7 @@ protected:
     bool m_fp16_compute{false};
     bool m_tensorcore{false};
     int m_num_worker_threads{1};
-    cudaDeviceProp m_device_prop;
+    cudaDeviceProp m_device_prop{};
     std::vector<cudnnHandle_t> m_handle;
     std::vector<cublasHandle_t> m_cublas_handles;
     std::string m_model_hash{""};

@@ -48,11 +48,11 @@ public:
     using NNPlanes = std::vector<BoardPlane>;
     NNPlanes planes;
     std::vector<float> probabilities;
-    int to_move;
-    float net_winrate;
-    float root_uct_winrate;
-    float child_uct_winrate;
-    int bestmove_visits;
+    int to_move{};
+    float net_winrate{};
+    float root_uct_winrate{};
+    float child_uct_winrate{};
+    int bestmove_visits{};
 };
 
 std::ostream& operator<<(std::ostream& stream, const TimeStep& timestep);

@@ -57,7 +57,7 @@ std::vector<TimeStep> Training::m_data{};
 
 std::ostream& operator<<(std::ostream& stream, const TimeStep& timestep) {
     stream << timestep.planes.size() << ' ';
-    for (const auto plane : timestep.planes) {
+    for (const auto& plane : timestep.planes) {
         stream << plane << ' ';
     }
     stream << timestep.probabilities.size() << ' ';

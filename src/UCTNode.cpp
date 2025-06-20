@@ -367,8 +367,11 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
     }
 
     assert(best != nullptr);
-    best->inflate();
-    return best->get();
+    if (best) {
+        best->inflate();
+        return best->get();
+    }
+    return nullptr;
 }
 
 class NodeComp

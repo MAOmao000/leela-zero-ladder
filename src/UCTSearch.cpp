@@ -313,15 +313,17 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
         }
         if (currnode->has_children() && !result.valid()) {
             auto next = currnode->uct_select_child(color, currnode == m_root.get());
-            auto move = next->get_move();
-            currstate.play_move(move);
-            if (move != FastBoard::PASS && currstate.superko()) {
-                next->invalidate();
-            } else {
-                node_stack.push(currnode);
-                new_stack.push(new_node);
-                currnode = next;
-                continue;
+            if (next) {
+                auto move = next->get_move();
+                currstate.play_move(move);
+                if (move != FastBoard::PASS && currstate.superko()) {
+                    next->invalidate();
+                } else {
+                    node_stack.push(currnode);
+                    new_stack.push(new_node);
+                    currnode = next;
+                    continue;
+                }
             }
         }
         node_stack.push(currnode);
@@ -781,7 +783,7 @@ bool UCTSearch::have_alternate_moves(const int elapsed_centis,
     // which will cause Leela to quickly respond to obvious/forced moves.
     // That comes at the cost of some playing strength as she now cannot
     // think ahead about her next moves in the remaining time.
-    auto tc = m_rootstate.get_timecontrol();
+    const auto& tc = m_rootstate.get_timecontrol();
     if (!tc.can_accumulate_time(my_color)
         || m_maxplayouts < UCTSearch::UNLIMITED_PLAYOUTS) {
         if (cfg_timemanage != TimeManagement::FAST) {

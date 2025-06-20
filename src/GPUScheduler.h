@@ -147,8 +147,8 @@ protected: // Member variables used by OpenCLSheduler
     std::mutex m_mutex;
     std::condition_variable m_cv;
     std::list<std::thread> m_worker_threads;
-    size_t m_out_pol_size;
-    size_t m_out_val_size;
+    size_t m_out_pol_size{};
+    size_t m_out_val_size{};
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 #endif

@@ -273,7 +273,7 @@ private:
         size_t mdimc, ndimc;
         size_t tce;
     };
-    sgemm_tuners m_sgemm_tuners;
+    sgemm_tuners m_sgemm_tuners{0};
     size_t m_wavefront_size{0};
     size_t m_max_workgroup_size{0};
     std::vector<size_t> m_max_workgroup_dims;

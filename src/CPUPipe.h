@@ -66,7 +66,7 @@ private:
                             std::vector<float>& M,
                             std::vector<float>& output);
 
-    int m_input_channels;
+    int m_input_channels{};
 
     // Input + residual block tower
     std::shared_ptr<const ForwardPipeWeights> m_weights;

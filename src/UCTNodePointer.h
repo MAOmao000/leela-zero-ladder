@@ -99,7 +99,7 @@ public:
     static size_t get_tree_size();
 
     ~UCTNodePointer();
-    UCTNodePointer(UCTNodePointer&& n);
+    UCTNodePointer(UCTNodePointer&& n) noexcept;
     UCTNodePointer(std::int16_t vertex, float policy);
     UCTNodePointer(const UCTNodePointer&) = delete;
 
@@ -117,7 +117,7 @@ public:
     UCTNode* get() const {
         return read_ptr(m_data.load());
     }
-    UCTNodePointer& operator=(UCTNodePointer&& n);
+    UCTNodePointer& operator=(UCTNodePointer&& n) noexcept;
     UCTNode* release();
 
     // construct UCTNode instance from the vertex/policy pair

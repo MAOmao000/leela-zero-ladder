@@ -545,14 +545,22 @@ void Backend<net_t>::initialize(
     (void)batch_size;
 
     const char* log_level = "CUDNN_LOGLEVEL_DBG=0";
-    putenv((char *)log_level);
+    if (putenv((char *)log_level)) {
+        std::cerr << "Error in setting environment variable CUDNN_LOGLEVEL_DBG" << std::endl;
+    }
     const char* log_dest = "CUDNN_LOGDEST_DBG=stderr";
-    putenv((char *)log_dest);
+    if (putenv((char *)log_dest)) {
+        std::cerr << "Error in setting environment variable CUDNN_LOGDEST_DBG" << std::endl;
+    }
     const char* module_load = "CUDA_MODULE_LOADING=LAZY";
-    putenv((char *)module_load);
+    if (putenv((char *)module_load)) {
+        std::cerr << "Error in setting environment variable CUDA_MODULE_LOADING" << std::endl;
+    }
     if (cfg_backend == backend_t::CUDNNGRAPH) {
         const char* log_info = "CUDNN_FRONTEND_LOG_INFO=0";
-        putenv((char *)log_info);
+        if (putenv((char *)log_info)) {
+            std::cerr << "Error in setting environment variable CUDNN_FRONTEND_LOG_INFO" << std::endl;
+        }
     }
 
     m_net_type = net_type;

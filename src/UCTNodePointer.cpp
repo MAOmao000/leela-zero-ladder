@@ -61,7 +61,7 @@ UCTNodePointer::~UCTNodePointer() {
     decrement_tree_size(sz);
 }
 
-UCTNodePointer::UCTNodePointer(UCTNodePointer&& n) {
+UCTNodePointer::UCTNodePointer(UCTNodePointer&& n) noexcept {
     auto nv = std::atomic_exchange(&n.m_data, INVALID);
     auto v = std::atomic_exchange(&m_data, nv);
 #ifdef NDEBUG
@@ -82,7 +82,7 @@ UCTNodePointer::UCTNodePointer(const std::int16_t vertex, const float policy) {
     increment_tree_size(sizeof(UCTNodePointer));
 }
 
-UCTNodePointer& UCTNodePointer::operator=(UCTNodePointer&& n) {
+UCTNodePointer& UCTNodePointer::operator=(UCTNodePointer&& n) noexcept {
     auto nv = std::atomic_exchange(&n.m_data, INVALID);
     auto v = std::atomic_exchange(&m_data, nv);
 
@@ -119,6 +119,23 @@ void UCTNodePointer::inflate() const {
         }
     }
 }
+/*
+UCTNodePointer.cpp(111,24): warning :  Potential leak of memory pointed to by 'v2' [clang-analyzer-cplusplus.NewDeleteLeaks]
+  111 |         bool success = m_data.compare_exchange_strong(v, v2);
+      |                        ^
+UCTNodePointer.cpp(103,5): message :  Loop condition is true.  Entering loop body
+  103 |     while (true) {
+      |     ^
+UCTNodePointer.cpp(105,9): message :  Taking false branch
+  105 |         if (is_inflated(v)) return;
+      |         ^
+UCTNodePointer.cpp(108,13): message :  Memory is allocated
+  108 |             new UCTNode(read_vertex(v), read_policy(v)));
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+UCTNodePointer.cpp(111,24): message :  Potential leak of memory pointed to by 'v2'
+  111 |         bool success = m_data.compare_exchange_strong(v, v2);
+      |                        ^
+*/
 
 bool UCTNodePointer::valid() const {
     auto v = m_data.load();
