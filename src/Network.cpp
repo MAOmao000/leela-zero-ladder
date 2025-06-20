@@ -1210,7 +1210,7 @@ bool Network::get_output_internal(const GameState* state,
                                      m_bn_val_w1.data(),
                                      m_bn_val_w2.data());
     }
-    if (cfg_backend == backend_t::TENSORRT) {
+    if (cfg_backend == backend_t::TENSORRT && !cfg_cpu_only) {
         // Get the moves
         for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
             const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
