@@ -566,7 +566,7 @@ int IsLadderChase(
     for (auto opp_i = 0; opp_i < opponent_num; opp_i++) {
         auto ladder_counter = 0;
         auto current_move = str_vtx[opp_i];
-        for (int i = base_state->get_movenum(); i >= 0; i -= 2) {
+        for (auto i = static_cast<int>(base_state->get_movenum()); i >= 0; i -= 2) {
             auto prev_state = base_state->get_game_history()[i];
             auto prev_move = prev_state->get_last_move();
             if (prev_move == str_vtx[opp_i] ||
