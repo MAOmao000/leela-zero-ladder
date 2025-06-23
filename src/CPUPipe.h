@@ -42,7 +42,9 @@ public:
     void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") override;
     bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
-                 std::vector<float>& output_val) override;
+                 std::vector<float>& output_val,
+                 const bool full_batch
+    ) override;
 
     void push_weights(
         const unsigned int filter_size, const unsigned int channels, const unsigned int outputs,

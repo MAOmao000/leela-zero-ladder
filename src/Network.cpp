@@ -111,14 +111,14 @@ float Network::benchmark_time(const int centiseconds) {
     // Isn't enough to guarantee correctness but better than nothing,
     // plus for large nets self-check takes a while (1~3 eval per second)
     Netresult result;
-    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false, true, true);
+    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, true, true);
 
     const Time start;
     for (auto i = size_t{0}; i < cpus; i++) {
         tg.add_task([this, &runcount, &result, start, centiseconds, state]() {
             while (true) {
                 runcount++;
-                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
+                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
                 const Time end;
                 const auto elapsed = Time::timediff_centis(start, end);
                 if (elapsed >= centiseconds) {
@@ -146,7 +146,7 @@ void Network::benchmark(const GameState* state, const int iterations) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
             }
         });
     }
@@ -527,7 +527,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
     // or just read directly as needed.
     auto gzhandle = gzopen(filename.c_str(), "rb");
     if (gzhandle == nullptr) {
-        myprintf("Could not open weights file: %s\n", filename.c_str());
+        myprintf_error("Could not open weights file: %s\n", filename.c_str());
         return {0, 0};
     }
     // Stream the gz file in to a memory buffer stream.
@@ -538,7 +538,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         auto bytesRead = gzread(gzhandle, chunkBuffer.data(), chunkBufferSize);
         if (bytesRead == 0) break;
         if (bytesRead < 0) {
-            myprintf("Failed to decompress or read: %s\n", filename.c_str());
+            myprintf_error("Failed to decompress or read: %s\n", filename.c_str());
             gzclose(gzhandle);
             return {0, 0};
         }
@@ -555,7 +555,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
         // First line is the file format version id
         iss >> format_version;
         if (iss.fail() || (format_version != 1 && format_version != 2)) {
-            myprintf("Weights file is the wrong version.\n");
+            myprintf_error("Weights file is the wrong version.\n");
             return {0, 0};
         } else {
             // Version 2 networks are identical to v1, except
@@ -1074,7 +1074,7 @@ void Network::ladder_update(
 
 bool Network::get_output(
     const GameState* state, const Ensemble ensemble,
-    Network::Netresult& result,
+    Network::Netresult& result, const bool full_batch,
     const int symmetry,
     const bool read_cache, const bool write_cache,
     bool force_selfcheck) {
@@ -1095,7 +1095,7 @@ bool Network::get_output(
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
         sym_tbl = symmetry;
-        ret = get_output_internal(state, symmetry, result);
+        ret = get_output_internal(state, symmetry, result, full_batch);
         if (!ret) {
             return false;
         }
@@ -1104,7 +1104,7 @@ bool Network::get_output(
         sym_tbl = 0;
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
             Netresult tmpresult;
-            ret = get_output_internal(state, sym, tmpresult);
+            ret = get_output_internal(state, sym, tmpresult, full_batch);
             if (!ret) {
                 break;
             }
@@ -1125,7 +1125,7 @@ bool Network::get_output(
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         sym_tbl = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        ret = get_output_internal(state, sym_tbl, result);
+        ret = get_output_internal(state, sym_tbl, result, full_batch);
         if (!ret) {
             return false;
         }
@@ -1138,7 +1138,7 @@ bool Network::get_output(
             && (force_selfcheck
                 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)) {
             Netresult result_ref;
-            ret = get_output_internal(state, sym_tbl, result_ref, true);
+            ret = get_output_internal(state, sym_tbl, result_ref, full_batch, true);
             if (!ret) {
                 return false;
             }
@@ -1170,6 +1170,7 @@ bool Network::get_output(
 bool Network::get_output_internal(const GameState* state,
                                   const int symmetry,
                                   Network::Netresult& result,
+                                  const bool full_batch,
                                   bool selfcheck) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
@@ -1188,12 +1189,12 @@ bool Network::get_output_internal(const GameState* state,
     std::vector<float> value_data(value_data_size);
 #ifdef USE_OPENCL_SELFCHECK
     if (selfcheck) {
-        ret = m_forward_cpu->forward(input_data, policy_data, value_data);
+        ret = m_forward_cpu->forward(input_data, policy_data, value_data, full_batch);
     } else {
-        ret = m_forward->forward(input_data, policy_data, value_data);
+        ret = m_forward->forward(input_data, policy_data, value_data, full_batch);
     }
 #else
-    ret = m_forward->forward(input_data, policy_data, value_data);
+    ret = m_forward->forward(input_data, policy_data, value_data, full_batch);
     (void)selfcheck;
 #endif
     if (!ret) {

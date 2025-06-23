@@ -135,9 +135,7 @@ extern bool cfg_allow_pondering;
 extern size_t cfg_num_threads;
 extern size_t cfg_batch_size;
 extern size_t cfg_gpu_batch;
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
 extern int cfg_batch_wait_time;
-#endif
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;

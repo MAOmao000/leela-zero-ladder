@@ -231,12 +231,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         ("tune-only", "Tune OpenCL only and then exit.")
         ("batchsize", po::value<unsigned int>()->default_value(0),
                       "Max batch size.  Select 0 to let leela-zero pick a reasonable default.")
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
         ("gpu_batch", po::value<std::string>()->default_value("single"),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
         ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
                       "Wait time milliseconds for full batch.")
-#endif
 #ifdef USE_HALF
         ("precision", po::value<std::string>(),
                       "Floating-point precision (single/half/auto).\n"
@@ -402,7 +400,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_gpus = vm["gpu"].as<std::vector<int>>();
     }
 
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
     auto gpu_batch = vm["gpu_batch"].as<std::string>();
     if ("single" == gpu_batch) {
         cfg_gpu_batch = 1;
@@ -416,7 +413,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
     if (vm.count("batchwait")) {
         cfg_batch_wait_time = vm["batchwait"].as<int>();
     }
-#endif
 
     if (vm.count("full-tuner")) {
         cfg_sgemm_exhaustive = true;

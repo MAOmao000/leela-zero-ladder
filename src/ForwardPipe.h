@@ -85,7 +85,8 @@ public:
     };
     virtual bool forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
-                         std::vector<float>& output_val) = 0;
+                         std::vector<float>& output_val,
+                         const bool full_batch) = 0;
     virtual void push_weights(
         const unsigned int filter_size,
         const unsigned int channels,

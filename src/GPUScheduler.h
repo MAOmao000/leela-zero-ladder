@@ -90,7 +90,8 @@ public:
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
-        std::vector<float>& output_val
+        std::vector<float>& output_val,
+        const bool full_batch
     ) override;
     void batch_worker(
         const size_t gnum,
@@ -141,7 +142,7 @@ private:
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
 #endif
 
-protected: // Member variables used by OpenCLSheduler
+protected: // Member variables used by GPUSheduler
     bool m_running = true;
     std::vector<std::unique_ptr<OpenCL_Network<net_t>>> m_networks;
     std::mutex m_mutex;
