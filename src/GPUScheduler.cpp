@@ -565,12 +565,16 @@ void GPUScheduler<net_t>::push_weights(
         weights
     );
     if (cfg_backend != backend_t::TENSORRT) {
-        m_bn_pol_w1 = weights->m_bn_pol_w1;
-        m_bn_pol_w2 = weights->m_bn_pol_w2;
+        if (cfg_backend == backend_t::OPENCL) {
+            m_bn_pol_w1 = weights->m_bn_pol_w1;
+            m_bn_pol_w2 = weights->m_bn_pol_w2;
+        }
         m_ip_pol_w = weights->m_ip_pol_w;
         m_ip_pol_b = weights->m_ip_pol_b;
-        m_bn_val_w1 = weights->m_bn_val_w1;
-        m_bn_val_w2 = weights->m_bn_val_w2;
+        if (cfg_backend == backend_t::OPENCL) {
+            m_bn_val_w1 = weights->m_bn_val_w1;
+            m_bn_val_w2 = weights->m_bn_val_w2;
+        }
         m_ip1_val_w = weights->m_ip1_val_w;
         m_ip1_val_b = weights->m_ip1_val_b;
         m_ip2_val_w = weights->m_ip2_val_w;
@@ -637,18 +641,22 @@ bool GPUScheduler<net_t>::forward(
         return false;
     }
     // Get the moves
-    CPUPipe::batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_POLICY, policy_data,
-                                          m_bn_pol_w1.data(),
-                                          m_bn_pol_w2.data());
+    if (cfg_backend == backend_t::OPENCL) {
+        CPUPipe::batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_POLICY, policy_data,
+                                              m_bn_pol_w1.data(),
+                                              m_bn_pol_w2.data());
+    }
     const auto policy_out =
         CPUPipe::innerproduct_pub<Network::OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>
             (policy_data, m_ip_pol_w, m_ip_pol_b);
     output_pol = Utils::softmax(policy_out, cfg_softmax_temp);
 
     // Now get the value
-    CPUPipe::batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_VALUE, value_data,
-                                          m_bn_val_w1.data(),
-                                          m_bn_val_w2.data());
+    if (cfg_backend == backend_t::OPENCL) {
+        CPUPipe::batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_VALUE, value_data,
+                                              m_bn_val_w1.data(),
+                                              m_bn_val_w2.data());
+    }
     const auto winrate_data =
         CPUPipe::innerproduct_pub<Network::OUTPUTS_VALUE * NUM_INTERSECTIONS, Network::VALUE_LAYER, true>
             (value_data, m_ip1_val_w, m_ip1_val_b);

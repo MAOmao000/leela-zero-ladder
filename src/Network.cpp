@@ -498,11 +498,23 @@ void Network::select_precision(const int channels) {
         backend = "cuDNN";
     }
     if (cfg_precision == precision_t::AUTO) {
-        if (cfg_backend != backend_t::OPENCL) {
+        if (cfg_backend == backend_t::TENSORRT) {
             myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
             m_forward =
                 init_net(channels, std::make_unique<GPUScheduler<float>>());
             myprintf("Using %s single precision.\n", backend.c_str());
+            return;
+        } else if (cfg_backend != backend_t::OPENCL) {
+            std::unique_ptr<ForwardPipe> fp16_net =
+                std::make_unique<GPUScheduler<half_float::half>>();
+            if (fp16_net->needs_autodetect()) {
+                m_forward =
+                    init_net(channels, std::make_unique<GPUScheduler<float>>());
+                myprintf("Using %s single precision.\n", backend.c_str());
+            } else {
+                m_forward = init_net(channels, std::move(fp16_net));
+                myprintf("Using %s half precision.\n", backend.c_str());
+            }
             return;
         }
         auto score_fp16 = float{-1.0};
