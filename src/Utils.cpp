@@ -36,16 +36,6 @@
 #include <mutex>
 
 #include "Utils.h"
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <pwd.h>
-#include <sys/select.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 #include "GTP.h"
 
 Utils::ThreadPool thread_pool;
@@ -233,4 +223,26 @@ std::string Utils::leelaz_file(const std::string& file) {
     boost::filesystem::create_directories(dir);
     dir /= file;
     return dir.string();
+}
+
+std::vector<float> Utils::softmax(const std::vector<float>& input,
+                                  const float temperature) {
+
+    auto output = std::vector<float>{};
+    output.reserve(input.size());
+
+    const auto alpha = *std::max_element(cbegin(input), cend(input));
+    auto denom = 0.0f;
+
+    for (const auto in_val : input) {
+        auto val = std::exp((in_val - alpha) / temperature);
+        denom += val;
+        output.push_back(val);
+    }
+
+    for (auto& out : output) {
+        out /= denom;
+    }
+
+    return output;
 }

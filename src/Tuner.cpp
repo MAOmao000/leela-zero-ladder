@@ -39,8 +39,10 @@
 #include <random>
 #include <sstream>
 #include <string>
-#ifndef USE_BLAS
+#if defined(USE_EIGEN)
+#ifdef NDEBUG
 #define EIGEN_NO_DEBUG // Disable assertions in your code．
+#endif
 #include <Eigen/Dense>
 #endif
 
@@ -50,11 +52,11 @@
 #include "Tuner.h"
 #include "Utils.h"
 
-const auto TUNER_FILE_LOCAL = std::string("leelaz_opencl_tuning");
+const auto TUNER_FILE_LOCAL = std::string("leelaz_ladder_opencl_tuning");
 
 template <typename net_t> std::vector<std::string> Tuner<net_t>::tuned_devices;
 
-#ifndef USE_BLAS
+#if defined(USE_EIGEN)
 // Eigen helpers
 template <typename T> using EigenMatrixMap =
     Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
@@ -75,7 +77,6 @@ float getTunerMaxError<float>() {
     return 1e-4f;
 }
 
-#ifdef USE_HALF
 template <>
 std::string getTunerKernel<half_float::half>() {
     return std::string("XgemmBatchedHalf");
@@ -85,7 +86,6 @@ template <>
 float getTunerMaxError<half_float::half>() {
     return 1e-1f;
 }
-#endif
 
 using namespace Utils;
 
@@ -106,7 +106,7 @@ static void sgemmBatched_ref(const std::vector<net_t>& a,
         auto offset_u = batch * m * k;
         auto offset_v = batch * n * k;
         auto offset_m = batch * m * n;
-#ifdef USE_BLAS
+#if !defined(USE_EIGEN)
         // Calculates C = transpose(tranpose(A) * B) in row major, or
         // C = A * transpose(B) in column major.
         for (auto i = 0; i < m; i++) {
@@ -294,7 +294,7 @@ static float compare_ref(std::vector<net_t>& x, std::vector<net_t>& ref,
                 auto r = ref[batch * n * m + j * n + i];
                 auto y = x[batch * n_ceil * m_ceil + j * n_ceil + i];
 
-                sum += (float)((r - y) * (r - y));
+                sum += static_cast<float>((r - y) * (r - y));
             }
         }
     }
@@ -690,6 +690,7 @@ template <typename net_t>
 std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
                                             const int k, const int batch_size) {
     auto tuner_file = leelaz_file(TUNER_FILE_LOCAL);
+    lockFile(tuner_file);
     auto file = std::ifstream{tuner_file};
 
     auto try_prior_tuning = file.good();
@@ -712,12 +713,14 @@ std::string Tuner<net_t>::load_sgemm_tuners(const int m, const int n,
             auto tuners = sgemm_tuners_from_line(line, m, n, k, batch_size);
             if (tuners.size() != 0) {
                 myprintf("Loaded existing SGEMM tuning.\n");
+                unlockFile();
                 return tuners;
             }
         }
     }
     auto tuners = tune_sgemm(m, n, k, batch_size);
     store_sgemm_tuners(m, n, k, batch_size, tuners);
+    unlockFile();
     return tuners;
 }
 
@@ -730,8 +733,6 @@ void Tuner<half_float::half>::enable_tensorcore() {
 }
 
 template class Tuner<float>;
-#ifdef USE_HALF
 template class Tuner<half_float::half>;
-#endif
 
 #endif

@@ -20,6 +20,7 @@
 #include "config.h"
 
 #if defined(USE_TENSOR_RT)
+
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <cstdio>
@@ -29,7 +30,6 @@
 #include <inttypes.h>
 
 #include "GTP.h"
-#include "Utils.h"
 #include "BackendTensorRT.h"
 
 using namespace Utils;
@@ -44,9 +44,10 @@ bool BackendTRT<net_t>::build(
 
     // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
     std::string tune_desc = strprintf(
-        R"|("salt"(%s%s)"model %s"(%s,%d,%d))|",
+        R"|("salt"(%s_%s_%s)"model %s"(%s,%d,%d))|",
         PROGRAM_VERSION_MAJOR,
         PROGRAM_VERSION_MINOR,
+        PROGRAM_VERSION_PATCH,
         typeid(net_t) == typeid(float) ? "single" : "half",
         "1.0",                    // model version
         Network::INPUT_CHANNELS,  // number of input channels
@@ -150,7 +151,7 @@ bool BackendTRT<net_t>::build(
 
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
@@ -159,6 +160,7 @@ bool BackendTRT<net_t>::build(
                 network->getName(),
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
+                PROGRAM_VERSION_PATCH,
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
@@ -167,11 +169,12 @@ bool BackendTRT<net_t>::build(
                 precision.c_str()
             );
             std::string paramStr = strprintf(
-                "_%d_%s_%s%s_%d_%d_%" PRId64 "x%d_%d_%s",
+                "_%d_%s_%s_%s_%s_%d_%d_%" PRId64 "x%d_%d_%s",
                 getInferLibVersion(),
                 deviceIdent,
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
+                PROGRAM_VERSION_PATCH,
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
@@ -179,6 +182,7 @@ bool BackendTRT<net_t>::build(
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
+            lockFile(planCacheFile);
             try {
                 plan = readFileBinary(planCacheFile);
             } catch (std::exception const& e) {
@@ -209,6 +213,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+                    unlockFile();
                     return false;
                 }
                 plan.insert(
@@ -219,6 +224,7 @@ bool BackendTRT<net_t>::build(
                 if (this->m_model_hash.size() != 64) {
                     tuneMutex.unlock();
                     std::cerr << "Unexpected model hash size" << std::endl;
+                    unlockFile();
                     return false;
                 }
                 plan.insert(
@@ -240,14 +246,18 @@ bool BackendTRT<net_t>::build(
             } else {
                 std::cout << "Using existing plan cache at " + planCacheFile << std::endl;
             }
+            unlockFile();
         } else {
             auto timingCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
+                "%s%strt-%d_gpu-%s_tune-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_fp%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
                 tuneIdent,
+                PROGRAM_VERSION_MAJOR,
+                PROGRAM_VERSION_MINOR,
+                PROGRAM_VERSION_PATCH,
                 BOARD_SIZE,
                 BOARD_SIZE,
                 batch_size,
@@ -255,6 +265,7 @@ bool BackendTRT<net_t>::build(
                 usingFP16 ? 16 : 32,
                 precision.c_str()
             );
+            lockFile(timingCacheFile);
             std::string timingCacheBlob;
             try {
                 timingCacheBlob = readFileBinary(timingCacheFile);
@@ -281,6 +292,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+                    unlockFile();
                     return false;
                 }
                 auto serializedTimingCache = std::unique_ptr<IHostMemory>(
@@ -295,6 +307,7 @@ bool BackendTRT<net_t>::build(
                 if (!planBuffer) {
                     tuneMutex.unlock();
                     std::cerr << "TensorRT backend: failed to create plan" << std::endl;
+                    unlockFile();
                     return false;
                 }
             }
@@ -302,6 +315,7 @@ bool BackendTRT<net_t>::build(
                 plan.end(),
                 static_cast<char*>(planBuffer->data()),
                 static_cast<char*>(planBuffer->data()) + planBuffer->size());
+            unlockFile();
         }
         tuneMutex.unlock();
     }

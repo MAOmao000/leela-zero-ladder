@@ -36,6 +36,76 @@
 #include <limits>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#define lockFile(file)                                       \
+    HANDLE hFile = CreateFile(                               \
+        file.c_str(),                                        \
+        GENERIC_READ | GENERIC_WRITE,                        \
+        FILE_SHARE_READ | FILE_SHARE_WRITE,                  \
+        NULL,                                                \
+        OPEN_ALWAYS,                                         \
+        FILE_ATTRIBUTE_NORMAL,                               \
+        NULL);                                               \
+    if (hFile == INVALID_HANDLE_VALUE) {                     \
+        myprintf_error("Could not lock file:%s.\n",          \
+            file.c_str());                                   \
+        exit(EXIT_FAILURE);                                  \
+    }                                                        \
+    OVERLAPPED overlapped = {0};                             \
+    auto locked = LockFileEx(                                \
+        hFile,                                               \
+        LOCKFILE_EXCLUSIVE_LOCK,                             \
+        0,                                                   \
+        0,                                                   \
+        0,                                                   \
+        &overlapped);                                        \
+    if (!locked) {                                           \
+        CloseHandle(hFile);                                  \
+        myprintf_error("Could not lock file:%s.\n",          \
+            file.c_str());                                   \
+        exit(EXIT_FAILURE);                                  \
+    }
+#define unlockFile()                                         \
+    if (!UnlockFileEx(hFile, 0, 0, 0, &overlapped)) {        \
+        myprintf_error("Could not unlock file.\n");          \
+    }                                                        \
+    CloseHandle(hFile);
+#else
+#include <pwd.h>
+#include <sys/select.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
+#define lockFile(file)                                       \
+    int fd = open(file.c_str(), O_RDWR | O_CREAT, 0664);     \
+    if (fd == -1) {                                          \
+        myprintf_error("Could not lock file:%s.\n",          \
+            file.c_str());                                   \
+        exit(EXIT_FAILURE);                                  \
+    }                                                        \
+    struct flock fl;                                         \
+    fl.l_type = F_WRLCK;                                     \
+    fl.l_whence = SEEK_SET;                                  \
+    fl.l_start = 0;                                          \
+    fl.l_len = 0;                                            \
+    if (fcntl(fd, F_SETLKW, &fl) == -1) {                    \
+        close(fd);                                           \
+        myprintf_error("Could not lock file:%s.\n",          \
+            file.c_str());                                   \
+        exit(EXIT_FAILURE);                                  \
+    }
+#define unlockFile()                                         \
+    fl.l_type = F_UNLCK;                                     \
+    fl.l_whence = SEEK_SET;                                  \
+    fl.l_start = 0;                                          \
+    fl.l_len = 0;                                            \
+    if (fcntl(fd, F_SETLK, &fl) == -1) {                     \
+        myprintf_error("Could not unlock file.\n");          \
+    }                                                        \
+    close(fd);
+#endif
+
 #include "ThreadPool.h"
 
 extern Utils::ThreadPool thread_pool;
@@ -70,6 +140,9 @@ namespace Utils {
 
     void create_z_table();
     float cached_t_quantile(int v);
+
+    std::vector<float> softmax(const std::vector<float>& input,
+                               const float temperature = 1.0f);
 }
 
 #endif
