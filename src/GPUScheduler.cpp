@@ -137,6 +137,9 @@ void GPUScheduler<net_t>::initialize(
     const NetworkType net_type,
     const std::string &model_hash)
 {
+#if !defined(USE_CUDNN)
+    (void) model_hash;
+#endif
     m_net_type = net_type;
     // Launch the worker threads.  Minimum 1 worker per GPU, but use enough
     // threads so that we can at least concurrently schedule something to the
