@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,31 +42,13 @@
 #include <sstream>
 #include <string>
 
-#ifndef USE_BLAS
-#define EIGEN_NO_DEBUG // Disable assertions in your code．
-#include <Eigen/Dense>
-#endif
-
-#ifdef __APPLE__
-#include <Accelerate/Accelerate.h>
-#endif
-#ifdef USE_MKL
-#include <mkl.h>
-#endif
-#ifdef USE_OPENBLAS
-#include <cblas.h>
-#ifdef USE_DNNL
-#include <dnnl.hpp>
-#endif
-#endif
 #include "CPUPipe.h"
+#if !defined(USE_CPU_ONLY)
+#include "GPUScheduler.h"
+#endif
 #include "Network.h"
 #include "zlib.h"
-#ifdef USE_OPENCL
-#include "OpenCLScheduler.h"
-#include "GPUScheduler.h"
 #include "UCTNode.h"
-#endif
 #include "FastBoard.h"
 #include "FastState.h"
 #include "FullBoard.h"
@@ -76,31 +58,17 @@
 #include "Random.h"
 #include "ThreadPool.h"
 #include "Timing.h"
-#include "Utils.h"
 #include "LadderDetection.h"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
-#ifndef USE_BLAS
-// Eigen helpers
-template <typename T>
-using EigenVectorMap = Eigen::Map<Eigen::Matrix<T, Eigen::Dynamic, 1>>;
-template <typename T>
-using ConstEigenVectorMap =
-    Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>>;
-template <typename T>
-using ConstEigenMatrixMap =
-    Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>>;
-#endif
-
 // Symmetry helper
 static std::array<std::array<int, NUM_INTERSECTIONS>, Network::NUM_SYMMETRIES>
     symmetry_nn_idx_table;
 
+#if !defined(USE_CPU_ONLY)
 float Network::benchmark_time(const int centiseconds) {
-    const auto cpus = cfg_num_threads;
-
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
 
@@ -111,46 +79,50 @@ float Network::benchmark_time(const int centiseconds) {
     // Isn't enough to guarantee correctness but better than nothing,
     // plus for large nets self-check takes a while (1~3 eval per second)
     Netresult result;
-    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, true, true);
+    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, false, false);
 
     const Time start;
-    for (auto i = size_t{0}; i < cpus; i++) {
+    for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, start, centiseconds, state]() {
             while (true) {
                 runcount++;
-                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
+                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
                 const Time end;
                 const auto elapsed = Time::timediff_centis(start, end);
                 if (elapsed >= centiseconds) {
                     break;
                 }
             }
+            drain_evals();
         });
     }
     tg.wait_all();
+    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_centis(start, end);
     return 100.0f * runcount.load() / elapsed;
 }
+#endif
 
 void Network::benchmark(const GameState* state, const int iterations) {
-    const auto cpus = cfg_num_threads;
     const Time start;
 
     ThreadGroup tg(thread_pool);
     std::atomic<int> runcount{0};
     Netresult result;
 
-    for (auto i = size_t{0}; i < cpus; i++) {
+    for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
             while (runcount < iterations) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false);
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
             }
+            drain_evals();
         });
     }
     tg.wait_all();
+    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_seconds(start, end);
@@ -284,7 +256,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     wtfile.clear();
     wtfile.seekg(0, std::ios::beg);
 
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
         auto fileSize = wtfile.tellg();
         std::string str;
@@ -298,6 +270,7 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
         wtfile.seekg(0, std::ios::beg);
     }
 #endif
+
     // Get the file format id out of the way
     std::getline(wtfile, line);
 
@@ -334,14 +307,8 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                 switch (linecount - plain_conv_wts) {
                     case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
                     case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
-                    case 2:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_pol_w1));
-                        m_fwd_weights->m_bn_pol_w1 = std::move(weights);
-                        break;
+                    case 2: m_fwd_weights->m_bn_pol_w1 = std::move(weights); break;
                     case 3:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_pol_w2));
                         process_bn_var(weights);
                         m_fwd_weights->m_bn_pol_w2 = std::move(weights);
                         break;
@@ -353,48 +320,20 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                                      BOARD_SIZE, BOARD_SIZE);
                             return {0, 0};
                         }
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip_pol_w));
                         m_fwd_weights->m_ip_pol_w = std::move(weights);
                         break;
-                    case 5:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip_pol_b));
-                        m_fwd_weights->m_ip_pol_b = std::move(weights);
-                        break;
+                    case 5: m_fwd_weights->m_ip_pol_b = std::move(weights); break;
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
-                    case 8:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_val_w1));
-                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
-                        break;
+                    case 8: m_fwd_weights->m_bn_val_w1 = std::move(weights); break;
                     case 9:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_val_w2));
                         process_bn_var(weights);
                         m_fwd_weights->m_bn_val_w2 = std::move(weights);
                         break;
-                    case 10:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip1_val_w));
-                        m_fwd_weights->m_ip1_val_w = std::move(weights);
-                        break;
-                    case 11:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip1_val_b));
-                        m_fwd_weights->m_ip1_val_b = std::move(weights);
-                        break;
-                    case 12:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip2_val_w));
-                        m_fwd_weights->m_ip2_val_w = std::move(weights);
-                        break;
-                    case 13:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip2_val_b));
-                        m_fwd_weights->m_ip2_val_b = std::move(weights);
-                        break;
+                    case 10: m_fwd_weights->m_ip1_val_w = std::move(weights); break;
+                    case 11: m_fwd_weights->m_ip1_val_b = std::move(weights); break;
+                    case 12: m_fwd_weights->m_ip2_val_w = std::move(weights); break;
+                    case 13: m_fwd_weights->m_ip2_val_b = std::move(weights); break;
                 }
             }
             linecount++;
@@ -450,14 +389,8 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                 switch (linecount - plain_conv_wts) {
                     case 0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
                     case 1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
-                    case 2:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_pol_w1));
-                        m_fwd_weights->m_bn_pol_w1 = std::move(weights);
-                        break;
+                    case 2: m_fwd_weights->m_bn_pol_w1 = std::move(weights); break;
                     case 3:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_pol_w2));
                         process_bn_var(weights);
                         m_fwd_weights->m_bn_pol_w2 = std::move(weights);
                         break;
@@ -469,55 +402,25 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                                      BOARD_SIZE, BOARD_SIZE);
                             return {0, 0};
                         }
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip_pol_w));
                         m_fwd_weights->m_ip_pol_w = std::move(weights);
                         break;
-                    case 5:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip_pol_b));
-                        m_fwd_weights->m_ip_pol_b = std::move(weights);
-                        break;
+                    case 5: m_fwd_weights->m_ip_pol_b = std::move(weights); break;
                     case 6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                     case 7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
-                    case 8:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_val_w1));
-                        m_fwd_weights->m_bn_val_w1 = std::move(weights);
-                        break;
+                    case 8: m_fwd_weights->m_bn_val_w1 = std::move(weights); break;
                     case 9:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_bn_val_w2));
                         process_bn_var(weights);
                         m_fwd_weights->m_bn_val_w2 = std::move(weights);
                         break;
-                    case 10:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip1_val_w));
-                        m_fwd_weights->m_ip1_val_w = std::move(weights);
-                        break;
-                    case 11:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip1_val_b));
-                        m_fwd_weights->m_ip1_val_b = std::move(weights);
-                        break;
-                    case 12:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip2_val_w));
-                        m_fwd_weights->m_ip2_val_w = std::move(weights);
-                        break;
-                    case 13:
-                        std::copy(cbegin(weights), cend(weights),
-                                  begin(m_ip2_val_b));
-                        m_fwd_weights->m_ip2_val_b = std::move(weights);
-                        break;
+                    case 10: m_fwd_weights->m_ip1_val_w = std::move(weights); break;
+                    case 11: m_fwd_weights->m_ip1_val_b = std::move(weights); break;
+                    case 12: m_fwd_weights->m_ip2_val_w = std::move(weights); break;
+                    case 13: m_fwd_weights->m_ip2_val_b = std::move(weights); break;
                 }
             }
             linecount++;
         }
     }
-    process_bn_var(m_bn_pol_w2);
-    process_bn_var(m_bn_val_w2);
 
     return {channels, static_cast<int>(residual_blocks)};
 }
@@ -576,20 +479,15 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
     const int channels, std::unique_ptr<ForwardPipe>&& pipe) {
 
     pipe->initialize(channels, m_net_type, m_model_hash);
-#ifdef USE_CPU_ONLY
-    pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
-#else
     if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
         pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
     } else {
         pipe->push_weights(FILTER_SIZE, INPUT_CHANNELS, channels, m_fwd_weights);
     }
-#endif
     return std::move(pipe);
 }
 
-#ifdef USE_HALF
-#ifndef USE_CPU_ONLY
+#if !defined(USE_CPU_ONLY)
 void Network::select_precision(const int channels) {
     std::string backend("OpenCL");
     if (cfg_backend == backend_t::TENSORRT) {
@@ -600,46 +498,31 @@ void Network::select_precision(const int channels) {
         backend = "cuDNN";
     }
     if (cfg_precision == precision_t::AUTO) {
-        auto score_fp16 = float{-1.0};
-        auto score_fp32 = float{-1.0};
-
-        // Setup fp16 here so that we can see if we can skip autodetect.
-        // However, if fp16 sanity check fails we will return a fp32 and pray it works.
-        myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
-        if (cfg_backend == backend_t::TENSORRT) {
+        if (cfg_backend != backend_t::OPENCL) {
+            myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
             m_forward =
                 init_net(channels, std::make_unique<GPUScheduler<float>>());
             myprintf("Using %s single precision.\n", backend.c_str());
             return;
         }
-        else if (cfg_backend != backend_t::OPENCL) {
-            std::unique_ptr<ForwardPipe> fp16_net =
-                std::make_unique<GPUScheduler<half_float::half>>();
-            if (fp16_net->needs_autodetect()) {
-                m_forward =
-                    init_net(channels, std::make_unique<GPUScheduler<float>>());
-                myprintf("Using %s single precision.\n", backend.c_str());
-            } else {
-                m_forward = init_net(channels, std::move(fp16_net));
-                myprintf("Using %s half precision.\n", backend.c_str());
-            }
-            return;
-        }
-        // backend = OPENCL
-        std::unique_ptr<ForwardPipe> fp16_net =
-            std::make_unique<OpenCLScheduler<half_float::half>>();
+        auto score_fp16 = float{-1.0};
+        auto score_fp32 = float{-1.0};
+        myprintf("Initializing OpenCL (autodetecting precision).\n");
+        // Setup fp16 here so that we can see if we can skip autodetect.
+        // However, if fp16 sanity check fails we will return a fp32 and pray it works.
+        auto fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
         if (!fp16_net->needs_autodetect()) {
             try {
-                myprintf("%s: using fp16/half or tensor core compute support.\n", backend.c_str());
+                myprintf("OpenCL: using fp16/half or tensor core compute support.\n");
                 m_forward = init_net(channels, std::move(fp16_net));
                 benchmark_time(1); // a sanity check run
             } catch (...) {
-                myprintf("%s: fp16/half or tensor core failed "
-                         "despite driver claiming support.\n", backend.c_str());
+                myprintf("OpenCL: fp16/half or tensor core failed "
+                         "despite driver claiming support.\n");
                 myprintf("Falling back to single precision\n");
                 m_forward.reset();
-                    m_forward = init_net(
-                        channels, std::make_unique<OpenCLScheduler<float>>());
+                m_forward = init_net(
+                    channels, std::make_unique<GPUScheduler<float>>());
             }
             return;
         }
@@ -647,7 +530,7 @@ void Network::select_precision(const int channels) {
         try {
             m_forward.reset();
             m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
+                init_net(channels, std::make_unique<GPUScheduler<float>>());
             score_fp32 = benchmark_time(100);
         } catch (...) {
             // empty - if exception thrown just throw away fp32 net
@@ -664,63 +547,36 @@ void Network::select_precision(const int channels) {
             myprintf("Both single precision and half precision failed to run.\n");
             throw std::runtime_error("Failed to initialize net.");
         } else if (score_fp16 < 0.0f) {
-            myprintf("Using %s single precision (half precision failed to run).\n", backend.c_str());
+            myprintf("Using OpenCL single precision (half precision failed to run).\n");
             m_forward.reset();
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        } else if (score_fp32 < 0.0f) {
-            myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
-        } else if (score_fp32 * 1.05f > score_fp16) {
-            myprintf("Using %s single precision (less than 5%% slower than half).\n", backend.c_str());
-            m_forward.reset();
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        } else {
-            myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
-        }
-        return;
-    } else if (cfg_precision == precision_t::SINGLE) {
-        myprintf("Initializing %s (single precision).\n", backend.c_str());
-        if (cfg_backend == backend_t::OPENCL) {
-            m_forward =
-                init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-        } else {
             m_forward =
                 init_net(channels, std::make_unique<GPUScheduler<float>>());
+        } else if (score_fp32 < 0.0f) {
+            myprintf("Using OpenCL half precision (single precision failed to run).\n");
+        } else if (score_fp32 * 1.05f > score_fp16) {
+            myprintf("Using OpenCL single precision (less than 5%% slower than half).\n");
+            m_forward.reset();
+            m_forward =
+                init_net(channels, std::make_unique<GPUScheduler<float>>());
+        } else {
+            myprintf("Using OpenCL half precision (at least 5%% faster than single).\n");
         }
+    } else if (cfg_precision == precision_t::SINGLE) {
+        myprintf("Initializing %s (single precision).\n", backend.c_str());
+        m_forward =
+            init_net(channels, std::make_unique<GPUScheduler<float>>());
     } else if (cfg_precision == precision_t::HALF) {
         myprintf("Initializing %s (half precision).\n", backend.c_str());
-        if (cfg_backend == backend_t::OPENCL) {
-            m_forward = init_net(
-                channels, std::make_unique<OpenCLScheduler<half_float::half>>());
-        } else {
-            m_forward = init_net(
-                channels, std::make_unique<GPUScheduler<half_float::half>>());
-        }
+        m_forward = init_net(
+            channels, std::make_unique<GPUScheduler<half_float::half>>());
     }
 }
 #endif
-#endif
 
 void Network::initialize(const int playouts, const std::string& weightsfile) {
-#ifdef USE_BLAS
-#ifndef __APPLE__
-#ifdef USE_OPENBLAS
-    openblas_set_num_threads(1);
-    myprintf("BLAS Core: %s\n", openblas_get_corename());
-#endif
-#ifdef USE_MKL
-    // mkl_set_threading_layer(MKL_THREADING_SEQUENTIAL);
-    mkl_set_num_threads(1);
-    MKLVersion Version;
-    mkl_get_version(&Version);
-    myprintf("BLAS core: MKL %s\n", Version.Processor);
-#endif
-#endif
-#else
-    myprintf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
-             EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
-#endif
+    if (cfg_backend != backend_t::TENSORRT) {
+        CPUPipe::blas_initialize();
+    }
     m_fwd_weights = std::make_shared<ForwardPipeWeights>();
 
     // Make a guess at a good size as long as the user doesn't
@@ -785,139 +641,60 @@ void Network::initialize(const int playouts, const std::string& weightsfile) {
             }
         }
     }
-    auto means_size = m_bn_val_w1.size();
+    auto means_size = m_fwd_weights->m_bn_val_w1.size();
     auto weights_size = m_fwd_weights->m_conv_val_w.size();
-    for (auto i = size_t{0}; i < m_bn_val_w1.size(); i++) {
-        m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
-        m_fwd_weights->m_conv_val_b[i] = 0.0f;
+    for (auto i = size_t{0}; i < means_size; i++) {
         if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
             for (auto k = size_t{0}; k < weights_size / means_size; k++) {
                 m_fwd_weights->m_conv_val_w[i * weights_size / means_size + k] *=
                     m_fwd_weights->m_bn_val_w2[i];
             }
             m_fwd_weights->m_bn_val_w1[i] =
-                m_bn_val_w1[i] * -1.0f * m_fwd_weights->m_bn_val_w2[i];
+                (m_fwd_weights->m_bn_val_w1[i] - m_fwd_weights->m_conv_val_b[i])
+                * -1.0f * m_fwd_weights->m_bn_val_w2[i];
+        } else {
+            m_fwd_weights->m_bn_val_w1[i] -= m_fwd_weights->m_conv_val_b[i];
         }
+        m_fwd_weights->m_conv_val_b[i] = 0.0f;
     }
-    means_size = m_bn_pol_w1.size();
+    means_size = m_fwd_weights->m_bn_pol_w1.size();
     weights_size = m_fwd_weights->m_conv_pol_w.size();
-    for (auto i = size_t{0}; i < m_bn_pol_w1.size(); i++) {
-        m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
-        m_fwd_weights->m_conv_pol_b[i] = 0.0f;
+    for (auto i = size_t{0}; i < means_size; i++) {
         if (cfg_backend != backend_t::OPENCL && !cfg_cpu_only) {
             for (auto k = size_t{0}; k < weights_size / means_size; k++) {
                 m_fwd_weights->m_conv_pol_w[i * weights_size / means_size + k] *=
                     m_fwd_weights->m_bn_pol_w2[i];
             }
             m_fwd_weights->m_bn_pol_w1[i] =
-                m_bn_pol_w1[i] * -1.0f * m_fwd_weights->m_bn_pol_w2[i];
-        }
-    }
-#ifndef USE_CPU_ONLY
-    if (!cfg_cpu_only && cfg_backend == backend_t::TENSORRT) {
-        select_precision(static_cast<int>(channels));
-    } else {
-#endif
-#ifdef USE_OPENCL
-        if (cfg_cpu_only) {
-            myprintf("Initializing CPU-only evaluation.\n");
-            m_forward = init_net(channels, std::make_unique<CPUPipe>());
+                (m_fwd_weights->m_bn_pol_w1[i] - m_fwd_weights->m_conv_pol_b[i])
+                * -1.0f * m_fwd_weights->m_bn_pol_w2[i];
         } else {
-#ifdef USE_OPENCL_SELFCHECK
-            if (cfg_backend == backend_t::OPENCL) {
-                // initialize CPU reference first, so that we can self-check
-                // when doing fp16 vs. fp32 detections
-                m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
-            }
-#endif
-#ifdef USE_HALF
-            // HALF support is enabled, and we are using the GPU.
-            // Select the precision to use at runtime.
-            select_precision(static_cast<int>(channels));
-#else
-            std::string backend("OpenCL");
-            if (cfg_backend == backend_t::TENSORRT) {
-                backend = "TensorRT";
-            } else if (cfg_backend == backend_t::CUDNNGRAPH) {
-                backend = "cuDNN Graph";
-            } else if (cfg_backend == backend_t::CUDNN) {
-                backend = "cuDNN";
-            }
-            myprintf("Initializing %s (single precision).\n", backend);
-            if (cfg_backend == backend_t::OPENCL) {
-                m_forward = init_net(channels, std::make_unique<OpenCLScheduler<float>>());
-            } else {
-                m_forward = init_net(channels, std::make_unique<GPUScheduler<float>>());
-            }
-#endif
+            m_fwd_weights->m_bn_pol_w1[i] -= m_fwd_weights->m_conv_pol_b[i];
         }
-#ifndef USE_CPU_ONLY
+        m_fwd_weights->m_conv_pol_b[i] = 0.0f;
     }
-#endif
-
-#else // !USE_OPENCL
+#if defined(USE_CPU_ONLY)
     myprintf("Initializing CPU-only evaluation.\n");
     m_forward = init_net(channels, std::make_unique<CPUPipe>());
+#else
+    if (cfg_cpu_only) {
+        myprintf("Initializing CPU-only evaluation.\n");
+        m_forward = init_net(channels, std::make_unique<CPUPipe>());
+    } else {
+#if defined(USE_OPENCL_SELFCHECK)
+        if (cfg_backend == backend_t::OPENCL) {
+            // initialize CPU reference first, so that we can self-check
+            // when doing fp16 vs. fp32 detections
+            m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
+        }
+#endif
+        select_precision(static_cast<int>(channels));
+    }
 #endif
 
     // Need to estimate size before clearing up the pipe.
     get_estimated_size();
     m_fwd_weights.reset();
-}
-
-template <unsigned int inputs, unsigned int outputs, bool ReLU, size_t W>
-std::vector<float> innerproduct(const std::vector<float>& input,
-                                const std::array<float, W>& weights,
-                                const std::array<float, outputs>& biases) {
-
-    std::vector<float> output(outputs);
-
-#ifdef USE_BLAS
-#ifdef USE_DNNL
-    dnnl_sgemm('N', 'N',
-        //  M  , N,   K
-        outputs, 1, inputs,
-#else
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-        //  M  , N,   K
-        outputs, 1, inputs,
-#endif
-        1.0f, &weights[0], inputs,
-        &input[0], 1,
-        0.0f, &output[0], 1);
-#else
-    EigenVectorMap<float> y(output.data(), outputs);
-    y.noalias() =
-        ConstEigenMatrixMap<float>(weights.data(), inputs, outputs).transpose()
-        * ConstEigenVectorMap<float>(input.data(), inputs);
-#endif
-    for (unsigned int o = 0; o < outputs; o++) {
-        auto val = biases[o] + output[o];
-        if (ReLU) {
-            val = std::max(0.0f, val);
-        }
-        output[o] = val;
-    }
-
-    return output;
-}
-
-template <size_t spatial_size>
-void batchnorm(const size_t channels,
-               std::vector<float>& data,
-               const float* const means,
-               const float* const stddivs) {
-
-    for (auto c = size_t{0}; c < channels; ++c) {
-        const auto mean = means[c];
-        const auto scale_stddiv = stddivs[c];
-        const auto arr = &data[c * spatial_size];
-
-        // Classical BN
-        for (auto b = size_t{0}; b < spatial_size; b++) {
-            arr[b] = std::max(0.0f, scale_stddiv * (arr[b] - mean));
-        }
-    }
 }
 
 #ifdef USE_OPENCL_SELFCHECK
@@ -946,28 +723,6 @@ void Network::compare_net_outputs(const Netresult& data, const Netresult& ref) {
     }
 }
 #endif
-
-std::vector<float> softmax(const std::vector<float>& input,
-                           const float temperature = 1.0f) {
-
-    auto output = std::vector<float>{};
-    output.reserve(input.size());
-
-    const auto alpha = *std::max_element(cbegin(input), cend(input));
-    auto denom = 0.0f;
-
-    for (const auto in_val : input) {
-        auto val = std::exp((in_val - alpha) / temperature);
-        denom += val;
-        output.push_back(val);
-    }
-
-    for (auto& out : output) {
-        out /= denom;
-    }
-
-    return output;
-}
 
 bool Network::probe_cache(const GameState* const state,
                           Network::Netresult& result) {
@@ -1175,74 +930,35 @@ bool Network::get_output_internal(const GameState* state,
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
     const auto input_data = gather_features(state, symmetry);
-    size_t policy_data_size;
-    size_t value_data_size;
-    if (cfg_backend == backend_t::TENSORRT && !cfg_cpu_only) {
-        policy_data_size = POTENTIAL_MOVES;
-        value_data_size = 1;
-    } else {
-        policy_data_size = OUTPUTS_POLICY * NUM_INTERSECTIONS;
-        value_data_size = OUTPUTS_VALUE * NUM_INTERSECTIONS;
-    }
-    bool ret;
-    std::vector<float> policy_data(policy_data_size);
-    std::vector<float> value_data(value_data_size);
+    std::vector<float> policy_data(POTENTIAL_MOVES);
+    std::vector<float> value_data(1);
 #ifdef USE_OPENCL_SELFCHECK
-    if (selfcheck) {
-        ret = m_forward_cpu->forward(input_data, policy_data, value_data, full_batch);
+    if (selfcheck && m_forward_cpu != nullptr) {
+        if (!m_forward_cpu->forward(input_data, policy_data, value_data, full_batch)) {
+            return false;
+        }
     } else {
-        ret = m_forward->forward(input_data, policy_data, value_data, full_batch);
+        if (!m_forward->forward(input_data, policy_data, value_data, full_batch)) {
+            return false;
+        }
     }
 #else
-    ret = m_forward->forward(input_data, policy_data, value_data, full_batch);
-    (void)selfcheck;
-#endif
-    if (!ret) {
+    (void) selfcheck;
+    if (!m_forward->forward(input_data, policy_data, value_data, full_batch)) {
         return false;
     }
-    if (cfg_backend == backend_t::OPENCL || cfg_cpu_only) {
-        // Policy and value header Batch Normalization
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY,
-                                     policy_data,
-                                     m_bn_pol_w1.data(),
-                                     m_bn_pol_w2.data());
-        batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE,
-                                     value_data,
-                                     m_bn_val_w1.data(),
-                                     m_bn_val_w2.data());
+#endif
+
+    // Get the moves
+    for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
+        const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
+        result.policy[sym_idx] = policy_data[idx];
     }
-    if (cfg_backend == backend_t::TENSORRT && !cfg_cpu_only) {
-        // Get the moves
-        for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-            const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-            result.policy[sym_idx] = policy_data[idx];
-        }
-        result.policy_pass = policy_data[NUM_INTERSECTIONS];
-        // Now get the value
-        // Map TanH output range [-1..1] to [0..1] range
-        result.winrate = (1.0f + value_data[0]) / 2.0f;
-    } else {
-        // Get the moves
-        const auto policy_out =
-            innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
-                policy_data, m_ip_pol_w, m_ip_pol_b);
-        const auto outputs = softmax(policy_out, cfg_softmax_temp);
-        for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
-            const auto sym_idx = symmetry_nn_idx_table[symmetry][idx];
-            result.policy[sym_idx] = outputs[idx];
-        }
-        result.policy_pass = outputs[NUM_INTERSECTIONS];
-        // Now get the value
-        const auto winrate_data =
-            innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
-                value_data, m_ip1_val_w, m_ip1_val_b);
-        const auto winrate_out =
-            innerproduct<VALUE_LAYER, 1, false>(
-                winrate_data, m_ip2_val_w, m_ip2_val_b);
-        // Map TanH output range [-1..1] to [0..1] range
-        const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;
-        result.winrate = winrate;
-    }
+    result.policy_pass = policy_data[NUM_INTERSECTIONS];
+    // Now get the value
+    // Map TanH output range [-1..1] to [0..1] range
+    result.winrate = (1.0f + value_data[0]) / 2.0f;
+
     return true;
 }
 
@@ -1402,11 +1118,6 @@ size_t Network::get_estimated_size() {
     result += m_fwd_weights->m_bn_pol_w2.size() * sizeof(float);
     result += m_fwd_weights->m_ip_pol_w.size() * sizeof(float);
     result += m_fwd_weights->m_ip_pol_b.size() * sizeof(float);
-    result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w1
-    result += OUTPUTS_POLICY * sizeof(float);  // m_bn_pol_w2
-    result += OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES
-              * sizeof(float);                 // m_ip_pol_w
-    result += POTENTIAL_MOVES * sizeof(float); // m_ip_pol_b
 
     // Value head
     result += m_fwd_weights->m_conv_val_w.size() * sizeof(float);
@@ -1417,14 +1128,7 @@ size_t Network::get_estimated_size() {
     result += m_fwd_weights->m_ip1_val_b.size() * sizeof(float);
     result += m_fwd_weights->m_ip2_val_w.size() * sizeof(float);
     result += m_fwd_weights->m_ip2_val_b.size() * sizeof(float);
-    result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w1
-    result += OUTPUTS_VALUE * sizeof(float);  // m_bn_val_w2
-    result += OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER
-              * sizeof(float);                // m_ip1_val_w
-    result += VALUE_LAYER * sizeof(float);    // m_ip1_val_b
 
-    result += VALUE_LAYER * sizeof(float);    // m_ip2_val_w
-    result += sizeof(float);                  // m_ip2_val_b
     return estimated_size = result;
 }
 

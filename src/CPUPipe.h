@@ -35,20 +35,99 @@
 #include <vector>
 #include <cmath>
 
+#if defined(USE_ACCELERATE)
+#include <Accelerate/Accelerate.h>
+#elif defined(USE_DNNL)
+#include <dnnl.hpp>
+#elif defined(USE_OPENBLAS)
+#include <cblas.h>
+#else
+#ifdef NDEBUG
+#define EIGEN_NO_DEBUG // Disable assertions in your code．
+#endif
+#include <Eigen/Dense>
+#endif
+
 #include "ForwardPipe.h"
 
 class CPUPipe : public ForwardPipe {
 public:
-    void initialize(const int channels, const NetworkType net_type, const std::string &model_hash = "") override;
+    static void blas_initialize();
+    void initialize(const int channels,
+                    const NetworkType net_type,
+                    const std::string &model_hash = "") override;
     bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
                  std::vector<float>& output_val,
-                 const bool full_batch
-    ) override;
+                 const bool full_batch) override;
 
-    void push_weights(
-        const unsigned int filter_size, const unsigned int channels, const unsigned int outputs,
-        const std::shared_ptr<const ForwardPipeWeights> weights) override;
+    void push_weights(const unsigned int filter_size,
+                      const unsigned int channels,
+                      const unsigned int outputs,
+                      const std::shared_ptr<const ForwardPipeWeights> weights) override;
+
+    template <size_t spatial_size>
+    static void batchnorm(const size_t channels,
+                          std::vector<float>& data,
+                          const float* const means,
+                          const float* const stddevs,
+                          const float* const eltwise = nullptr)
+    {
+        for (auto c = size_t{0}; c < channels; ++c) {
+            const auto mean = means[c];
+            const auto scale_stddev = stddevs[c];
+            const auto arr = &data[c * spatial_size];
+
+            if (eltwise == nullptr) {
+                // Classical BN
+                for (auto b = size_t{0}; b < spatial_size; b++) {
+                    arr[b] = std::max(0.0f, scale_stddev * (arr[b] - mean));
+                }
+            } else {
+                // BN + residual add
+                const auto res = &eltwise[c * spatial_size];
+                for (auto b = size_t{0}; b < spatial_size; b++) {
+                    arr[b] =
+                        std::max(0.0f, (scale_stddev * (arr[b] - mean)) + res[b]);
+                }
+            }
+        }
+    }
+
+    template <unsigned int inputs, unsigned int outputs, bool ReLU>
+    static std::vector<float> innerproduct_pub(const std::vector<float>& input,
+                                               const std::vector<float>& weights,
+                                               const std::vector<float>& biases)
+    {
+        std::vector<float> output(outputs);
+#if defined(USE_EIGEN)
+        Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>> y(output.data(), outputs);
+        y.noalias() =
+            Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic>>(
+                weights.data(), inputs, outputs).transpose()
+            * Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, 1>>(
+                input.data(), inputs);
+#else
+#if defined(USE_DNNL)
+        dnnl_sgemm('N', 'N',
+#else
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+#endif
+            //  M  , N,   K
+            outputs, 1, inputs,
+            1.0f, &weights[0], inputs,
+            &input[0], 1,
+            0.0f, &output[0], 1);
+#endif
+        for (unsigned int o = 0; o < outputs; o++) {
+            auto val = biases[o] + output[o];
+            if (ReLU) {
+                val = std::max(0.0f, val);
+            }
+            output[o] = val;
+        }
+        return output;
+    }
 
 private:
     void winograd_transform_in(const std::vector<float>& in,
@@ -68,15 +147,17 @@ private:
                             std::vector<float>& M,
                             std::vector<float>& output);
 
+    void innerproduct(const size_t inputs,
+                      const size_t outputs,
+                      const std::vector<float>& input,
+                      const std::vector<float>& weights,
+                      const std::vector<float>& biases,
+                      std::vector<float>& output);
+
     int m_input_channels{};
 
-    // Input + residual block tower
+    // Input + residual block tower + header
     std::shared_ptr<const ForwardPipeWeights> m_weights;
-
-    std::vector<float> m_conv_pol_w;
-    std::vector<float> m_conv_val_w;
-    std::vector<float> m_conv_pol_b;
-    std::vector<float> m_conv_val_b;
 
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };

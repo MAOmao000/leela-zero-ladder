@@ -47,6 +47,7 @@
 #ifdef USE_OPENCL_SELFCHECK
 #include "SMP.h"
 #endif
+#include "Utils.h"
 
 // Winograd filter transformation changes 3x3 filters to M + 3 - 1
 constexpr auto FILTER_SIZE = 3;
@@ -75,7 +76,7 @@ public:
     bool get_output(const GameState* state, const Ensemble ensemble,
                     Network::Netresult& result, const bool full_batch,
                     const int symmetry = -1, const bool read_cache = true,
-                    const bool write_cache = true, bool force_selfcheck = false);
+                    const bool write_cache = true, const bool force_selfcheck = false);
 
     static constexpr auto INPUT_MOVES = 8;
     static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
@@ -85,7 +86,9 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
+#if !defined(USE_CPU_ONLY)
     float benchmark_time(int centiseconds);
+#endif
     void benchmark(const GameState* state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
@@ -120,22 +123,6 @@ private:
 
     static std::vector<float> winograd_transform_f(const std::vector<float>& f,
                                                    int outputs, int channels);
-    static std::vector<float> zeropad_U(const std::vector<float>& U,
-                                        int outputs, int channels,
-                                        int outputs_pad, int channels_pad);
-    static void winograd_transform_in(const std::vector<float>& in,
-                                      std::vector<float>& V, int C);
-    static void winograd_transform_out(const std::vector<float>& M,
-                                       std::vector<float>& Y, int K);
-    static void winograd_convolve3(int outputs,
-                                   const std::vector<float>& input,
-                                   const std::vector<float>& U,
-                                   std::vector<float>& V,
-                                   std::vector<float>& M,
-                                   std::vector<float>& output);
-    static void winograd_sgemm(const std::vector<float>& U,
-                               const std::vector<float>& V,
-                               std::vector<float>& M, int C, int K);
     bool get_output_internal(const GameState* state,
                              int symmetry,
                              Network::Netresult& result,
@@ -149,7 +136,7 @@ private:
     bool probe_cache(const GameState* state, Network::Netresult& result);
     std::unique_ptr<ForwardPipe>&& init_net(
         int channels, std::unique_ptr<ForwardPipe>&& pipe);
-#ifdef USE_HALF
+#if !defined(USE_CPU_ONLY)
     void select_precision(int channels);
 #endif
     std::unique_ptr<ForwardPipe> m_forward;
@@ -165,24 +152,6 @@ private:
     // Residual tower
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
-    // Policy head
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w1{};
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w2{};
-
-    std::array<float, OUTPUTS_POLICY * NUM_INTERSECTIONS * POTENTIAL_MOVES>
-        m_ip_pol_w{};
-    std::array<float, POTENTIAL_MOVES> m_ip_pol_b{};
-
-    // Value head
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w1{};
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w2{};
-
-    std::array<float, OUTPUTS_VALUE * NUM_INTERSECTIONS * VALUE_LAYER>
-        m_ip1_val_w{};
-    std::array<float, VALUE_LAYER> m_ip1_val_b{};
-
-    std::array<float, VALUE_LAYER> m_ip2_val_w{};
-    std::array<float, 1> m_ip2_val_b{};
     bool m_value_head_not_stm{};
 
     std::string m_model_hash{""};

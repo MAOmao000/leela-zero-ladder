@@ -43,7 +43,7 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT)
 #include "NvInfer.h"
 
 namespace trtLog {
@@ -132,10 +132,8 @@ private:
 
 extern bool cfg_gtp_mode;
 extern bool cfg_allow_pondering;
-extern size_t cfg_num_threads;
-extern size_t cfg_batch_size;
-extern size_t cfg_gpu_batch;
-extern int cfg_batch_wait_time;
+extern unsigned int cfg_num_threads;
+extern unsigned int cfg_batch_size;
 extern int cfg_max_playouts;
 extern int cfg_max_visits;
 extern size_t cfg_max_memory;
@@ -151,37 +149,38 @@ extern int cfg_random_min_visits;
 extern float cfg_random_temp;
 extern std::uint64_t cfg_rng_seed;
 extern bool cfg_dumbpass;
-enum class backend_t {
-    NONE, OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
-};
-extern backend_t cfg_backend;
-extern bool cfg_NCHW;
-#ifdef USE_OPENCL
 extern std::vector<int> cfg_gpus;
-extern bool cfg_sgemm_exhaustive;
-extern bool cfg_tune_only;
-#ifdef USE_TENSOR_RT
-extern trtLog::Logger cfg_logger;
-enum class trtcache_t {
-    PLAN, TIMING
-};
-extern int cfg_builder_opt_level;
-extern bool cfg_cache_plan;
-#endif
-#ifdef USE_HALF
+extern size_t cfg_gpu_batch;
 enum class precision_t {
     AUTO, SINGLE, HALF
 };
 extern precision_t cfg_precision;
+extern int cfg_batch_wait_time;
+enum class backend_t {
+    CPU, OPENCL, CUDNN, CUDNNGRAPH, TENSORRT
+};
+extern backend_t cfg_backend;
+#if !defined(USE_CPU_ONLY)
+extern bool cfg_sgemm_exhaustive;
+extern bool cfg_tune_only;
+#if defined(USE_TENSOR_RT)
+extern trtLog::Logger cfg_logger;
+extern int cfg_builder_opt_level;
+enum class trtcache_t {
+    PLAN, TIMING
+};
+extern bool cfg_cache_plan;
+#endif
+#if defined(USE_CUDNN)
+extern bool cfg_NCHW;
 #endif
 #endif
+
 extern float cfg_puct;
 extern float cfg_logpuct;
 extern float cfg_logconst;
 extern float cfg_dynamic_k_factor;
 extern float cfg_dynamic_k_base;
-extern float cfg_stdev_scale;
-extern float cfg_stdev_prior;
 extern float cfg_softmax_temp;
 extern float cfg_fpu_reduction;
 extern float cfg_fpu_root_reduction;

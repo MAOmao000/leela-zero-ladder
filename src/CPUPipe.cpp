@@ -29,28 +29,13 @@
 
 #include "config.h"
 
-#ifdef __APPLE__
-#include <Accelerate/Accelerate.h>
-#endif
-#ifdef USE_MKL
-#include <mkl.h>
-#endif
-#ifdef USE_OPENBLAS
-#include <cblas.h>
-#ifdef USE_DNNL
-#include <dnnl.hpp>
-#endif
-#endif
-#ifndef USE_BLAS
-#define EIGEN_NO_DEBUG // Disable assertions in your code．
-#include <Eigen/Dense>
-#endif
-
 #include "CPUPipe.h"
 #include "Im2Col.h"
 #include "Network.h"
+#include "GTP.h"
+#include "Utils.h"
 
-#ifndef USE_BLAS
+#if defined(USE_EIGEN)
 // Eigen helpers
 template <typename T>
 using EigenMatrixMap =
@@ -66,8 +51,27 @@ using ConstEigenVectorMap =
     Eigen::Map<const Eigen::Matrix<T, Eigen::Dynamic, 1>>;
 #endif
 
-void CPUPipe::initialize(const int channels, const NetworkType net_type, const std::string &model_hash) {
+void CPUPipe::blas_initialize() {
+#if defined(USE_ACCELERATE)
+    Utils::myprintf("BLAS Core: %s\n", "Accelerate");
+#elif defined(USE_DNNL)
+    Utils::myprintf("BLAS core: oneDNN %d.%d.%d\n",
+        DNNL_VERSION_MAJOR, DNNL_VERSION_MINOR, DNNL_VERSION_PATCH);
+#elif defined(USE_OPENBLAS)
+    openblas_set_num_threads(1);
+    Utils::myprintf("BLAS Core: %s\n", openblas_get_corename());
+#else
+    Utils::myprintf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
+        EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
+#endif
+}
+
+void CPUPipe::initialize(const int channels,
+                         const NetworkType net_type,
+                         const std::string &model_hash) {
+    // For compatibility with TensorRT implementation
     (void) model_hash;
+
     m_input_channels = channels;
     m_net_type = net_type;
 }
@@ -204,23 +208,23 @@ void CPUPipe::winograd_sgemm(const std::vector<float>& U,
         const auto offset_u = b * K * C;
         const auto offset_v = b * C * P;
         const auto offset_m = b * K * P;
-#ifdef USE_BLAS
-#ifdef USE_DNNL
-        dnnl_sgemm('T', 'N',
-#else
-        cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
-#endif
-                K, P, C,
-                    1.0f,
-                    &U[offset_u], K, //&V[offset_v], K, //&U[offset_u], K,
-                    &V[offset_v], P, //&U[offset_u], P, //&V[offset_v], P,
-                    0.0f,
-                    &M[offset_m], P);
-#else
+#if defined(USE_EIGEN)
         auto C_mat = EigenMatrixMap<float>(M.data() + offset_m, P, K);
         C_mat.noalias() =
             ConstEigenMatrixMap<float>(V.data() + offset_v, P, C)
             * ConstEigenMatrixMap<float>(U.data() + offset_u, K, C).transpose();
+#else
+#if defined(USE_DNNL)
+        dnnl_sgemm('T', 'N',
+#else
+        cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans,
+#endif
+                    K, P, C,
+                    1.0f,
+                    &U[offset_u], K,
+                    &V[offset_v], P,
+                    0.0f,
+                    &M[offset_m], P);
 #endif
     }
 }
@@ -343,23 +347,23 @@ void convolve(const size_t outputs,
     // passing a matrix A[m][n], the value should be m.
     //    cblas_sgemm(CblasRowMajor, TransA, TransB, M, N, K, alpha, A, lda, B,
     //                ldb, beta, C, N);
-#ifdef USE_BLAS
-#ifdef USE_DNNL
-    dnnl_sgemm('N', 'N',
-#else
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-#endif
-            // M        N            K
-                outputs, num_intersections, filter_dim,
-                1.0f, &weights[0], filter_dim,
-                &col[0], num_intersections,
-                0.0f, &output[0], num_intersections);
-#else
+#if defined(USE_EIGEN)
     auto C_mat =
         EigenMatrixMap<float>(output.data(), num_intersections, outputs);
     C_mat.noalias() =
         ConstEigenMatrixMap<float>(col.data(), num_intersections, filter_dim)
         * ConstEigenMatrixMap<float>(weights.data(), filter_dim, outputs);
+#else
+#if defined(USE_DNNL)
+    dnnl_sgemm('N', 'N',
+#else
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+#endif
+                // M        N            K
+                outputs, num_intersections, filter_dim,
+                1.0f, &weights[0], filter_dim,
+                &col[0], num_intersections,
+                0.0f, &output[0], num_intersections);
 #endif
 
     for (unsigned int o = 0; o < outputs; o++) {
@@ -391,20 +395,25 @@ void relu(const size_t spatial_size,
     }
 }
 
-void innerproduct(const size_t inputs,
+void CPUPipe::innerproduct(const size_t inputs,
     const size_t outputs,
     const std::vector<float>& input,
     const std::vector<float>& weights,
     const std::vector<float>& biases,
     std::vector<float>& output) {
 
-#ifdef USE_BLAS
-#ifdef USE_DNNL
+#if defined(USE_EIGEN)
+    EigenVectorMap<float> y(output.data(), outputs);
+    y.noalias() =
+        ConstEigenMatrixMap<float>(weights.data(),
+            inputs,
+            outputs).transpose()
+        * ConstEigenVectorMap<float>(input.data(), inputs);
+#else
+#if defined(USE_DNNL)
     dnnl_sgemm('N', 'N',
         outputs, 1, inputs,
 #else
-    //cblas_sgemv(CblasRowMajor, CblasNoTrans,
-        //outputs, inputs,
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
         // M     K
         outputs, 1, inputs,
@@ -412,44 +421,9 @@ void innerproduct(const size_t inputs,
         1.0f, &weights[0], inputs,
         &input[0], 1,
         0.0f, &output[0], 1);
-#else
-    EigenVectorMap<float> y(output.data(), outputs);
-    y.noalias() =
-        ConstEigenMatrixMap<float>(weights.data(),
-            inputs,
-            outputs).transpose()
-        * ConstEigenVectorMap<float>(input.data(), inputs);
 #endif
-
     for (auto o = size_t{ 0 }; o < outputs; ++o) {
         output[o] += biases[o];
-    }
-}
-
-template <size_t spatial_size>
-void batchnorm(const size_t channels,
-               std::vector<float>& data,
-               const float* const means,
-               const float* const stddevs,
-               const float* const eltwise = nullptr) {
-    for (auto c = size_t{0}; c < channels; ++c) {
-        const auto mean = means[c];
-        const auto scale_stddev = stddevs[c];
-        const auto arr = &data[c * spatial_size];
-
-        if (eltwise == nullptr) {
-            // Classical BN
-            for (auto b = size_t{0}; b < spatial_size; b++) {
-                arr[b] = std::max(0.0f, scale_stddev * (arr[b] - mean));
-            }
-        } else {
-            // BN + residual add
-            const auto res = &eltwise[c * spatial_size];
-            for (auto b = size_t{0}; b < spatial_size; b++) {
-                arr[b] =
-                    std::max(0.0f, (scale_stddev * (arr[b] - mean)) + res[b]);
-            }
-        }
     }
 }
 
@@ -473,9 +447,10 @@ bool CPUPipe::forward(const std::vector<float>& input,
                       std::vector<float>& output_pol,
                       std::vector<float>& output_val,
                       const bool full_batch) {
+    // For compatibility with GPU backend implementation
     (void) full_batch;
-    const auto lambda_Sig = [](const auto val) { return 1.f / (1.f + std::exp(-val)); };
 
+    const auto lambda_Sig = [](const auto val) { return 1.f / (1.f + std::exp(-val)); };
     // Input convolution
     constexpr auto P = WINOGRAD_P;
     // Calculate output channels
@@ -516,16 +491,13 @@ bool CPUPipe::forward(const std::vector<float>& input,
         std::swap(conv_out, conv_in);
         winograd_convolve3(output_channels, conv_in,
                            m_weights->m_conv_weights[i + 1], V, M, conv_out);
-        if (m_net_type == NetworkType::LEELA_ZERO)
-        {
+        if (m_net_type == NetworkType::LEELA_ZERO) {
             batchnorm<NUM_INTERSECTIONS>(
                 output_channels, conv_out,
                 m_weights->m_batchnorm_means[i + 1].data(),
                 m_weights->m_batchnorm_stddevs[i + 1].data(),
                 res.data());
-        }
-        else if (m_net_type == NetworkType::MINIGO_SE)
-        {
+        } else if (m_net_type == NetworkType::MINIGO_SE) {
             batchnorm_no_relu<NUM_INTERSECTIONS>(
                 output_channels, conv_out,
                 m_weights->m_batchnorm_means[i + 1].data(),
@@ -556,23 +528,52 @@ bool CPUPipe::forward(const std::vector<float>& input,
             }
         }
     }
-    convolve<1>(Network::OUTPUTS_POLICY, conv_out, m_conv_pol_w, m_conv_pol_b,
-                output_pol);
-    convolve<1>(Network::OUTPUTS_VALUE, conv_out, m_conv_val_w, m_conv_val_b,
-                output_val);
+    std::vector<float> policy_data(Network::OUTPUTS_POLICY * NUM_INTERSECTIONS);
+    convolve<1>(Network::OUTPUTS_POLICY,
+                conv_out,
+                m_weights->m_conv_pol_w,
+                m_weights->m_conv_pol_b,
+                policy_data);
+    std::vector<float> value_data(Network::OUTPUTS_VALUE * NUM_INTERSECTIONS);
+    convolve<1>(Network::OUTPUTS_VALUE,
+                conv_out,
+                m_weights->m_conv_val_w,
+                m_weights->m_conv_val_b,
+                value_data);
+    // Get the moves
+    batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_POLICY, policy_data,
+                                 m_weights->m_bn_pol_w1.data(),
+                                 m_weights->m_bn_pol_w2.data());
+    const auto policy_out =
+        innerproduct_pub<Network::OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>
+            (policy_data, m_weights->m_ip_pol_w, m_weights->m_ip_pol_b);
+    output_pol = Utils::softmax(policy_out, cfg_softmax_temp);
+
+    // Now get the value
+    batchnorm<NUM_INTERSECTIONS>(Network::OUTPUTS_VALUE, value_data,
+                                 m_weights->m_bn_val_w1.data(),
+                                 m_weights->m_bn_val_w2.data());
+    const auto winrate_data =
+        innerproduct_pub<Network::OUTPUTS_VALUE * NUM_INTERSECTIONS, Network::VALUE_LAYER, true>
+            (value_data, m_weights->m_ip1_val_w, m_weights->m_ip1_val_b);
+    const auto winrate_out =
+        innerproduct_pub<Network::VALUE_LAYER, 1, false>
+            (winrate_data, m_weights->m_ip2_val_w, m_weights->m_ip2_val_b);
+
+    output_val[0] = std::tanh(winrate_out[0]);
+
     return true;
 }
 
-void CPUPipe::push_weights(const unsigned int /*filter_size*/,
-                           const unsigned int /*channels*/,
+void CPUPipe::push_weights(const unsigned int filter_size,
+                           const unsigned int channels,
                            const unsigned int outputs,
                            const std::shared_ptr<const ForwardPipeWeights> weights) {
 
-    m_weights = weights;
+    // For compatibility with GPU backend implementation
+    (void) filter_size;
+    (void) channels;
+    (void) outputs;
 
-    // Output head convolutions
-    m_conv_pol_w = weights->m_conv_pol_w;
-    m_conv_pol_b.resize(m_conv_pol_w.size() / outputs, 0.0f);
-    m_conv_val_w = weights->m_conv_val_w;
-    m_conv_val_b.resize(m_conv_val_w.size() / outputs, 0.0f);
+    m_weights = weights;
 }

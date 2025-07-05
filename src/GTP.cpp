@@ -60,10 +60,8 @@ using namespace Utils;
 // Configuration flags
 bool cfg_gtp_mode;
 bool cfg_allow_pondering;
-size_t cfg_num_threads;
-size_t cfg_batch_size;
-size_t cfg_gpu_batch;
-int cfg_batch_wait_time;
+unsigned int cfg_num_threads;
+unsigned int cfg_batch_size;
 int cfg_max_playouts;
 int cfg_max_visits;
 size_t cfg_max_memory;
@@ -79,26 +77,27 @@ int cfg_random_min_visits;
 float cfg_random_temp;
 std::uint64_t cfg_rng_seed;
 bool cfg_dumbpass;
-backend_t cfg_backend;
-bool cfg_NCHW;
-#ifdef USE_OPENCL
 std::vector<int> cfg_gpus;
+size_t cfg_gpu_batch;
+precision_t cfg_precision;
+int cfg_batch_wait_time;
+backend_t cfg_backend;
+#if !defined(USE_CPU_ONLY)
 bool cfg_sgemm_exhaustive;
 bool cfg_tune_only;
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT)
 trtLog::Logger cfg_logger{};
 int cfg_builder_opt_level;
 bool cfg_cache_plan;
 #endif
-#ifdef USE_HALF
-precision_t cfg_precision;
+#if defined(USE_CUDNN)
+bool cfg_NCHW;
 #endif
 #endif
+
 float cfg_puct;
 float cfg_logpuct;
 float cfg_logconst;
-float cfg_stdev_scale;
-float cfg_stdev_prior;
 float cfg_dynamic_k_factor;
 float cfg_dynamic_k_base;
 float cfg_softmax_temp;
@@ -349,10 +348,7 @@ void GTP::setup_default_parameters() {
 
     // we will re-calculate this on Leela.cpp
     cfg_num_threads = 1;        // -t, --threads
-    // we will re-calculate this on Leela.cpp
     cfg_batch_size = 1;         // --batchsize
-    cfg_gpu_batch = 1;          // --gpu_batch
-    cfg_batch_wait_time = 0;    // --batchwait
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
     cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
@@ -364,39 +360,30 @@ void GTP::setup_default_parameters() {
     cfg_timemanage = TimeManagement::AUTO; // --timemanage
     cfg_lagbuffer_cs = 100;                // -b, --lagbuffer
     cfg_weightsfile = leelaz_file("best-network"); // -w, --weights
-#ifdef USE_OPENCL
     cfg_gpus = {};                       // --gpu
+    cfg_gpu_batch = 1;                   // --gpu_batch
+    cfg_precision = precision_t::AUTO;   // --precision
+    cfg_batch_wait_time = 0;             // --batchwait
+    cfg_backend = backend_t::CPU;        // --backend
+#if !defined(USE_CPU_ONLY)
     cfg_sgemm_exhaustive = false;        // --full-tuner
     cfg_tune_only = false;               // --tune-only
-#ifdef USE_TENSOR_RT
+#if defined(USE_TENSOR_RT)
     cfg_builder_opt_level = 2;           // --builder_opt_level [0-5]
     cfg_cache_plan = true;               // --trt_cache
-    cfg_backend = backend_t::TENSORRT;   // --backend
-#else
-#ifdef USE_CUDNN
-    cfg_backend = backend_t::CUDNNGRAPH; // --backend
-#else
-    cfg_backend = backend_t::OPENCL;     // --backend
 #endif
-#endif
+#if defined(USE_CUDNN)
     cfg_NCHW = false;                    // --channel-first
+#endif
+#endif
 
-#ifdef USE_HALF
-    cfg_precision = precision_t::AUTO;   // --precision
-#endif
-#else
-    cfg_backend = backend_t::NONE; // --backend
-    cfg_NCHW = false;              // --channel-first
-#endif
-    cfg_puct = 0.5f;               // --puct(No significant difference between 0.5 and 0.8)
-    cfg_logpuct = 0.015f;          // --logpuct
-    cfg_logconst = 1.7f;           // --logconst
-    cfg_dynamic_k_factor = 4.0f;   // --dynamic_k_factor
-    cfg_dynamic_k_base = 20000.0f; // --dynamic_k_base
-    cfg_stdev_scale = 0.85f;       // --puct_stdev_scale
-    cfg_stdev_prior = 0.4f;        // --puct_stdev_prior
-    cfg_softmax_temp = 1.0f;       // --softmax_temp
-    cfg_fpu_reduction = 0.25f;     // --fpu_reduction
+    cfg_puct = 0.5f;                 // --puct(No significant difference between 0.5 and 0.8)
+    cfg_logpuct = 0.015f;            // --logpuct
+    cfg_logconst = 1.7f;             // --logconst
+    cfg_dynamic_k_factor = 4.0f;     // --dynamic_k_factor
+    cfg_dynamic_k_base = 20000.0f;   // --dynamic_k_base
+    cfg_softmax_temp = 1.0f;         // --softmax_temp
+    cfg_fpu_reduction = 0.25f;       // --fpu_reduction
     // see UCTSearch::should_resign
     cfg_resignpct = -1;              // -r, --resignpct
     cfg_noise = false;               // --noise
@@ -410,7 +397,7 @@ void GTP::setup_default_parameters() {
     cfg_logfile_handle = nullptr;    // -l, --logfile
     cfg_quiet = false;               // -q, --quiet
     cfg_benchmark = false;           // --benchmark
-#ifdef USE_CPU_ONLY
+#if defined(USE_CPU_ONLY)
     cfg_cpu_only = true;             // --cpu-only
 #else
     cfg_cpu_only = false;            // --cpu-only
@@ -1283,7 +1270,7 @@ std::pair<std::string, std::string> GTP::parse_option(std::istringstream& is) {
 size_t GTP::get_base_memory() {
     // At the moment of writing the memory consumption is
     // roughly network size + 85 for one GPU and + 160 for two GPUs.
-#ifdef USE_OPENCL
+#if !defined(USE_CPU_ONLY)
     auto gpus = std::max(cfg_gpus.size(), size_t{1});
     return s_network->get_estimated_size() + 85 * MiB * gpus;
 #else
