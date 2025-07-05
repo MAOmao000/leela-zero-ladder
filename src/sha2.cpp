@@ -1,3 +1,5 @@
+#if defined(USE_TENSOR_RT)
+
 #include "sha2.h"
 
 /*
@@ -1271,6 +1273,4 @@ void SHA2::get512(const uint32_t* msg, size_t len, uint8_t hash[64]) {CONVERTMSG
 void SHA2::get512(const uint32_t* msg, size_t len, uint32_t hash[16]) {CONVERTMSG32(get512);}
 void SHA2::get512(const uint32_t* msg, size_t len, uint64_t hash[8]) {CONVERTMSG32(get512);}
 
-
-
-
+#endif
