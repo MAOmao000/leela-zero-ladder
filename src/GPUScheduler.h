@@ -30,6 +30,7 @@
 
 #ifndef GPUSCHEDULER_H_INCLUDED
 #define GPUSCHEDULER_H_INCLUDED
+
 #include "config.h"
 
 #include <list>
@@ -37,11 +38,11 @@
 #include <vector>
 
 #include "ForwardPipe.h"
-#include "Backend.h"
 #include "GTP.h"
 #include "SMP.h"
 #include "ThreadPool.h"
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+#include "OpenCL.h"
+#if defined(USE_CUDNN)
 #include "Backend.h"
 #endif
 
@@ -59,16 +60,19 @@ class GPUScheduler : public ForwardPipe {
     public:
         std::mutex mutex;
         std::condition_variable cv;
+        const bool full_batch;
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
         ForwardQueueEntry(
             const std::vector<float>& input,
             std::vector<float>& output_pol,
-            std::vector<float>& output_val)
-            : in(input),
-              out_p(output_pol),
-              out_v(output_val) {}
+            std::vector<float>& output_val,
+            const bool full)
+                : full_batch(full),
+                  in(input),
+                  out_p(output_pol),
+                  out_v(output_val) {}
     };
 
 public:
@@ -98,7 +102,7 @@ public:
         const size_t tid = -1
     );
     void wait_time_reset() override {
-        m_waittime = 10;
+        m_waittime = cfg_batch_wait_time;
     }
 
 private:
@@ -138,7 +142,8 @@ private:
     // set to true when single (non-batch) eval is in progress
     std::atomic<bool> m_single_eval_in_progress{false};
     std::list<std::shared_ptr<ForwardQueueEntry>> m_forward_queue;
-#if defined(USE_CUDNN) || defined(USE_TENSOR_RT)
+    std::vector<std::unique_ptr<OpenCL<net_t>>> m_opencl;
+#if defined(USE_CUDNN)
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
 #endif
 
@@ -148,8 +153,18 @@ protected: // Member variables used by GPUSheduler
     std::mutex m_mutex;
     std::condition_variable m_cv;
     std::list<std::thread> m_worker_threads;
-    size_t m_out_pol_size{};
-    size_t m_out_val_size{};
+
+    std::vector<float> m_bn_pol_w1;
+    std::vector<float> m_bn_pol_w2;
+    std::vector<float> m_ip_pol_w;
+    std::vector<float> m_ip_pol_b;
+    std::vector<float> m_bn_val_w1;
+    std::vector<float> m_bn_val_w2;
+    std::vector<float> m_ip1_val_w;
+    std::vector<float> m_ip1_val_b;
+    std::vector<float> m_ip2_val_w;
+    std::vector<float> m_ip2_val_b;
+
     NetworkType m_net_type{NetworkType::LEELA_ZERO};
 };
 #endif
