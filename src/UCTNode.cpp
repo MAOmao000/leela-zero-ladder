@@ -81,6 +81,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
     NNCache::Netresult raw_netlist;
     if (!network.get_output(
         &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist, full_batch)) {
+        expand_cancel();
         return false;
     }
 
@@ -357,7 +358,7 @@ UCTNode* UCTNode::uct_select_child(const int color, const bool is_root) {
         const auto psa = child.get_policy();
         const auto denom = 1.0f + child.get_visits();
         const auto puct = cpuct * psa * (numerator / denom);
-        auto value = winrate + puct;
+        const auto value = winrate + puct;
         assert(value > std::numeric_limits<double>::lowest());
 
         if (value > best_value) {
