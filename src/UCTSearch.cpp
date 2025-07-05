@@ -51,9 +51,6 @@
 #include "Timing.h"
 #include "Training.h"
 #include "Utils.h"
-#ifdef USE_OPENCL
-#include "GPUScheduler.h"
-#endif
 
 using namespace Utils;
 
@@ -126,6 +123,8 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
                 m_cv.wait(lock, [this]() {
                     return m_run.load() || m_kill.load();
                 });
+                // first: m_run:true m_kill:false
+                // quit:  m_run:true m_kill:true
             }
             if (m_kill.load()) {
                 return;
@@ -139,6 +138,7 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
                             cfg_analyze_tags.interval_centis() * 10), [this]() {
                                 return !m_run.load();
                     });
+                    // first: m_run:true
                 }
                 if (m_run.load()) {
                     if (output_analysis(m_rootstate, *m_root)) {
@@ -428,15 +428,19 @@ int UCTSearch::output_analysis(const FastState& state, const UCTNode& parent) {
     std::stable_sort(rbegin(sortable_data), rend(sortable_data));
 
     auto i = 0;
-    // Output analysis data in gtp stream
-    for (const auto& node : sortable_data) {
-        if (i > 0) {
-            gtp_printf_raw(" ");
+    if (m_analysis_out) {
+        // Output analysis data in gtp stream
+        for (const auto& node : sortable_data) {
+            if (i > 0) {
+                gtp_printf_raw(" ");
+            }
+            gtp_printf_raw(node.get_info_string(i).c_str());
+            i++;
         }
-        gtp_printf_raw(node.get_info_string(i).c_str());
-        i++;
+        gtp_printf_raw("\n");
+    } else {
+        return sortable_data.size();
     }
-    gtp_printf_raw("\n");
     return i;
 }
 
@@ -500,7 +504,7 @@ bool UCTSearch::should_resign(const passflag_t passflag, const float besteval) {
 
     const auto is_default_cfg_resign = cfg_resignpct < 0;
     const auto resign_threshold =
-        0.01f * (is_default_cfg_resign ? 5 : cfg_resignpct);
+        0.01f * (is_default_cfg_resign ? 10 : cfg_resignpct);
     if (besteval > resign_threshold) {
         // eval > cfg_resign
         return false;
@@ -843,9 +847,7 @@ void UCTWorker::operator()() {
             lagtime = m_time_for_move / 2;
         }
     }
-#ifdef USE_OPENCL
     m_network.drain_evals();
-#endif
 }
 
 void UCTSearch::increment_playouts() {
@@ -879,10 +881,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(),
-#ifdef USE_OPENCL
-            m_network,
-#endif
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network,
             &start, time_for_move));
     }
 
@@ -901,10 +900,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     } else {
         tg.wait_all();
     }
-#ifdef USE_OPENCL
     m_network.resume_evals();
-#endif
-
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
         node->set_active(true);
@@ -926,12 +922,10 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
              m_root->get_visits(), m_nodes.load(), m_playouts.load(),
              (m_playouts * 100.0) / (elapsed_centis + 1));
 
-#ifdef USE_OPENCL
-#if !defined(USE_CUDNN) && !defined(USE_TENSOR_RT)
+#if defined(USE_OPENCL) && !defined(USE_CUDNN) && !defined(USE_TENSOR_RT)
 #ifndef NDEBUG
     myprintf("batch stats: %d %d\n",
              batch_stats.single_evals.load(), batch_stats.batch_evals.load());
-#endif
 #endif
 #endif
 
@@ -973,11 +967,7 @@ void UCTSearch::ponder() {
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get()
-#ifdef USE_OPENCL
-            , m_network
-#endif
-        ));
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network));
     }
     if (cfg_analyze_tags.interval_centis()) {
         m_analysis_stop = false;
@@ -994,10 +984,7 @@ void UCTSearch::ponder() {
     } else {
         tg.wait_all();
     }
-#ifdef USE_OPENCL
     m_network.resume_evals();
-#endif
-
     // Display search info.
     myprintf("\n");
     dump_stats(m_rootstate, *m_root);
