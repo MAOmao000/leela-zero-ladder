@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,7 +30,8 @@
 
 #include "config.h"
 
-#ifdef USE_OPENCL
+#if defined(USE_OPENCL)
+
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
@@ -59,14 +60,12 @@ std::string getClArgs<float>() {
     return "-cl-mad-enable -cl-fast-relaxed-math -cl-no-signed-zeros "
            "-cl-denorms-are-zero";
 }
-#ifdef USE_HALF
 template <>
 std::string getClArgs<half_float::half>() {
     return "-DUSE_HALF "
            "-cl-mad-enable -cl-fast-relaxed-math -cl-no-signed-zeros "
            "-cl-denorms-are-zero";
 }
-#endif
 
 const std::string sourceCode_common =
     #include "kernels/common.opencl"
@@ -1147,9 +1146,7 @@ std::string OpenCL<net_t>::get_device_name() {
 
 template class OpenCL<float>;
 template class OpenCL_Network<float>;
-#ifdef USE_HALF
 template class OpenCL<half_float::half>;
 template class OpenCL_Network<half_float::half>;
-#endif
 
 #endif

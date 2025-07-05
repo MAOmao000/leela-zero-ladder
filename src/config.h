@@ -30,6 +30,63 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
+#if defined(USE_TENSOR_RT)
+#undef USE_CPU_ONLY
+#if !defined(USE_CUDNN)
+#define USE_CUDNN
+#endif
+#if !defined(USE_OPENCL)
+#define USE_OPENCL
+#endif
+
+#elif defined(USE_CUDNN)
+#undef USE_CPU_ONLY
+#if !defined(USE_OPENCL)
+#define USE_OPENCL
+#endif
+
+#elif defined(USE_OPENCL)
+#undef USE_CPU_ONLY
+
+#elif !defined(USE_CPU_ONLY)
+#define USE_OPENCL
+
+#endif
+
+/*
+ * Features
+ *
+ * USE_DNNL and USE_OPENBLAS: Optionally use a basic linear algebra library.
+ * This is may perform faster than the included Eigen library,
+ * and some BLAS libraries can target multiple CPU models.
+ * Not all operations are performed on the GPU -
+ * some operations won't get any speedup from it.
+ * Also used for OpenCL self-checks.
+ */
+/*
+ * We use Eigen by default, except on macOS, which has a fast BLAS
+ * built-in. (Accelerate)
+ */
+#if !defined(__APPLE__) && !defined(__MACOSX)
+#undef USE_ACCELERATE
+#if defined(USE_DNNL)
+#undef USE_OPENBLAS
+#undef USE_EIGEN
+#elif defined(USE_OPENBLAS)
+#undef USE_EIGEN
+#elif !defined(USE_EIGEN)
+#define USE_EIGEN
+#endif
+
+#else
+#if !defined(USE_ACCELERATE)
+#define USE_ACCELERATE
+#endif
+#undef USE_DNNL
+#undef USE_OPENBLAS
+#undef USE_EIGEN
+#endif
+
 #ifndef NDEBUG
 #include <crtdbg.h>
 #endif
@@ -68,47 +125,22 @@ enum class NetworkType {
     LEELA_ZERO, MINIGO_SE
 };
 
-/*
- * Features
- *
- * USE_BLAS: Optionally use a basic linear algebra library.
- * This is may perform faster than the included Eigen library,
- * and some BLAS libraries can target multiple CPU models.
- * Not all operations are performed on the GPU -
- * some operations won't get any speedup from it.
- * Also used for OpenCL self-checks.
- */
-//#define USE_BLAS
+static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
+static constexpr auto PROGRAM_VERSION_MAJOR = "3";
+static constexpr auto PROGRAM_VERSION_MINOR = "0";
+static constexpr auto PROGRAM_VERSION_PATCH = "0";
 
 /*
- * We use OpenBLAS by default, except on macOS, which has a fast BLAS
- * built-in. (Accelerate)
+ * OpenBLAS limitation: the default configuration on some Linuxes
+ * is limited to 64 cores.
  */
-#if !defined(__APPLE__) && !defined(__MACOSX)
-#if defined(USE_BLAS)
-#define USE_OPENBLAS
-#endif
+#if defined(USE_OPENBLAS)
+static constexpr auto MAX_CPUS = 64;
+#else
+static constexpr auto MAX_CPUS = 256;
 #endif
 
-#ifdef USE_TENSOR_RT
-#define USE_CUDNN
-#endif
-
-/*
- * USE_MKL: Optionally allows using Intel Math Kernel library as
- * BLAS implementation. Note that MKL's license is not compatible with the GPL,
- * so do not redistribute the resulting binaries. It is fine to use it on your
- * own system.
- */
-//#define USE_MKL
-/*
- * USE_OPENCL: Use OpenCL acceleration for GPUs. This makes the program a lot
- * faster if you have a recent GPU. Don't use it on CPUs even if they have
- * OpenCL drivers - the BLAS version is much faster for those.
- */
-#ifndef USE_CPU_ONLY
-#define USE_OPENCL
-
+#if !defined(USE_CPU_ONLY)
 /*
  * USE_HALF: Include the half-precision OpenCL implementation when building.
  * The current implementation autodetects whether half-precision is better
@@ -117,44 +149,18 @@ enum class NetworkType {
  * accuracy on the calculation, but generally it is worth using half precision
  * if it is at least 5% faster.
  */
-#define USE_HALF
-
-/*
- * USE_TUNER: Expose some extra command line parameters that allow tuning the
- * search algorithm.
- */
-#define USE_TUNER
-
-#endif
-
-
-static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
-static constexpr auto PROGRAM_VERSION_MAJOR = "3";
-static constexpr auto PROGRAM_VERSION_MINOR = "0";
-
-/*
- * OpenBLAS limitation: the default configuration on some Linuxes
- * is limited to 64 cores.
- */
-#if defined(USE_BLAS) && defined(USE_OPENBLAS)
-static constexpr auto MAX_CPUS = 64;
-#else
-static constexpr auto MAX_CPUS = 256;
-#endif
-
-#ifdef USE_HALF
 #include "half/half.hpp"
-#endif
-
-#ifdef USE_OPENCL
+#if defined(USE_OPENCL_SELFCHECK)
 // If OpenCL are fully usable, then check the OpenCL against CPU
 // implementation with some probability.
-//#define USE_OPENCL_SELFCHECK
 static constexpr auto SELFCHECK_PROBABILITY = 2000;
 #endif
+#else
+#undef USE_OPENCL_SELFCHECK
+#endif
 
-#if (_MSC_VER >= 1400) /* VC8+ Disable all deprecation warnings */
+#if (_MSC_VER >= 1900) /* VC14+ Disable all deprecation warnings */
 #pragma warning(disable : 4996)
-#endif /* VC8+ */
+#endif /* VC14+ */
 
 #endif
