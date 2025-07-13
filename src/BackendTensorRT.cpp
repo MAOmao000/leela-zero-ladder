@@ -35,8 +35,6 @@
 using namespace Utils;
 using namespace nvinfer1;
 
-#include "NvInferRuntime.h"
-
 template <typename net_t>
 bool BackendTRT<net_t>::build(
     const int num_worker_threads,

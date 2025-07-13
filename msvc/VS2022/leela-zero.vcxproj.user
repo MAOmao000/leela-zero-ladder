@@ -10,7 +10,7 @@ CUDNN_LOGDEST_DBG=stdout
 $(LocalDebuggerEnvironment)</LocalDebuggerEnvironment>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>--backend cudnngraph -v5  -g --noponder -w C:\IGO\leela-zero\msvc\x64\Release\0e9ea880fd3c4444695e8ff4b8a36310d2c03f7c858cadd37af3b76df1d1d15f.gz</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>-g --noponder -w C:\IGO\leela-zero-tensorrt\Release\leela-zero-weights\best-network</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>
