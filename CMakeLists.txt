@@ -13,7 +13,6 @@
 # along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.18.2)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -z noexecstack")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
@@ -66,7 +65,7 @@ if(GccSpecificFlags)
   set(GCC_FLAGS "${GCC_COMPILE_FLAGS} ${GCC_DISABLED_WARNING_COMPILE_FLAGS}")
   set(CMAKE_CXX_FLAGS_DEBUG "${GCC_FLAGS} -g -Og")
   set(CMAKE_CXX_FLAGS_RELEASE "${GCC_FLAGS} -g -O3 -DNDEBUG")
-  set(CMAKE_EXE_LINKER_FLAGS "-flto -g")
+  set(CMAKE_EXE_LINKER_FLAGS "-flto -g -z noexecstack")
 endif(GccSpecificFlags)
 
 if(USE_HALF)
