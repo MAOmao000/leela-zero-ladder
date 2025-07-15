@@ -104,7 +104,7 @@
       <FileType>Document</FileType>
       <Include Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\IGO\leela-zero-cudnn\src;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include;%(Include)</Include>
       <UseHostInclude Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</UseHostInclude>
-      <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_89,sm_89</CodeGeneration>
+      <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_90,sm_90</CodeGeneration>
       <Defines Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(Defines)</Defines>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">O2</Optimization>
       <Runtime Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MT</Runtime>
@@ -182,7 +182,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <TargetName>leelaz_cudnn</TargetName>
+    <TargetName>leelaz_full</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
     <IncludePath>..\..\src\Eigen;$(IncludePath)</IncludePath>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>
@@ -272,7 +272,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_DNNL;USE_CUDNN;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;USE_DNNL;USE_TENSOR_RT;BYTE_ORDER=1234;LITTLE_ENDIAN=1234;BIG_ENDIAN=4321;_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>C:\lib\oneDNN\include;C:\lib\oneDNN\build\include;C:\lib\vcpkg\installed\x64-windows-static\include;C:\lib\OpenCL-SDK\install\include;C:\Program Files\TensorRT-10.12.0.36\include;..\..\src\Eigen;..\..\src\cudnn-frontend\include;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\include;C:\Program Files\NVIDIA\CUDNN\v9.10\include\12.9;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
@@ -319,7 +319,7 @@
     </Link>
     <CudaCompile>
       <AdditionalOptions>%(AdditionalOptions) -Wno-deprecated-gpu-targets -std=c++17 -Xcompiler=-Ob2 -allow-unsupported-compiler</AdditionalOptions>
-      <CodeGeneration>compute_89,sm_89;%(CodeGeneration)</CodeGeneration>
+      <CodeGeneration>compute_90,sm_90;%(CodeGeneration)</CodeGeneration>
       <FastMath>true</FastMath>
       <Optimization>InheritFromHost</Optimization>
       <Runtime>MT</Runtime>
