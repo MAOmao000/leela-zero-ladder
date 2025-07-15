@@ -44,6 +44,7 @@
 #include "UCTSearch.h"
 
 #if defined(USE_TENSOR_RT)
+#include <iostream>
 #include "NvInfer.h"
 
 namespace trtLog {
