@@ -194,13 +194,13 @@ private:
 
     void push_weights(
         const size_t layer,
-        const std::vector<float>& weights,
+        const std::vector<net_t>& weights,
         const bool host_mem = false
     );
 
     void push_weights_col_major(
         const size_t layer,
-        const std::vector<float>& weights,
+        const std::vector<net_t>& weights,
         const int row,
         const int column,
         const int channels = 1,
