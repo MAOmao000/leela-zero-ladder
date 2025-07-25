@@ -498,71 +498,58 @@ void Network::select_precision(const int channels) {
         backend = "cuDNN";
     }
     if (cfg_precision == precision_t::AUTO) {
-        if (cfg_backend == backend_t::TENSORRT || cfg_backend == backend_t::OPENCL) {
-            auto score_fp16 = float{-1.0};
-            auto score_fp32 = float{-1.0};
-            myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
-            // Setup fp16 here so that we can see if we can skip autodetect.
-            // However, if fp16 sanity check fails we will return a fp32 and pray it works.
-            std::unique_ptr<ForwardPipe> fp16_net;
-            fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
-            if (!fp16_net->needs_autodetect()) {
-                try {
-                    myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
-                    m_forward = init_net(channels, std::move(fp16_net));
-                    score_fp16 = benchmark_time(100);
-                } catch (...) {
-                    myprintf("%s: fp16/half or tensor core failed "
-                             "despite driver claiming support.\n", backend.c_str());
-                    myprintf("Falling back to single precision\n");
-                    m_forward.reset();
-                    m_forward = init_net(
-                        channels, std::make_unique<GPUScheduler<float>>());
-                    return;
-                }
-                // Start by setting up fp32.
-                try {
-                    m_forward.reset();
-                    m_forward =
-                        init_net(channels, std::make_unique<GPUScheduler<float>>());
-                    score_fp32 = benchmark_time(100);
-                } catch (...) {
-                    // empty - if exception thrown just throw away fp32 net
-                }
-                if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
-                    myprintf("Both single precision and half precision failed to run.\n");
-                    throw std::runtime_error("Failed to initialize net.");
-                } else if (score_fp16 < 0.0f) {
-                    myprintf("Using %s single precision (half precision failed to run).\n", backend.c_str());
-                } else if (score_fp32 < 0.0f) {
-                    myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
-                    m_forward.reset();
-                    m_forward =
-                        init_net(channels, std::make_unique<GPUScheduler<half_float::half>>());
-                } else if (score_fp32 * 1.05f > score_fp16) {
-                    myprintf("Using %s single precision (less than 5%% slower than half).\n", backend.c_str());
-                } else {
-                    myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
-                    m_forward.reset();
-                    m_forward =
-                        init_net(channels, std::make_unique<GPUScheduler<half_float::half>>());
-                }
-            } else {
-                myprintf("Initializing %s (single precision).\n", backend.c_str());
+        auto score_fp16 = float{-1.0};
+        auto score_fp32 = float{-1.0};
+        myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
+        // Setup fp16 here so that we can see if we can skip autodetect.
+        // However, if fp16 sanity check fails we will return a fp32 and pray it works.
+        std::unique_ptr<ForwardPipe> fp16_net;
+        fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
+        if (!fp16_net->needs_autodetect()) {
+            try {
+                myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
+                m_forward = init_net(channels, std::move(fp16_net));
+                score_fp16 = benchmark_time(100);
+            } catch (...) {
+                myprintf("%s: fp16/half or tensor core failed "
+                         "despite driver claiming support.\n", backend.c_str());
+                myprintf("Falling back to single precision\n");
+                m_forward.reset();
+                m_forward = init_net(
+                    channels, std::make_unique<GPUScheduler<float>>());
+                return;
+            }
+            // Start by setting up fp32.
+            try {
+                m_forward.reset();
                 m_forward =
                     init_net(channels, std::make_unique<GPUScheduler<float>>());
+                score_fp32 = benchmark_time(100);
+            } catch (...) {
+                // empty - if exception thrown just throw away fp32 net
+            }
+            if (score_fp16 < 0.0f && score_fp32 < 0.0f) {
+                myprintf("Both single precision and half precision failed to run.\n");
+                throw std::runtime_error("Failed to initialize net.");
+            } else if (score_fp16 < 0.0f) {
+                myprintf("Using %s single precision (half precision failed to run).\n", backend.c_str());
+            } else if (score_fp32 < 0.0f) {
+                myprintf("Using %s half precision (single precision failed to run).\n", backend.c_str());
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<GPUScheduler<half_float::half>>());
+            } else if (score_fp32 * 1.05f > score_fp16) {
+                myprintf("Using %s single precision (less than 5%% slower than half).\n", backend.c_str());
+            } else {
+                myprintf("Using %s half precision (at least 5%% faster than single).\n", backend.c_str());
+                m_forward.reset();
+                m_forward =
+                    init_net(channels, std::make_unique<GPUScheduler<half_float::half>>());
             }
         } else {
-            std::unique_ptr<ForwardPipe> fp16_net =
-                std::make_unique<GPUScheduler<half_float::half>>();
-            if (fp16_net->needs_autodetect()) {
-                m_forward =
-                    init_net(channels, std::make_unique<GPUScheduler<float>>());
-                myprintf("Using %s single precision.\n", backend.c_str());
-            } else {
-                m_forward = init_net(channels, std::move(fp16_net));
-                myprintf("Using %s half precision.\n", backend.c_str());
-            }
+            myprintf("Initializing %s (single precision).\n", backend.c_str());
+            m_forward =
+                init_net(channels, std::make_unique<GPUScheduler<float>>());
         }
     } else if (cfg_precision == precision_t::SINGLE) {
         myprintf("Initializing %s (single precision).\n", backend.c_str());
