@@ -30,7 +30,6 @@
 
 #ifndef GPUSCHEDULER_H_INCLUDED
 #define GPUSCHEDULER_H_INCLUDED
-
 #include "config.h"
 
 #include <list>
@@ -70,9 +69,9 @@ class GPUScheduler : public ForwardPipe {
             std::vector<float>& output_val,
             const bool full)
                 : full_batch(full),
-                  in(input),
-                  out_p(output_pol),
-                  out_v(output_val) {}
+                in(input),
+                out_p(output_pol),
+                out_v(output_val) {}
     };
 
 public:

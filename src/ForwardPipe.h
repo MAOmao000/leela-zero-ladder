@@ -75,6 +75,7 @@ public:
     virtual void initialize(const int channels,
                             const NetworkType net_type,
                             const std::string &model_hash = "") = 0;
+
     virtual bool needs_autodetect() {
         return false;
     };

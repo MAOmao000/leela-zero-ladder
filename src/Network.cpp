@@ -504,7 +504,8 @@ void Network::select_precision(const int channels) {
             myprintf("Initializing %s (autodetecting precision).\n", backend.c_str());
             // Setup fp16 here so that we can see if we can skip autodetect.
             // However, if fp16 sanity check fails we will return a fp32 and pray it works.
-            auto fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
+            std::unique_ptr<ForwardPipe> fp16_net;
+            fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
             if (!fp16_net->needs_autodetect()) {
                 try {
                     myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
