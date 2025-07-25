@@ -189,15 +189,15 @@ bool Tuner<net_t>::valid_config_sgemm(Parameters p, const bool exhaustive) {
         if (p["NDIMC"] < p["NDIMB"]) {
             return false;
         }
-        if (p["MWG"] < 32) {
-            return false;
-        }
-        if (p["NWG"] < 32) {
-            return false;
-        }
-        if (p["KWG"] < 32) {
-            return false;
-        }
+//        if (p["MWG"] < 32) {
+//            return false;
+//        }
+//        if (p["NWG"] < 32) {
+//            return false;
+//        }
+//        if (p["KWG"] < 32) {
+//            return false;
+//        }
         // VWM / VWN has no meaning if we don't do SA / SB.
         // Only test VWM / VWN == 2
         if (p["SA"] == 0 && p["VWM"] != 2) {
@@ -344,8 +344,10 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
     if (cfg_sgemm_exhaustive) {
         topts = {
             {"MWG", {32, 64, 128, 256}},
-            {"NWG", {8, 16, 32, 64, 128, 256}},
-            {"KWG", {16, 32, 64, 128, 256}},
+//            {"NWG", {8, 16, 32, 64, 128, 256}},
+            {"NWG", {8, 16, 32, 64}},
+//            {"KWG", {16, 32, 64, 128, 256}},
+            {"KWG", {16, 32, 64}},
             {"MDIMC", {8, 16, 32, 64}},
             {"NDIMC", {8, 16, 32, 64}},
             {"MDIMA", {8, 16, 32}},
@@ -361,8 +363,10 @@ std::vector<Parameters> Tuner<net_t>::build_valid_params() {
     } else {
         topts = {
             {"MWG", {32, 64, 128}},
-            {"NWG", {16, 32, 64, 128}},
-            {"KWG", {16, 32, 64, 128}},
+//            {"NWG", {16, 32, 64, 128}},
+            {"NWG", {8, 16, 32}},
+//            {"KWG", {16, 32, 64, 128}},
+            {"KWG", {16, 32}},
             {"MDIMC", {8, 16, 32}},
             {"NDIMC", {8, 16, 32}},
             {"MDIMA", {8, 16, 32}},
@@ -463,9 +467,11 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
     auto failed_compile = 0;
     auto failed_enqueue = 0;
     auto failed_error = 0;
+    auto no_update = 0;
 
     for (auto& p : valid_params) {
         param_counter++;
+        no_update++;
 
         auto defines = parameters_to_defines(p);
 
@@ -493,11 +499,17 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
             sgemm_generate_data(at, k, m, batch_size, k_ceil, m_ceil);
             sgemm_generate_data(b, n, k, batch_size, n_ceil, k_ceil);
 
-            queue.enqueueWriteBuffer(aBuffer, CL_FALSE, 0,
-                                     at_size * sizeof(net_t), at.data());
-            queue.enqueueWriteBuffer(bBuffer, CL_FALSE, 0,
-                                     b_size * sizeof(net_t), b.data());
-            queue.finish();
+            try {
+                queue.enqueueWriteBuffer(aBuffer, CL_FALSE, 0,
+                                         at_size * sizeof(net_t), at.data());
+                queue.enqueueWriteBuffer(bBuffer, CL_FALSE, 0,
+                                         b_size * sizeof(net_t), b.data());
+                queue.finish();
+            } catch (const cl::Error&) {
+                // Failed to compile, get next parameter
+                failed_compile++;
+                continue;
+            }
         }
 
         sgemm_kernel.setArg(0, m_ceil);
@@ -564,6 +576,7 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
 
         if (error < getTunerMaxError<net_t>()
             && (best_time == 0 || sum < best_time)) {
+            no_update = 0;
             auto param_str = parameters_to_string(p);
             auto kernel_ms = 1e-6f * (sum / runs);
             // Timing is in nanoseconds (10^-9), Giga = 10^9, so this works out
@@ -573,6 +586,9 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
                      kernel_ms, kernel_gflops);
             best_time = sum;
             best_params = defines;
+        } else if (no_update >= 100) {
+            no_update = 0;
+            myprintf("(%u/%u) ...\n", param_counter, valid_params.size());
         }
     }
     if (best_time == 0) {
@@ -591,6 +607,7 @@ std::string Tuner<net_t>::tune_sgemm(const int m, const int n, const int k,
                        min_error, getTunerMaxError<net_t>());
         throw std::runtime_error("Tuner failed to find working configuration.");
     }
+    myprintf("\nEnded OpenCL SGEMM tuner.\n");
     return best_params;
 }
 
