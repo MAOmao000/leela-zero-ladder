@@ -524,8 +524,14 @@ Backend<net_t>::Backend(
 
     if (best_device.major >= 7) {
         m_tensorcore = true;
-    } else if (best_device.major >= 6) {
-        m_fp16_compute = true;
+    } else if (best_device.major == 6) {
+        if (best_device.minor != 1) {
+            m_fp16_compute = true;
+        }
+    } else if (best_device.major == 5) {
+        if (best_device.minor == 3) {
+            m_fp16_compute = true;
+        }
     }
 
     cudaSetDevice(best_device_id);
