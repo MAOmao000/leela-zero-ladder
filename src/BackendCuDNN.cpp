@@ -669,7 +669,7 @@ void BackendCuDNN<net_t>::forward_activations(
             cudaMemcpyHostToDevice,
             cudaStreamPerThread)
         );
-    } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
+    } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
         auto input_net_t =
             std::vector<net_t>(batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());

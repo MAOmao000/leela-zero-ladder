@@ -64,7 +64,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_value_init(
         intermediate_type = fe::DataType_t::FLOAT;
     } else {
         data_type = fe::DataType_t::HALF;
-        compute_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::HALF;
         conv_compute_type = fe::DataType_t::HALF;
         intermediate_type = fe::DataType_t::HALF;
     }
@@ -135,7 +135,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::bias_value_init(
         intermediate_type = fe::DataType_t::FLOAT;
     } else {
         data_type = fe::DataType_t::HALF;
-        compute_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::HALF;
         intermediate_type = fe::DataType_t::HALF;
     }
     auto build_new_graph = [=](cudnnHandle_t handle) {
@@ -298,7 +298,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::convolve_no_relu_init(
         intermediate_type = fe::DataType_t::FLOAT;
     } else {
         data_type = fe::DataType_t::HALF;
-        compute_type = fe::DataType_t::FLOAT;
+        compute_type = fe::DataType_t::HALF;
         conv_compute_type = fe::DataType_t::HALF;
         intermediate_type = fe::DataType_t::HALF;
     }
@@ -887,7 +887,7 @@ void BackendGraph<net_t>::forward_activations(
             cudaMemcpyHostToDevice,
             cudaStreamPerThread)
         );
-    } else if (typeid(net_t) == typeid(__half) && cfg_NCHW) {
+    } else if (typeid(net_t) == typeid(half_float::half) && cfg_NCHW) {
         auto input_net_t =
             std::vector<net_t>(batch_size * this->m_layers[0].channels * NUM_INTERSECTIONS);
         std::copy(input.begin(), input.end(), input_net_t.begin());
