@@ -16,6 +16,10 @@ cmake_minimum_required(VERSION 3.18.2)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
+endif()
+
 project(leelaz)
 
 # Required Packages
@@ -57,7 +61,7 @@ if(GccSpecificFlags)
   set(GCC_COMPILE_FLAGS "-Wall -Wextra -ffast-math -flto -march=native")
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-uninitialized -Wno-unused-value \
-        -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy -Wno-inconsistent-missing-override -Wno-nan-infinity-disabled")
+        -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy -Wno-inconsistent-missing-override")
   else()
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-maybe-uninitialized \
         -Wno-mismatched-tags -Wno-deprecated-copy")
