@@ -507,7 +507,7 @@ void Network::select_precision(const int channels) {
         fp16_net = std::make_unique<GPUScheduler<half_float::half>>();
         if (!fp16_net->needs_autodetect()) {
             try {
-                myprintf("%s: using fp16/half or tensor core compute support.\n", backend);
+                myprintf("%s: using fp16/half or tensor core compute support.\n", backend.c_str());
                 m_forward = init_net(channels, std::move(fp16_net));
                 score_fp16 = benchmark_time(100);
             } catch (...) {
