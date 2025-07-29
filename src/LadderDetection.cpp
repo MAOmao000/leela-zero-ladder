@@ -650,10 +650,10 @@ void LadderDetection(
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                         depth, result.policy[i]);
 #endif
-                    auto j = 0;
+                    auto j = 1;
                     for (; j < check_nodes; j++) {
-                        if (result.policy[i] > policy[j + 1]) {
-                            result.policy[i] = policy[j + 2] * 0.9f;
+                        if (result.policy[i] > policy[j]) {
+                            result.policy[i] = policy[j] * 0.9f;
                             break;
                         }
                     }
