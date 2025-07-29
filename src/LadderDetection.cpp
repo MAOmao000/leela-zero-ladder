@@ -599,12 +599,19 @@ int IsLadderChase(
 
 void LadderDetection(
     const GameState* base_state,
-    int* const ladder_pos,
-    const std::array<float, NUM_INTERSECTIONS> &policy,
-    const float &ladder_min_policy,
-    const int &check_nodes
+    Network::Netresult& result
     )
 {
+    std::array<float, NUM_INTERSECTIONS> policy(result.policy);
+    std::stable_sort(rbegin(policy), rend(policy));
+    auto check_nodes = cfg_ladder_check_nodes;
+    for (auto i = 1; i < cfg_ladder_check_nodes; i++) {
+        if (policy[i] < cfg_ladder_min_policy) {
+            check_nodes = i;
+            break;
+        }
+    }
+    const float ladder_min_policy = policy[check_nodes - 1];
     auto state = std::make_unique<GameState>(base_state);
     const auto turn_color = state->board.get_to_move();
 
@@ -620,7 +627,7 @@ void LadderDetection(
         const auto y = i / BOARD_SIZE;
         const auto vertex = state->board.get_vertex(x, y);
         if (state->board.get_state(vertex) != FastBoard::EMPTY
-            || policy[i] < ladder_min_policy
+            || result.policy[i] < ladder_min_policy
             || !state->is_move_legal(turn_color, vertex)) {
             continue;
         }
@@ -635,15 +642,26 @@ void LadderDetection(
 
             if (stone_count >= cfg_defense_stones) {
                 auto depth = IsLadderEscape(state.get(), vertex);
-                if (depth < 0 && -depth / 2 + stone_count > capture_count) {
+                if (depth <= -cfg_ladder_defense && -depth / 2 + stone_count > capture_count) {
 #ifndef NDEBUG
                     auto move_string = state->move_to_text(vertex);
                     myprintf("can't escape. %s(%s) depth count:%d policy:%f\n",
                         move_string.c_str(),
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
-                        depth, policy[i]);
+                        depth, result.policy[i]);
 #endif
-                    ladder_pos[i] = depth;
+                    auto j = 0;
+                    for (; j < check_nodes; j++) {
+                        if (result.policy[i] > policy[j + 1]) {
+                            result.policy[i] = policy[j + 2] * 0.9f;
+                            break;
+                        }
+                    }
+                    if (j < check_nodes && cfg_ladder_penalty_winrate > 0.0f) {
+                        result.winrate -=
+                            result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                        result.winrate = std::max(0.001f, result.winrate);
+                    }
                     state->undo_move();
                     continue;
                 }
@@ -654,7 +672,7 @@ void LadderDetection(
             continue;
         }
         auto depth = IsLadderChase(state.get(), vertex, base_state);
-        if (depth > 0) {
+        if (depth >= cfg_ladder_offense) {
 #ifndef NDEBUG
             auto move_string = state->move_to_text(vertex);
             myprintf("shouldn't chase. %s(%s) depth count:%d\n",
@@ -662,7 +680,12 @@ void LadderDetection(
                 turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                 depth);
 #endif
-            ladder_pos[i] = depth;
+            if (cfg_ladder_penalty_winrate > 0.0f) {
+                result.winrate -=
+                    result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                result.winrate = std::max(0.001f, result.winrate);
+            }
+            result.policy[i] = 0.0f;
         }
         state->undo_move();
     }

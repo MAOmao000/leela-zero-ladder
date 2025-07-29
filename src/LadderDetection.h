@@ -20,9 +20,6 @@ int IsLadderChase(
 
 void LadderDetection(
     const GameState* state,
-    int* const ladder_pos,
-    const std::array<float, NUM_INTERSECTIONS> &policy,
-    const float &ladder_min_policy,
-    const int &check_nodes = INT_MAX
+    Network::Netresult& result
 );
 #endif

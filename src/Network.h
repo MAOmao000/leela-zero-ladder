@@ -128,7 +128,6 @@ private:
                              Network::Netresult& result,
                              const bool full_batch,
                              bool selfcheck = false);
-    void ladder_update(const GameState* state, Network::Netresult& result);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
                                       std::vector<float>::iterator white,
