@@ -24,6 +24,9 @@
 #include "GTP.h"
 
 using namespace Utils;
+#if defined(USE_TENSOR_RT)
+using namespace nvinfer1;
+#endif
 
 void BE::squeeze_excitation_float(
     cublasHandle_t cublas_handle,
@@ -475,6 +478,18 @@ template <typename net_t>
 Backend<net_t>::Backend(
     const int gpu,
     const bool silent) {
+
+#if defined(USE_TENSOR_RT)
+    if (cfg_backend == backend_t::TENSORRT) {
+        // Certain minor versions of TensorRT uses a global logger, which is bad.
+        // Since TensorRT maintains ABI compatibility between minor versions, a dynamic library mismatch
+        // does not necessarily generate a dynamic link error, therefore, an extra check is required.
+        if (getInferLibVersion() / 100 != NV_TENSORRT_VERSION / 100) {
+            myprintf("TensorRT backend: detected incompatible version of TensorRT library.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+#endif
 
     auto best_bandwidth = 0.0;
     auto found_device = false;
