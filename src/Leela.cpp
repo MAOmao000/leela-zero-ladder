@@ -122,8 +122,8 @@ static void calculate_thread_count_gpu(
                 std::min(cfg_max_threads, cfg_batch_size * gpu_count * cfg_gpu_batch);
         } else {
             cfg_num_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
-            if (cfg_num_threads > 2) {
-                cfg_num_threads -= 2;
+            if (cfg_num_threads > 1) {
+                cfg_num_threads -= 1;
             }
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
