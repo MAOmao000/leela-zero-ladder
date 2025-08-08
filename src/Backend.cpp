@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017 Henrik Forsten
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -497,7 +497,9 @@ Backend<net_t>::Backend(
     auto best_device_id = 0;
     cudaDeviceProp best_device;
 
-    cudaGetDeviceCount(&nDevices);
+    if (cudaGetDeviceCount(&nDevices) != cudaSuccess) {
+        myprintf("cudaGetDeviceCount error(%d).\n", nDevices);
+    }
 
     if (!silent) {
         myprintf("Detected %d CUDA devices.\n", nDevices);
@@ -506,7 +508,9 @@ Backend<net_t>::Backend(
     for (int i = 0; i < nDevices; i++) {
         cudaDeviceProp prop;
         cudaGetDeviceProperties(&prop, i);
-        auto bandwidth = 2.0f * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6;
+        int clock_rate = 0;
+        cudaDeviceGetAttribute(&clock_rate, cudaDevAttrClockRate, i);
+        auto bandwidth = 2.0f * clock_rate * (prop.memoryBusWidth / 8) / 1.0e6;
         if (!silent) {
             myprintf("Device Number: %d\n", i);
             myprintf("  Device name: %s\n", prop.name);
