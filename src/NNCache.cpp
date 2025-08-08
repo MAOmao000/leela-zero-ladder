@@ -88,6 +88,9 @@ void NNCache::resize(const int size) {
 }
 
 void NNCache::clear() {
+    if (m_lookups) {
+        dump_stats();
+    }
     m_cache.clear();
     m_order.clear();
 }
@@ -105,7 +108,7 @@ void NNCache::set_size_from_playouts(const int max_playouts) {
 }
 
 void NNCache::dump_stats() {
-    Utils::myprintf(
+    Utils::myprintf_error(
         "NNCache: %d/%d hits/lookups = %.1f%% hitrate, %d inserts, %u size\n",
         m_hits, m_lookups, 100. * m_hits / (m_lookups + 1), m_inserts,
         m_cache.size());

@@ -351,7 +351,7 @@ void GTP::setup_default_parameters() {
     cfg_batch_size = 1;         // --batchsize
 
     cfg_max_memory = UCTSearch::DEFAULT_MAX_MEMORY;    // fix
-    cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
+    cfg_max_playouts = 2500; // UCTSearch::UNLIMITED_PLAYOUTS;  // -p, --playouts
     cfg_max_visits = UCTSearch::UNLIMITED_PLAYOUTS;    // -v, --visits
     // This will be overwriiten in initialize() after network size is known.
     cfg_max_tree_size = UCTSearch::DEFAULT_MAX_MEMORY; // fix

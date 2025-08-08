@@ -66,6 +66,11 @@ public:
                                          + sizeof(std::unique_ptr<Netresult>);
 
     NNCache(int size = MAX_CACHE_COUNT); // ~ 208MiB
+    ~NNCache() {
+        if (m_lookups) {
+            dump_stats();
+        }
+    }
 
     // Set a reasonable size gives max number of playouts
     void set_size_from_playouts(int max_playouts);
@@ -79,11 +84,6 @@ public:
 
     // Insert a new entry.
     void insert(std::uint64_t hash, const Netresult& result);
-
-    // Return the hit rate ratio.
-    std::pair<int, int> hit_rate() const {
-        return {m_hits, m_lookups};
-    }
 
     void dump_stats();
 
