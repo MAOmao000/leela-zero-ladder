@@ -135,7 +135,7 @@ std::shared_ptr<conv_descriptor> BackendGraph<net_t>::bias_value_init(
         intermediate_type = fe::DataType_t::FLOAT;
     } else {
         data_type = fe::DataType_t::HALF;
-        compute_type = fe::DataType_t::HALF;
+        compute_type = fe::DataType_t::FLOAT;
         intermediate_type = fe::DataType_t::HALF;
     }
     auto build_new_graph = [=](cudnnHandle_t handle) {
