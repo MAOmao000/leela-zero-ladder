@@ -109,6 +109,7 @@ static void calculate_thread_count_gpu(
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
                 / (gpu_count * cfg_gpu_batch);
+            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
@@ -128,6 +129,7 @@ static void calculate_thread_count_gpu(
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
                 / (gpu_count * cfg_gpu_batch);
+            cfg_num_threads = cfg_batch_size * gpu_count * cfg_gpu_batch;
             // no idea why somebody wants to use threads less than the number of GPUs
             // but should at least prevent crashing
             if (cfg_batch_size == 0) {
