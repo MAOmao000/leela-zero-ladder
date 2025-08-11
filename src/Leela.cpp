@@ -542,6 +542,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (cfg_max_playouts == 0) {
             cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
         }
+    } else {
+#if defined(USE_CPU_ONLY)
+        cfg_max_playouts = 2500;
+#else
+        if (cfg_cpu_only) {
+            cfg_max_playouts = 2500;
+        } else {
+            cfg_max_playouts = 20000;
+        }
+#endif
     }
 
     if (vm.count("visits")) {
