@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2018-2019 Junhee Yoo and contributors
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -43,6 +43,7 @@
 #include "OpenCL.h"
 #if defined(USE_CUDNN)
 #include "Backend.h"
+#include "BackendTensorRT.h"
 #endif
 
 #ifndef NDEBUG
@@ -78,7 +79,7 @@ public:
     GPUScheduler();
     ~GPUScheduler() override;
 
-    virtual void initialize(
+    void initialize(
         const int channels,
         const NetworkType net_type,
         const std::string &model_hash = nullptr
@@ -107,28 +108,28 @@ public:
 private:
     void drain() override;
     void resume() override;
-    virtual void push_input_convolution(
+    void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_residual(
+    void push_residual(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_residual_se(
+    void push_residual_se(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const size_t weight_index,
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
-    virtual void push_convolve(
+    void push_convolve(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
@@ -144,6 +145,7 @@ private:
     std::vector<std::unique_ptr<OpenCL<net_t>>> m_opencl;
 #if defined(USE_CUDNN)
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
+    std::vector<std::unique_ptr<BackendTRT>> m_backend_trt;
 #endif
 
 protected: // Member variables used by GPUSheduler

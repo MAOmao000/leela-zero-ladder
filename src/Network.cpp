@@ -491,7 +491,10 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(
 void Network::select_precision(const int channels) {
     std::string backend("OpenCL");
     if (cfg_backend == backend_t::TENSORRT) {
-        backend = "TensorRT";
+        myprintf("Initializing TensorRT (single precision).\n");
+        m_forward =
+            init_net(channels, std::make_unique<GPUScheduler<float>>());
+        return;
     } else if (cfg_backend == backend_t::CUDNNGRAPH) {
         backend = "cuDNN Graph";
     } else if (cfg_backend == backend_t::CUDNN) {

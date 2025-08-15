@@ -122,8 +122,8 @@ GPUScheduler<net_t>::GPUScheduler()
             m_backend.emplace_back(std::move(net));
 #if defined(USE_TENSOR_RT)
         } else if (cfg_backend == backend_t::TENSORRT) {
-            auto net = std::make_unique<BackendTRT<net_t>>(gpu, silent);
-            m_backend.emplace_back(std::move(net));
+            auto net = std::make_unique<BackendTRT>(gpu, silent);
+            m_backend_trt.emplace_back(std::move(net));
 #endif
 #endif
         }
@@ -157,6 +157,10 @@ void GPUScheduler<net_t>::initialize(
 #if defined(USE_CUDNN)
         if (cfg_backend == backend_t::OPENCL) {
             m_opencl[gnum]->initialize(channels, cfg_batch_size, net_type);
+#if defined(USE_TENSOR_RT)
+        } else if (cfg_backend == backend_t::TENSORRT) {
+            m_backend_trt[gnum]->initialize(channels, cfg_batch_size, net_type, num_worker_threads, model_hash);
+#endif
         } else {
             m_backend[gnum]->initialize(channels, cfg_batch_size, net_type, num_worker_threads, model_hash);
         }
@@ -195,32 +199,28 @@ GPUScheduler<net_t>::~GPUScheduler()
     }
 
 #if defined(USE_CUDNN)
-    for (const auto& backend : m_backend) {
-        for (auto iter = std::begin(backend->m_layers);
-            iter != std::end(backend->m_layers);
-            iter++)
-        {
-            const auto& layer = *iter;
-            for (auto it = layer.weights.begin();
-                it != layer.weights.end();
-                ++it)
+    if (cfg_backend == backend_t::TENSORRT) {
+        for (const auto& backend : m_backend_trt) {
+            for (auto iter = std::begin(backend->m_layers);
+                iter != std::end(backend->m_layers);
+                iter++)
             {
-                if (cfg_backend == backend_t::TENSORRT) {
+                const auto& layer = *iter;
+                for (auto it = layer.weights.begin();
+                    it != layer.weights.end();
+                    ++it)
+                {
                     void *w_mem;
                     cudaHostGetDevicePointer((void**)&w_mem, *it, 0);
                     if (w_mem) {
                         cudaFreeAsync(w_mem, cudaStreamDefault);
                     }
                     cudaFreeHost(*it);
-                } else {
-                    cudaFreeAsync(*it, cudaStreamDefault);
                 }
             }
         }
-    }
-    for (const auto& backend : m_backend) {
-        for (const auto& context : backend->m_context) {
-            if (cfg_backend == backend_t::TENSORRT) {
+        for (const auto& backend : m_backend_trt) {
+            for (const auto& context : backend->m_context) {
                 if (context->m_buffers_allocated) {
 #if defined(USE_TENSOR_RT)
                     for (auto ptr: context->mBuffers) {
@@ -228,35 +228,59 @@ GPUScheduler<net_t>::~GPUScheduler()
                     }
 #endif
                 }
-            } else if (context->m_buffers_allocated) {
-                if (context->m_workspace)
-                    cudaFreeAsync(context->m_workspace, cudaStreamDefault);
-                if (context->m_InBuffer)
-                    cudaFreeAsync(context->m_InBuffer, cudaStreamDefault);
-                if (context->m_OutBuffer)
-                    cudaFreeAsync(context->m_OutBuffer, cudaStreamDefault);
-                if (context->m_IdentityOutBuffer)
-                    cudaFreeAsync(context->m_IdentityOutBuffer, cudaStreamDefault);
-                if (context->m_PoolBuffer)
-                    cudaFreeAsync(context->m_PoolBuffer, cudaStreamDefault);
-                if (context->m_TempBuffer)
-                    cudaFreeAsync(context->m_TempBuffer, cudaStreamDefault);
-                if (m_net_type == NetworkType::MINIGO_SE) {
-                    if (context->m_alpha_16)
-                        cudaFreeAsync(context->m_alpha_16, cudaStreamDefault);
-                    if (context->m_alpha_32)
-                        cudaFreeAsync(context->m_alpha_32, cudaStreamDefault);
-                    if (context->m_beta_16)
-                        cudaFreeAsync(context->m_beta_16, cudaStreamDefault);
-                    if (context->m_beta_32)
-                        cudaFreeAsync(context->m_beta_32, cudaStreamDefault);
+            }
+        }
+        cudaStreamSynchronize(cudaStreamDefault);
+        for (auto& backend : m_backend_trt) {
+            backend.release();
+        }
+    } else {
+        for (const auto& backend : m_backend) {
+            for (auto iter = std::begin(backend->m_layers);
+                iter != std::end(backend->m_layers);
+                iter++)
+            {
+                const auto& layer = *iter;
+                for (auto it = layer.weights.begin();
+                    it != layer.weights.end();
+                    ++it)
+                {
+                    cudaFreeAsync(*it, cudaStreamDefault);
                 }
             }
         }
-    }
-    cudaStreamSynchronize(cudaStreamDefault);
-    for (auto& backend : m_backend) {
-        backend.release();
+        for (const auto& backend : m_backend) {
+            for (const auto& context : backend->m_context) {
+                if (context->m_buffers_allocated) {
+                    if (context->m_workspace)
+                        cudaFreeAsync(context->m_workspace, cudaStreamDefault);
+                    if (context->m_InBuffer)
+                        cudaFreeAsync(context->m_InBuffer, cudaStreamDefault);
+                    if (context->m_OutBuffer)
+                        cudaFreeAsync(context->m_OutBuffer, cudaStreamDefault);
+                    if (context->m_IdentityOutBuffer)
+                        cudaFreeAsync(context->m_IdentityOutBuffer, cudaStreamDefault);
+                    if (context->m_PoolBuffer)
+                        cudaFreeAsync(context->m_PoolBuffer, cudaStreamDefault);
+                    if (context->m_TempBuffer)
+                        cudaFreeAsync(context->m_TempBuffer, cudaStreamDefault);
+                    if (m_net_type == NetworkType::MINIGO_SE) {
+                        if (context->m_alpha_16)
+                            cudaFreeAsync(context->m_alpha_16, cudaStreamDefault);
+                        if (context->m_alpha_32)
+                            cudaFreeAsync(context->m_alpha_32, cudaStreamDefault);
+                        if (context->m_beta_16)
+                            cudaFreeAsync(context->m_beta_16, cudaStreamDefault);
+                        if (context->m_beta_32)
+                            cudaFreeAsync(context->m_beta_32, cudaStreamDefault);
+                    }
+                }
+            }
+        }
+        cudaStreamSynchronize(cudaStreamDefault);
+        for (auto& backend : m_backend) {
+            backend.release();
+        }
     }
 #endif
 }
@@ -272,7 +296,7 @@ bool GPUScheduler<net_t>::needs_autodetect()
             }
         }
 #if defined(USE_CUDNN)
-    } else {
+    } else if (cfg_backend != backend_t::TENSORRT) {
         for (auto& backend : m_backend) {
             // If any card has no native fp16 compute, we'll have to benchmark.
             if (!backend->has_fp16_compute() && !backend->has_tensor_cores()) {
@@ -294,15 +318,31 @@ void GPUScheduler<net_t>::push_input_convolution(
 {
 #if defined(USE_CUDNN)
     if (cfg_backend != backend_t::OPENCL) {
-        for (const auto& backend : m_backend) {
-            backend->push_input_convolution(
-                filter_size,
-                channels,
-                outputs,
-                weights->m_conv_weights[weight_index],
-                weights->m_batchnorm_means[weight_index]
-            );
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            for (const auto& backend : m_backend_trt) {
+                backend->push_input_convolution(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index]
+                );
+            }
+        } else {
+#endif
+            for (const auto& backend : m_backend) {
+                backend->push_input_convolution(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index]
+                );
+            }
+#if defined(USE_TENSOR_RT)
         }
+#endif
         return;
     }
 #endif
@@ -344,17 +384,35 @@ void GPUScheduler<net_t>::push_residual(
 {
 #if defined(USE_CUDNN)
     if (cfg_backend != backend_t::OPENCL) {
-        for (const auto& backend : m_backend) {
-            backend->push_residual(
-                filter_size,
-                channels,
-                outputs,
-                weights->m_conv_weights[weight_index],
-                weights->m_batchnorm_means[weight_index],
-                weights->m_conv_weights[weight_index + 1],
-                weights->m_batchnorm_means[weight_index + 1]
-            );
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            for (const auto& backend : m_backend_trt) {
+                backend->push_residual(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index],
+                    weights->m_conv_weights[weight_index + 1],
+                    weights->m_batchnorm_means[weight_index + 1]
+                );
+            }
+        } else {
+#endif
+            for (const auto& backend : m_backend) {
+                backend->push_residual(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index],
+                    weights->m_conv_weights[weight_index + 1],
+                    weights->m_batchnorm_means[weight_index + 1]
+                );
+            }
+#if defined(USE_TENSOR_RT)
         }
+#endif
         return;
     }
 #endif
@@ -395,21 +453,43 @@ void GPUScheduler<net_t>::push_residual_se(
 {
 #if defined(USE_CUDNN)
     if (cfg_backend != backend_t::OPENCL) {
-        for (const auto& backend : m_backend) {
-            backend->push_residual_se(
-                filter_size,
-                channels,
-                outputs,
-                weights->m_conv_weights[weight_index],
-                weights->m_batchnorm_means[weight_index],
-                weights->m_conv_weights[weight_index + 1],
-                weights->m_batchnorm_means[weight_index + 1],
-                weights->m_se_weights[weight_index - 1],
-                weights->m_se_biases[weight_index - 1],
-                weights->m_se_weights[weight_index],
-                weights->m_se_biases[weight_index]
-            );
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            for (const auto& backend : m_backend_trt) {
+                backend->push_residual_se(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index],
+                    weights->m_conv_weights[weight_index + 1],
+                    weights->m_batchnorm_means[weight_index + 1],
+                    weights->m_se_weights[weight_index - 1],
+                    weights->m_se_biases[weight_index - 1],
+                    weights->m_se_weights[weight_index],
+                    weights->m_se_biases[weight_index]
+                );
+            }
+        } else {
+#endif
+            for (const auto& backend : m_backend) {
+                backend->push_residual_se(
+                    filter_size,
+                    channels,
+                    outputs,
+                    weights->m_conv_weights[weight_index],
+                    weights->m_batchnorm_means[weight_index],
+                    weights->m_conv_weights[weight_index + 1],
+                    weights->m_batchnorm_means[weight_index + 1],
+                    weights->m_se_weights[weight_index - 1],
+                    weights->m_se_biases[weight_index - 1],
+                    weights->m_se_weights[weight_index],
+                    weights->m_se_biases[weight_index]
+                );
+            }
+#if defined(USE_TENSOR_RT)
         }
+#endif
         return;
     }
 #endif
@@ -459,33 +539,67 @@ void GPUScheduler<net_t>::push_convolve(
 {
 #if defined(USE_CUDNN)
     if (cfg_backend != backend_t::OPENCL) {
-        for (const auto& backend : m_backend) {
-            if (outputs == Network::OUTPUTS_POLICY) {
-                backend->push_convolve(
-                    filter_size,
-                    channels,
-                    outputs,
-                    weights->m_conv_pol_w,
-                    weights->m_bn_pol_w1,
-                    weights->m_ip_pol_w, 
-                    weights->m_ip_pol_b,
-                    weights->m_ip_pol_w, 
-                    weights->m_ip_pol_b
-                );
-            } else {
-                backend->push_convolve(
-                    filter_size,
-                    channels,
-                    outputs,
-                    weights->m_conv_val_w,
-                    weights->m_bn_val_w1,
-                    weights->m_ip1_val_w,
-                    weights->m_ip1_val_b,
-                    weights->m_ip2_val_w,
-                    weights->m_ip2_val_b
-                );
+#if defined(USE_TENSOR_RT)
+        if (cfg_backend == backend_t::TENSORRT) {
+            for (const auto& backend : m_backend_trt) {
+                if (outputs == Network::OUTPUTS_POLICY) {
+                    backend->push_convolve(
+                        filter_size,
+                        channels,
+                        outputs,
+                        weights->m_conv_pol_w,
+                        weights->m_bn_pol_w1,
+                        weights->m_ip_pol_w, 
+                        weights->m_ip_pol_b,
+                        weights->m_ip_pol_w, 
+                        weights->m_ip_pol_b
+                    );
+                } else {
+                    backend->push_convolve(
+                        filter_size,
+                        channels,
+                        outputs,
+                        weights->m_conv_val_w,
+                        weights->m_bn_val_w1,
+                        weights->m_ip1_val_w,
+                        weights->m_ip1_val_b,
+                        weights->m_ip2_val_w,
+                        weights->m_ip2_val_b
+                    );
+                }
             }
+        } else {
+#endif
+            for (const auto& backend : m_backend) {
+                if (outputs == Network::OUTPUTS_POLICY) {
+                    backend->push_convolve(
+                        filter_size,
+                        channels,
+                        outputs,
+                        weights->m_conv_pol_w,
+                        weights->m_bn_pol_w1,
+                        weights->m_ip_pol_w, 
+                        weights->m_ip_pol_b,
+                        weights->m_ip_pol_w, 
+                        weights->m_ip_pol_b
+                    );
+                } else {
+                    backend->push_convolve(
+                        filter_size,
+                        channels,
+                        outputs,
+                        weights->m_conv_val_w,
+                        weights->m_bn_val_w1,
+                        weights->m_ip1_val_w,
+                        weights->m_ip1_val_b,
+                        weights->m_ip2_val_w,
+                        weights->m_ip2_val_b
+                    );
+                }
+            }
+#if defined(USE_TENSOR_RT)
         }
+#endif
         return;
     }
 #endif
@@ -599,6 +713,7 @@ bool GPUScheduler<net_t>::forward(
     if (m_draining.load()) {
         return false;
     }
+#if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
         auto entry =
             std::make_shared<ForwardQueueEntry>(input, output_pol, output_val, full_batch);
@@ -618,6 +733,7 @@ bool GPUScheduler<net_t>::forward(
         }
         return true;
     }
+#endif
     std::vector<float> policy_data(Network::OUTPUTS_POLICY * NUM_INTERSECTIONS);
     std::vector<float> value_data(Network::OUTPUTS_VALUE * NUM_INTERSECTIONS);
     auto entry =
@@ -854,14 +970,16 @@ void GPUScheduler<net_t>::batch_worker(
                     (const int)count
                 );
 #if defined(USE_CUDNN)
+#if defined(USE_TENSOR_RT)
             } else if (cfg_backend == backend_t::TENSORRT) {
-                m_backend[gnum]->forward(
+                m_backend_trt[gnum]->forward(
                     batch_input,
                     batch_output_pol,
                     batch_output_val,
                     static_cast<int>(tid),
                     static_cast<int>(count)
                 );
+#endif
             } else {
                 m_backend[gnum]->forward(
                     batch_input,
