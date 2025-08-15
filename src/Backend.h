@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#if defined(USE_TENSOR_RT) || defined(USE_CUDNN)
+#if defined(USE_CUDNN)
 #include <cassert>
 #include <cstddef>
 #include <memory>
@@ -50,21 +50,12 @@
 #include <cublas_v2.h>
 #include <cudnn_frontend.h>
 
-#if defined(USE_TENSOR_RT)
-#include <cuda_runtime_api.h>
-#include "NvInfer.h"
-#include "sha2.h"
-#endif
-
 #include "Utils.h"
 
 using namespace Utils;
 
 template <typename net_t> class BackendCuDNN;
 template <typename net_t> class BackendGraph;
-#if defined(USE_TENSOR_RT)
-template <typename net_t> class BackendTRT;
-#endif
 
 namespace fe = cudnn_frontend;
 
@@ -227,11 +218,6 @@ public:
     void *m_alpha_32{nullptr};
     void *m_beta_16{nullptr};
     void *m_beta_32{nullptr};
-#if defined(USE_TENSOR_RT)
-    // Only TENSORRT backend are used.
-    std::unique_ptr<nvinfer1::IExecutionContext> mContext{nullptr};
-    std::map<std::string, void*> mBuffers;
-#endif
 };
 
 // Only CUDNN and CUDNNGRAPH backend are used.
@@ -271,11 +257,6 @@ public:
     std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc;
 #ifndef _WIN32
     std::vector<std::shared_ptr<conv_descriptor>> bias_desc;
-#endif
-#if defined(USE_TENSOR_RT)
-    // Only TENSORRT backend are used.
-    std::vector<int64_t> weights_size;
-    std::string name;
 #endif
 };
 
@@ -431,18 +412,6 @@ void squeeze_excitation(
             isTensorCore);
     }
 }
-
-#if defined(USE_TENSOR_RT)
-struct InferDeleter {
-    template <typename T>
-    void operator()(T* obj) const {
-        delete obj;
-    }
-};
-
-template <typename T>
-using TrtUniquePtr = std::unique_ptr<T, InferDeleter>;
-#endif
 
 template <typename net_t>
 class Backend {
