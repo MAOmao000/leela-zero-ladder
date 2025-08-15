@@ -43,6 +43,14 @@
 #include "Network.h"
 #include "UCTSearch.h"
 
+namespace TimeManagement {
+    enum enabled_t {
+        AUTO = -1, OFF = 0, ON = 1, FAST = 2, NO_PRUNING = 3
+    };
+};
+
+class UCTSearch;
+
 #if defined(USE_TENSOR_RT)
 #include <iostream>
 #include "NvInfer.h"
@@ -200,7 +208,9 @@ extern int cfg_ladder_offense;
 extern int cfg_defense_stones;
 extern int cfg_offense_stones;
 extern int cfg_ladder_check_nodes;
+extern int cfg_ladder_penalty_base;
 extern float cfg_ladder_penalty_winrate;
+extern float cfg_ladder_penalty_policy;
 extern float cfg_ladder_min_policy;
 extern int cfg_ladder_defense_root;
 extern int cfg_ladder_offense_root;

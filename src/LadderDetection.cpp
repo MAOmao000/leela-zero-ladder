@@ -650,10 +650,10 @@ void LadderDetection(
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                         depth, result.policy[i]);
 #endif
-                    auto j = 1;
+                    auto j = cfg_ladder_penalty_base;
                     for (; j < check_nodes; j++) {
                         if (result.policy[i] > policy[j]) {
-                            result.policy[i] = policy[j] * 0.9f;
+                            result.policy[i] = policy[j] * cfg_ladder_penalty_policy;
                             break;
                         }
                     }

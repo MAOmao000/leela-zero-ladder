@@ -193,8 +193,12 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder offense check minimum stones.")
         ("ladder_check_nodes", po::value<int>()->default_value(cfg_ladder_check_nodes),
                       "Number of nodes to check ladder.")
+        ("ladder_penalty_base", po::value<int>()->default_value(cfg_ladder_penalty_base),
+                      "Indice of defensive penalty node to check ladder.")
         ("ladder_penalty_winrate", po::value<float>(),
                       "The rate at which the ladder reduces the winning rate of the board.")
+        ("ladder_penalty_policy", po::value<float>(),
+                      "The rate at which the ladder reduces the defensive policy.")
         ("ladder_min_policy", po::value<float>(),
                       "Minimal policy that does ladder detect checking.")
         ("ladder_defense_root", po::value<int>()->default_value(cfg_ladder_defense_root),
@@ -647,8 +651,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         cfg_ladder_check_nodes = vm["ladder_check_nodes"].as<int>();
     }
 
+    if (vm.count("ladder_penalty_base")) {
+        cfg_ladder_penalty_base = vm["ladder_penalty_base"].as<int>();
+    }
+
     if (vm.count("ladder_penalty_winrate")) {
         cfg_ladder_penalty_winrate = vm["ladder_penalty_winrate"].as<float>();
+    }
+
+    if (vm.count("ladder_penalty_policy")) {
+        cfg_ladder_penalty_policy = vm["ladder_penalty_policy"].as<float>();
     }
 
     if (vm.count("ladder_min_policy")) {
