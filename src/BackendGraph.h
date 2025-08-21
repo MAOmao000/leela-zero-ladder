@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017 Henrik Forsten
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -110,23 +110,6 @@ private:
         const int outputs,
         const size_t batch_size = 1
     );
-
-#ifndef _WIN32
-    std::shared_ptr<conv_descriptor> convolve_value_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const int filter_size,
-        const size_t batch_size = 1
-    );
-
-    std::shared_ptr<conv_descriptor> bias_value_init(
-        cudnnHandle_t handle,
-        const int channels,
-        const int outputs,
-        const size_t batch_size = 1
-    );
-#endif
 
     void push_weights(
         const size_t layer,
