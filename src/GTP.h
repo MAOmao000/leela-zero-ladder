@@ -214,11 +214,6 @@ extern float cfg_ladder_penalty_policy;
 extern float cfg_ladder_min_policy;
 extern int cfg_ladder_defense_root;
 extern int cfg_ladder_offense_root;
-extern float cfg_cut_policy;
-enum class style_t {
-    STANDARD, STABLE, RISKY
-};
-extern style_t cfg_play_style;
 
 extern AnalyzeTags cfg_analyze_tags;
 
