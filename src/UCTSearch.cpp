@@ -51,6 +51,11 @@
 #include "Timing.h"
 #include "Training.h"
 #include "Utils.h"
+#ifndef NDEBUG
+#if !defined(USE_CPU_ONLY)
+#include "GPUScheduler.h"
+#endif
+#endif
 
 using namespace Utils;
 
