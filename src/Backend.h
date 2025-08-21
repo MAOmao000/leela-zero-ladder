@@ -1,7 +1,7 @@
 /*
     This file is part of Leela Zero.
     Copyright (C) 2017 Henrik Forsten
-    Copyright (C) 2024 MAOmao000
+    Copyright (C) 2025 MAOmao000
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -255,9 +255,6 @@ public:
     std::vector<std::shared_ptr<conv_descriptor>> conv_desc;
     std::vector<std::shared_ptr<conv_descriptor>> conv_no_relu_desc;
     std::vector<std::shared_ptr<conv_descriptor>> conv_add_relu_desc;
-#ifndef _WIN32
-    std::vector<std::shared_ptr<conv_descriptor>> bias_desc;
-#endif
 };
 
 // Filter layout KRSC: output, rows, columns, inputs
