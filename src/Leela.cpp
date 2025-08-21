@@ -89,6 +89,9 @@ static void calculate_thread_count_gpu(
     // 1) if no args are given, use batch size of 5 and thread count of (batch size) * (number of gpus) * 2
     // 2) if number of threads are given, use batch size of (thread count) / (number of gpus) / 2
     // 3) if number of batches are given, use thread count of (batch size) * (number of gpus) * 2
+    if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
+        cfg_gpu_batch = 2;
+    }
     auto gpu_count = cfg_gpus.size();
     if (gpu_count == 0) {
         // size of zero if autodetect GPU : default to 1
@@ -125,6 +128,11 @@ static void calculate_thread_count_gpu(
             cfg_num_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
             if (cfg_num_threads > 1) {
                 cfg_num_threads -= 1;
+            }
+            if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
+                if (cfg_num_threads > 1) {
+                    cfg_num_threads -= 1;
+                }
             }
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)
@@ -205,10 +213,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Ladder defense check minimum depth of root.")
         ("ladder_offense_root", po::value<int>()->default_value(cfg_ladder_offense_root),
                       "Ladder offense check minimum depth of root.")
-        ("cut_policy", po::value<float>(),
-                      "Minimum policy when creating UCT nodes.")
-        ("play_style", po::value<std::string>()->default_value("standard"),
-                      "Leela Zero's play style (standard/stable/risky).")
         ;
 #ifndef USE_CPU_ONLY
     po::options_description gpu_desc("GPU device options");
@@ -222,7 +226,7 @@ static void parse_commandline(const int argc, const char* const argv[]) {
                       "Default is to auto which automatically determines which one to use.")
         ("batchwait", po::value<int>()->default_value(cfg_batch_wait_time),
                       "Wait time milliseconds for full batch.")
-        ("gpu_batch", po::value<std::string>()->default_value("single"),
+        ("gpu_batch", po::value<std::string>(),
                       "Should one GPU be assigned to one GPU batch or two? (single/double)")
 #if defined(USE_TENSOR_RT)
         ("backend", po::value<std::string>()->default_value("tensorrt"),
@@ -385,14 +389,16 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (vm.count("gpu")) {
             cfg_gpus = vm["gpu"].as<std::vector<int>>();
         }
-        auto gpu_batch = vm["gpu_batch"].as<std::string>();
-        if ("single" == gpu_batch) {
-            cfg_gpu_batch = 1;
-        } else if ("double" == gpu_batch) {
-            cfg_gpu_batch = 2;
-        } else {
-            printf("Unexpected option for --gpu_batch, single/double.\n");
-            exit(EXIT_FAILURE);
+        if (vm.count("gpu_batch")) {
+            auto gpu_batch = vm["gpu_batch"].as<std::string>();
+            if ("single" == gpu_batch) {
+                cfg_gpu_batch = 1;
+            } else if ("double" == gpu_batch) {
+                cfg_gpu_batch = 2;
+            } else {
+                printf("Unexpected option for --gpu_batch, single/double.\n");
+                exit(EXIT_FAILURE);
+            }
         }
         if (vm.count("precision")) {
             auto precision = vm["precision"].as<std::string>();
@@ -476,6 +482,10 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 #endif
 #if defined(USE_CUDNN)
         if (cfg_backend == backend_t::CUDNNGRAPH) {
+            if (vm.count("channel-first")) {
+                printf("The cudnngraph backend does not support the channel-first option\n");
+                exit(EXIT_FAILURE);
+            }
             calculate_thread_count_gpu(vm);
             myprintf("Using CuDNN Graph batch size of %d\n", cfg_batch_size);
         } else if (cfg_backend == backend_t::CUDNN) {
@@ -546,16 +556,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
         if (cfg_max_playouts == 0) {
             cfg_max_playouts = UCTSearch::UNLIMITED_PLAYOUTS;
         }
-    } else {
-#if defined(USE_CPU_ONLY)
-        cfg_max_playouts = 2500;
-#else
-        if (cfg_cpu_only) {
-            cfg_max_playouts = 2500;
-        } else {
-            cfg_max_playouts = 20000;
-        }
-#endif
     }
 
     if (vm.count("visits")) {
@@ -673,24 +673,6 @@ static void parse_commandline(const int argc, const char* const argv[]) {
 
     if (vm.count("ladder_offense_root")) {
         cfg_ladder_offense_root = vm["ladder_offense_root"].as<int>();;
-    }
-
-    if (vm.count("cut_policy")) {
-        cfg_cut_policy = vm["cut_policy"].as<float>();
-    }
-
-    if (vm.count("play_style")) {
-        auto play_style = vm["play_style"].as<std::string>();
-        if (play_style == "standard") {
-            cfg_play_style = style_t::STANDARD;
-        } else if (play_style == "stable") {
-            cfg_play_style = style_t::STABLE;
-        } else if (play_style == "risky") {
-            cfg_play_style = style_t::RISKY;
-        } else {
-            printf("Invalid play_style value.\n");
-            exit(EXIT_FAILURE);
-        }
     }
 
     auto out = std::stringstream{};
