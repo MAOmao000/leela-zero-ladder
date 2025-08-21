@@ -62,7 +62,7 @@ if(GccSpecificFlags)
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-uninitialized -Wno-unused-value \
         -Wno-mismatched-tags -Wno-deprecated-copy-with-user-provided-copy -Wno-inconsistent-missing-override \
-        -Wno-nan-infinity-disabled -Wno-deprecated-declarations")
+        -Wno-deprecated-declarations")
   else()
     set(GCC_DISABLED_WARNING_COMPILE_FLAGS "-Wno-ignored-attributes -Wno-maybe-uninitialized \
         -Wno-mismatched-tags -Wno-deprecated-copy")
