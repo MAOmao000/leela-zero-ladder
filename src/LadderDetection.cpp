@@ -650,17 +650,26 @@ void LadderDetection(
                         turn_color == FastBoard::WHITE ? "WHITE": "BLACK",
                         depth, result.policy[i]);
 #endif
-                    auto j = cfg_ladder_penalty_base;
-                    for (; j < check_nodes; j++) {
-                        if (result.policy[i] > policy[j]) {
-                            result.policy[i] = policy[j] * cfg_ladder_penalty_policy;
-                            break;
+                    if (cfg_ladder_penalty_base) {
+                        auto j = cfg_ladder_penalty_base;
+                        for (; j < check_nodes; j++) {
+                            if (result.policy[i] > policy[j]) {
+                                result.policy[i] = policy[j] * cfg_ladder_penalty_policy;
+                                break;
+                            }
                         }
-                    }
-                    if (j < check_nodes && cfg_ladder_penalty_winrate > 0.0f) {
-                        result.winrate -=
-                            result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
-                        result.winrate = std::max(0.001f, result.winrate);
+                        if (j < check_nodes && cfg_ladder_penalty_winrate > 0.0f) {
+                            result.winrate -=
+                                result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                            result.winrate = std::max(0.001f, result.winrate);
+                        }
+                    } else {
+                        if (cfg_ladder_penalty_winrate > 0.0f) {
+                            result.winrate -=
+                                result.winrate * result.policy[i] * cfg_ladder_penalty_winrate;
+                            result.winrate = std::max(0.001f, result.winrate);
+                        }
+                        result.policy[i] = 0.0f;
                     }
                     state->undo_move();
                     continue;
