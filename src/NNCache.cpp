@@ -87,9 +87,9 @@ void NNCache::resize(const int size) {
     }
 }
 
-void NNCache::clear() {
-    if (m_lookups) {
-        dump_stats();
+void NNCache::clear(bool dump_stats) {
+    if (m_lookups && dump_stats) {
+        NNCache::dump_stats();
     }
     m_cache.clear();
     m_order.clear();

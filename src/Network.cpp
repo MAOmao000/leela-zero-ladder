@@ -1060,8 +1060,12 @@ void Network::nncache_resize(const int max_count) {
     return m_nncache.resize(max_count);
 }
 
-void Network::nncache_clear() {
-    m_nncache.clear();
+void Network::nncache_clear(bool dump_stats) {
+    m_nncache.clear(dump_stats);
+}
+
+void Network::nncache_dump() {
+    m_nncache.dump_stats();
 }
 
 void Network::drain_evals() {
