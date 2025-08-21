@@ -124,8 +124,6 @@ float cfg_ladder_penalty_policy;
 float cfg_ladder_min_policy;
 int cfg_ladder_defense_root;
 int cfg_ladder_offense_root;
-float cfg_cut_policy;
-style_t cfg_play_style;
 
 AnalyzeTags cfg_analyze_tags;
 
@@ -416,8 +414,6 @@ void GTP::setup_default_parameters() {
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root
-    cfg_cut_policy = 0.005f;            // --cut_policy
-    cfg_play_style = style_t::STABLE;   // --play_style
 
     cfg_analyze_tags = AnalyzeTags{};
 
@@ -673,6 +669,9 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         } else {
             gtp_fail_printf(id, "syntax not understood");
         }
+        if (game.has_resigned()) {
+            s_network->nncache_dump();
+        }
         return;
     } else if (command.find("genmove") == 0
                || command.find("lz-genmove_analyze") == 0) {
@@ -741,6 +740,9 @@ void GTP::execute(GameState& game, const std::string& xinput) {
             gtp_printf_raw("\n");
         }
         cfg_analyze_tags = {};
+        if (game.has_resigned()) {
+            s_network->nncache_dump();
+        }
         return;
     } else if (command.find("lz-analyze") == 0) {
         std::istringstream cmdstream(command);
@@ -984,7 +986,7 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         gtp_printf_raw("\n");
         return;
     } else if (command.find("clear_cache") == 0) {
-        s_network->nncache_clear();
+        s_network->nncache_clear(!game.has_resigned());
         gtp_printf(id, "");
         return;
     } else if (command.find("place_free_handicap") == 0) {
