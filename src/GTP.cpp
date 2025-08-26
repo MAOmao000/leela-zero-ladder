@@ -922,8 +922,8 @@ void GTP::execute(GameState& game, const std::string& xinput) {
                                         Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false, s,
-                                            false);
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
+                                            s, false);
                 if (ret) {
                     Network::show_heatmap(&game, vec, false);
                 }

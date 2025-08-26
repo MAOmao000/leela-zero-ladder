@@ -834,6 +834,7 @@ bool Network::get_output(
     if (cfg_ladder_defense > 0 || cfg_ladder_offense > 0) {
         LadderDetection(state, result);
     }
+
     if (write_cache) {
         // Insert result into cache.
         m_nncache.insert(state->board.get_hash(), result);
