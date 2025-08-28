@@ -47,6 +47,7 @@
 #define CUDA_API_PER_THREAD_DEFAULT_STREAM
 
 #include <cuda_runtime_api.h>
+#include <cuda_fp16.h>
 #include "NvInfer.h"
 
 #include "sha2.h"
@@ -204,6 +205,7 @@ public:
     }
 };
 
+template <typename net_t>
 class BackendTRT {
 public:
     BackendTRT() {}

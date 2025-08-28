@@ -86,9 +86,6 @@ public:
 
     void initialize(int playouts, const std::string& weightsfile);
 
-#if !defined(USE_CPU_ONLY)
-    float benchmark_time(int centiseconds);
-#endif
     void benchmark(const GameState* state, int iterations = 1600);
     static void show_heatmap(const FastState* state, const Netresult& netres,
                              bool topmoves);
@@ -119,6 +116,9 @@ public:
     }
 
 private:
+#if !defined(USE_CPU_ONLY)
+    float benchmark_time(int centiseconds);
+#endif
     std::pair<int, int> load_v1_network(std::istream& wtfile);
     std::pair<int, int> load_network_file(const std::string& filename);
 

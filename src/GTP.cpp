@@ -405,12 +405,12 @@ void GTP::setup_default_parameters() {
 
     cfg_ladder_defense = 11;            // --ladder_defense
     cfg_ladder_offense = 8;             // --ladder_offense
-    cfg_defense_stones = 1;             // --defense_stones
+    cfg_defense_stones = 0;             // --defense_stones
     cfg_offense_stones = 4;             // --offense_stones
     cfg_ladder_check_nodes = 10;        // --ladder_check_nodes
-    cfg_ladder_penalty_base = 1;        // --ladder_penalty_base
+    cfg_ladder_penalty_base = 2;        // --ladder_penalty_base
     cfg_ladder_penalty_winrate = 0.9f;  // --ladder_penalty_winrate
-    cfg_ladder_penalty_policy = 0.5f;   // --ladder_penalty_policy
+    cfg_ladder_penalty_policy = 0.9f;   // --ladder_penalty_policy
     cfg_ladder_min_policy = 0.0005f;    // --ladder_min_policy
     cfg_ladder_defense_root = 0;        // --ladder_defense_root
     cfg_ladder_offense_root = 0;        // --ladder_offense_root

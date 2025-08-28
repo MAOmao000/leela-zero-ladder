@@ -122,7 +122,7 @@ GPUScheduler<net_t>::GPUScheduler()
             m_backend.emplace_back(std::move(net));
 #if defined(USE_TENSOR_RT)
         } else if (cfg_backend == backend_t::TENSORRT) {
-            auto net = std::make_unique<BackendTRT>(gpu, silent);
+            auto net = std::make_unique<BackendTRT<net_t>>(gpu, silent);
             m_backend_trt.emplace_back(std::move(net));
 #endif
 #endif

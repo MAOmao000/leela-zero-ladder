@@ -145,7 +145,7 @@ private:
     std::vector<std::unique_ptr<OpenCL<net_t>>> m_opencl;
 #if defined(USE_CUDNN)
     std::vector<std::unique_ptr<Backend<net_t>>> m_backend;
-    std::vector<std::unique_ptr<BackendTRT>> m_backend_trt;
+    std::vector<std::unique_ptr<BackendTRT<net_t>>> m_backend_trt;
 #endif
 
 protected: // Member variables used by GPUSheduler
