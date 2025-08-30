@@ -1062,9 +1062,11 @@ void Network::nncache_clear(bool dump_stats) {
     m_nncache.clear(dump_stats);
 }
 
+#ifndef NDEBUG
 void Network::nncache_dump() {
     m_nncache.dump_stats();
 }
+#endif
 
 void Network::drain_evals() {
     if (!cfg_cpu_only) {

@@ -100,7 +100,9 @@ public:
     size_t get_estimated_cache_size();
     void nncache_resize(int max_count);
     void nncache_clear(bool dump_stats);
+#ifndef NDEBUG
     void nncache_dump();
+#endif
 
     void drain_evals();
 

@@ -66,11 +66,13 @@ public:
                                          + sizeof(std::unique_ptr<Netresult>);
 
     NNCache(int size = MAX_CACHE_COUNT); // ~ 208MiB
+#ifndef NDEBUG
     ~NNCache() {
         if (m_lookups) {
             dump_stats();
         }
     }
+#endif
 
     // Set a reasonable size gives max number of playouts
     void set_size_from_playouts(int max_playouts);
@@ -85,7 +87,9 @@ public:
     // Insert a new entry.
     void insert(std::uint64_t hash, const Netresult& result);
 
+#ifndef NDEBUG
     void dump_stats();
+#endif
 
     // Return the estimated memory consumption of the cache.
     size_t get_estimated_size();
