@@ -86,12 +86,16 @@ static void calculate_thread_count_gpu(
     auto cfg_max_threads = size_t{MAX_CPUS};
 
     // Default thread count : GPU case
-    // 1) if no args are given, use batch size of 5 and thread count of (batch size) * (number of gpus) * 2
-    // 2) if number of threads are given, use batch size of (thread count) / (number of gpus) / 2
-    // 3) if number of batches are given, use thread count of (batch size) * (number of gpus) * 2
-    if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
-        cfg_gpu_batch = 2;
-    }
+    // 1) If neither the number of threads nor the batch size argument is specified,
+    //   the number of threads = number of logical cores - 1,
+    //   and batch size = (number of threads + (number of GPUs) * (batch ratio) - 1)/((number of GPUs) * (batch ratio)).
+    //   The batch ratio is 1 if the argument gpu_batch is single, and 2 if it is double.
+    // 2) If only the batch size argument is not specified,
+    //   batch size = (number of threads + (number of GPUs) * (batch ratio) - 1) / ((number of GPUs) * (batch ratio)).
+    //   The batch ratio is 1 if the argument gpu_batch is single, and 2 if it is double.
+    // 3) If only the number of threads argument is not specified,
+    //   the number of threads = batch size * (number of GPUs) * (batch ratio) is used.
+    //   The batch ratio is 1 if the argument gpu_batch is single, and 2 if it is double.
     auto gpu_count = cfg_gpus.size();
     if (gpu_count == 0) {
         // size of zero if autodetect GPU : default to 1
@@ -128,11 +132,6 @@ static void calculate_thread_count_gpu(
             cfg_num_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
             if (cfg_num_threads > 1) {
                 cfg_num_threads -= 1;
-            }
-            if (!vm.count("gpu_batch") && SMP::get_num_cpus() < 16) {
-                if (cfg_num_threads > 1) {
-                    cfg_num_threads -= 1;
-                }
             }
             cfg_batch_size =
                 (cfg_num_threads + (gpu_count * cfg_gpu_batch) - 1)

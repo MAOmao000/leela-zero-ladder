@@ -669,9 +669,11 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         } else {
             gtp_fail_printf(id, "syntax not understood");
         }
+#ifndef NDEBUG
         if (game.has_resigned()) {
             s_network->nncache_dump();
         }
+#endif
         return;
     } else if (command.find("genmove") == 0
                || command.find("lz-genmove_analyze") == 0) {
@@ -740,9 +742,11 @@ void GTP::execute(GameState& game, const std::string& xinput) {
             gtp_printf_raw("\n");
         }
         cfg_analyze_tags = {};
+#ifndef NDEBUG
         if (game.has_resigned()) {
             s_network->nncache_dump();
         }
+#endif
         return;
     } else if (command.find("lz-analyze") == 0) {
         std::istringstream cmdstream(command);
