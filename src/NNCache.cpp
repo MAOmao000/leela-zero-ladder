@@ -92,6 +92,8 @@ void NNCache::clear(bool dump_stats) {
     if (m_lookups && dump_stats) {
         NNCache::dump_stats();
     }
+#else
+    (void) dump_stats;
 #endif
     m_cache.clear();
     m_order.clear();
