@@ -128,7 +128,7 @@ enum class NetworkType {
 static constexpr auto PROGRAM_NAME = "Leela Zero(ladder detection)";
 static constexpr auto PROGRAM_VERSION_MAJOR = "3";
 static constexpr auto PROGRAM_VERSION_MINOR = "0";
-static constexpr auto PROGRAM_VERSION_PATCH = "5";
+static constexpr auto PROGRAM_VERSION_PATCH = "6";
 
 /*
  * OpenBLAS limitation: the default configuration on some Linuxes
