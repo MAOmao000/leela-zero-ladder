@@ -922,21 +922,21 @@ void GTP::execute(GameState& game, const std::string& xinput) {
         Network::Netresult vec;
         if (cmdstream.fail()) {
             // Default = DIRECT with no symmetric change
-            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
                                         Network::IDENTITY_SYMMETRY, false);
         } else if (symmetry == "all") {
             for (auto s = 0; s < Network::NUM_SYMMETRIES; ++s) {
-                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
+                ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
                                             s, false);
                 if (ret) {
                     Network::show_heatmap(&game, vec, false);
                 }
             }
         } else if (symmetry == "average" || symmetry == "avg") {
-            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec, false,
+            ret = s_network->get_output(&game, Network::Ensemble::AVERAGE, vec,
                                         -1, false);
         } else {
-            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec, false,
+            ret = s_network->get_output(&game, Network::Ensemble::DIRECT, vec,
                                         std::stoi(symmetry), false);
         }
 

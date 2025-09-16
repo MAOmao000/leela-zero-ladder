@@ -191,7 +191,7 @@ GPUScheduler<net_t>::~GPUScheduler()
 {
     {
         std::unique_lock<std::mutex> lk(m_mutex);
-        m_running = false;
+        set_gpu_run(Network::TERMINATION);
     }
     m_cv.notify_all();
     for (auto& x : m_worker_threads) {
@@ -707,16 +707,15 @@ template <typename net_t>
 bool GPUScheduler<net_t>::forward(
     const std::vector<float>& input,
     std::vector<float>& output_pol,
-    std::vector<float>& output_val,
-    const bool full_batch)
+    std::vector<float>& output_val)
 {
-    if (m_draining.load()) {
+    if (m_running.load() == Network::TERMINATION) {
         return false;
     }
 #if defined(USE_TENSOR_RT)
     if (cfg_backend == backend_t::TENSORRT) {
         auto entry =
-            std::make_shared<ForwardQueueEntry>(input, output_pol, output_val, full_batch);
+            std::make_shared<ForwardQueueEntry>(input, output_pol, output_val);
         size_t queue_size = 0;
         std::unique_lock<std::mutex> lk(entry->mutex);
         {
@@ -724,7 +723,7 @@ bool GPUScheduler<net_t>::forward(
             m_forward_queue.emplace_back(entry);
             queue_size = m_forward_queue.size();
         }
-        if (!full_batch || queue_size >= cfg_batch_size) {
+        if (m_running.load() == Network::INITIAL || queue_size >= cfg_batch_size) {
             m_cv.notify_one();
         }
         entry->cv.wait(lk);
@@ -737,7 +736,7 @@ bool GPUScheduler<net_t>::forward(
     std::vector<float> policy_data(Network::OUTPUTS_POLICY * NUM_INTERSECTIONS);
     std::vector<float> value_data(Network::OUTPUTS_VALUE * NUM_INTERSECTIONS);
     auto entry =
-        std::make_shared<ForwardQueueEntry>(input, policy_data, value_data, full_batch);
+        std::make_shared<ForwardQueueEntry>(input, policy_data, value_data);
     size_t queue_size = 0;
     std::unique_lock<std::mutex> lk(entry->mutex);
     {
@@ -750,7 +749,7 @@ bool GPUScheduler<net_t>::forward(
             m_waittime += 2;
         }
     }
-    if (!full_batch || queue_size >= cfg_batch_size) {
+    if (m_running.load() == Network::INITIAL || queue_size >= cfg_batch_size) {
         m_cv.notify_one();
     }
     entry->cv.wait(lk);
@@ -831,7 +830,7 @@ void GPUScheduler<net_t>::batch_worker(
         size_t count = 0;
         std::unique_lock<std::mutex> lk(m_mutex);
         while (true) {
-            if (!m_running) {
+            if (m_running.load() == Network::TERMINATION) {
                 return inputs;
             }
             count = m_forward_queue.size();
@@ -841,7 +840,7 @@ void GPUScheduler<net_t>::batch_worker(
             }
             bool timeout = !m_cv.wait_for(
                 lk, std::chrono::milliseconds(m_waittime), [this]() {
-                    return !m_running
+                    return m_running.load() == Network::TERMINATION
                            || m_forward_queue.size() >= cfg_batch_size;
                 }
             );
@@ -866,7 +865,7 @@ void GPUScheduler<net_t>::batch_worker(
                 }
             }
         }
-        if (!m_running) {
+        if (m_running.load() == Network::TERMINATION) {
             return inputs;
         }
         // Move 'count' evals from shared queue to local list.
@@ -881,12 +880,11 @@ void GPUScheduler<net_t>::batch_worker(
         std::list<std::shared_ptr<ForwardQueueEntry>> inputs;
         std::unique_lock<std::mutex> lk(m_mutex);
         m_cv.wait(lk, [this] {
-            return !m_running ||
-                m_draining.load() ||
+            return m_running.load() == Network::TERMINATION ||
                 m_forward_queue.size() >= cfg_batch_size ||
-                (m_forward_queue.size() == 1 && !m_forward_queue.front()->full_batch);
+                (m_forward_queue.size() >= 1 && m_running.load() == Network::INITIAL);
         });
-        if (!m_running) {
+        if (m_running.load() == Network::TERMINATION) {
             return inputs;
         }
         auto count = m_forward_queue.size();
@@ -894,8 +892,7 @@ void GPUScheduler<net_t>::batch_worker(
             return inputs;
         } else if (count >= static_cast<size_t>(cfg_batch_size)) {
             count = cfg_batch_size;
-        } else if (!m_draining.load() &&
-            m_forward_queue.front()->full_batch) {
+        } else if (m_running.load() == Network::SIMULATION) {
             return inputs;
         }
         // Move 'count' evals from shared queue to local list.
@@ -918,7 +915,7 @@ void GPUScheduler<net_t>::batch_worker(
         } else {
             inputs = pickup_task_wait();
         }
-        if (!m_running) {
+        if (m_running.load() == Network::TERMINATION) {
             return;
         }
         auto count = inputs.size();
@@ -959,7 +956,7 @@ void GPUScheduler<net_t>::batch_worker(
             }
         }
 #endif
-        if (!m_draining.load()) {
+        if (m_running.load() == Network::TERMINATION) {
             // run the NN evaluation
             if (cfg_backend == backend_t::OPENCL) {
                 m_networks[gnum]->forward(
@@ -1017,27 +1014,6 @@ void GPUScheduler<net_t>::batch_worker(
             m_single_eval_in_progress.exchange(false);
         }
     }
-}
-
-template <typename net_t>
-void GPUScheduler<net_t>::drain()
-{
-    // When signaled to drain requests, this method picks up all pending
-    // requests and wakes them up.  Throws exception once the woken up request
-    // sees m_draining.
-    m_draining.exchange(true);
-    m_cv.notify_all();
-}
-
-template <typename net_t>
-void GPUScheduler<net_t>::resume()
-{
-    {
-        std::unique_lock<std::mutex> lk(m_mutex);
-        m_forward_queue.clear();
-    }
-    // UCTNode::think() should wait for all child threads to complete before resuming.
-    m_draining.exchange(false);
 }
 
 template class GPUScheduler<float>;

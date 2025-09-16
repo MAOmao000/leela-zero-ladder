@@ -58,8 +58,7 @@ public:
                     const std::string &model_hash = "") override;
     bool forward(const std::vector<float>& input,
                  std::vector<float>& output_pol,
-                 std::vector<float>& output_val,
-                 const bool full_batch) override;
+                 std::vector<float>& output_val) override;
 
     void push_weights(const unsigned int filter_size,
                       const unsigned int channels,

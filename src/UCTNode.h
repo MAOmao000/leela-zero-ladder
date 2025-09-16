@@ -55,7 +55,7 @@ public:
     ~UCTNode() = default;
 
     bool create_children(Network& network, std::atomic<int>& nodecount,
-                         GameState& state, float& eval, const bool full_batch,
+                         GameState& state, float& eval,
                          const float min_psa_ratio = 0.0f);
 
     const std::vector<UCTNodePointer>& get_children() const;

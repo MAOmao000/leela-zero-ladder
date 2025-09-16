@@ -60,7 +60,7 @@ bool UCTNode::first_visit() const {
 }
 
 bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
-                              GameState& state, float& eval, const bool full_batch,
+                              GameState& state, float& eval,
                               const float min_psa_ratio) {
     // no successors in final state
     if (state.get_passes() >= 2) {
@@ -80,7 +80,7 @@ bool UCTNode::create_children(Network& network, std::atomic<int>& nodecount,
 
     NNCache::Netresult raw_netlist;
     if (!network.get_output(
-        &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist, full_batch)) {
+        &state, Network::Ensemble::RANDOM_SYMMETRY, raw_netlist)) {
         expand_cancel();
         return false;
     }

@@ -169,7 +169,7 @@ void Training::record(Network& network, GameState& state,
     step.planes = get_planes(&state);
 
     NNCache::Netresult result;
-    if (!network.get_output(&state, Network::Ensemble::DIRECT, result, false,
+    if (!network.get_output(&state, Network::Ensemble::DIRECT, result,
                             Network::IDENTITY_SYMMETRY)) {
         return;
     }

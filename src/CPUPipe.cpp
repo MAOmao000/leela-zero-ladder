@@ -445,10 +445,7 @@ void batchnorm_no_relu(const size_t channels,
 
 bool CPUPipe::forward(const std::vector<float>& input,
                       std::vector<float>& output_pol,
-                      std::vector<float>& output_val,
-                      const bool full_batch) {
-    // For compatibility with GPU backend implementation
-    (void) full_batch;
+                      std::vector<float>& output_val) {
 
     const auto lambda_Sig = [](const auto val) { return 1.f / (1.f + std::exp(-val)); };
     // Input convolution

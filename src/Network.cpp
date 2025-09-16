@@ -79,25 +79,27 @@ float Network::benchmark_time(const int centiseconds) {
     // Isn't enough to guarantee correctness but better than nothing,
     // plus for large nets self-check takes a while (1~3 eval per second)
     Netresult result;
-    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, false, -1, false, false, false);
+    set_gpu_run(Network::INITIAL);
+    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false, false);
 
+    set_gpu_run(Network::SIMULATION);
     const Time start;
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, start, centiseconds, state]() {
             while (true) {
                 runcount++;
-                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
                 const Time end;
                 const auto elapsed = Time::timediff_centis(start, end);
                 if (elapsed >= centiseconds) {
+                    set_gpu_run(Network::INITIAL);
+                    get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false, false);
                     break;
                 }
+                get_output(&state, Ensemble::RANDOM_SYMMETRY, result, -1, false, false);
             }
-            drain_evals();
         });
     }
     tg.wait_all();
-    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_centis(start, end);
@@ -112,17 +114,21 @@ void Network::benchmark(const GameState* state, const int iterations) {
     std::atomic<int> runcount{0};
     Netresult result;
 
+    set_gpu_run(Network::SIMULATION);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
         tg.add_task([this, &runcount, &result, iterations, state]() {
-            while (runcount < iterations) {
+            while (true) {
                 runcount++;
-                get_output(state, Ensemble::RANDOM_SYMMETRY, result, true, -1, false, false, false);
+                if (runcount >= iterations) {
+                    set_gpu_run(Network::INITIAL);
+                    get_output(state, Ensemble::RANDOM_SYMMETRY, result, -1, false, false);
+                    break;
+                }
+                get_output(state, Ensemble::RANDOM_SYMMETRY, result, -1, false, false);
             }
-            drain_evals();
         });
     }
     tg.wait_all();
-    resume_evals();
 
     const Time end;
     const auto elapsed = Time::timediff_seconds(start, end);
@@ -748,7 +754,7 @@ bool Network::probe_cache(const GameState* const state,
 
 bool Network::get_output(
     const GameState* state, const Ensemble ensemble,
-    Network::Netresult& result, const bool full_batch,
+    Network::Netresult& result,
     const int symmetry,
     const bool read_cache, const bool write_cache,
     bool force_selfcheck) {
@@ -769,7 +775,7 @@ bool Network::get_output(
     if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
         sym_tbl = symmetry;
-        ret = get_output_internal(state, symmetry, result, full_batch);
+        ret = get_output_internal(state, symmetry, result);
         if (!ret) {
             return false;
         }
@@ -778,7 +784,7 @@ bool Network::get_output(
         sym_tbl = 0;
         for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
             Netresult tmpresult;
-            ret = get_output_internal(state, sym, tmpresult, full_batch);
+            ret = get_output_internal(state, sym, tmpresult);
             if (!ret) {
                 break;
             }
@@ -799,7 +805,7 @@ bool Network::get_output(
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         sym_tbl = Random::get_Rng().randfix<NUM_SYMMETRIES>();
-        ret = get_output_internal(state, sym_tbl, result, full_batch);
+        ret = get_output_internal(state, sym_tbl, result);
         if (!ret) {
             return false;
         }
@@ -812,7 +818,7 @@ bool Network::get_output(
             && (force_selfcheck
                 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)) {
             Netresult result_ref;
-            ret = get_output_internal(state, sym_tbl, result_ref, full_batch, true);
+            ret = get_output_internal(state, sym_tbl, result_ref, true);
             if (!ret) {
                 return false;
             }
@@ -845,7 +851,6 @@ bool Network::get_output(
 bool Network::get_output_internal(const GameState* state,
                                   const int symmetry,
                                   Network::Netresult& result,
-                                  const bool full_batch,
                                   bool selfcheck) {
 
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
@@ -854,17 +859,17 @@ bool Network::get_output_internal(const GameState* state,
     std::vector<float> value_data(1);
 #ifdef USE_OPENCL_SELFCHECK
     if (selfcheck && m_forward_cpu != nullptr) {
-        if (!m_forward_cpu->forward(input_data, policy_data, value_data, full_batch)) {
+        if (!m_forward_cpu->forward(input_data, policy_data, value_data)) {
             return false;
         }
     } else {
-        if (!m_forward->forward(input_data, policy_data, value_data, full_batch)) {
+        if (!m_forward->forward(input_data, policy_data, value_data)) {
             return false;
         }
     }
 #else
     (void) selfcheck;
-    if (!m_forward->forward(input_data, policy_data, value_data, full_batch)) {
+    if (!m_forward->forward(input_data, policy_data, value_data)) {
         return false;
     }
 #endif
@@ -1069,15 +1074,3 @@ void Network::nncache_dump() {
     m_nncache.dump_stats();
 }
 #endif
-
-void Network::drain_evals() {
-    if (!cfg_cpu_only) {
-        m_forward->drain();
-    }
-}
-
-void Network::resume_evals() {
-    if (!cfg_cpu_only) {
-        m_forward->resume();
-    }
-}

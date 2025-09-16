@@ -81,16 +81,14 @@ public:
     };
     virtual bool forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
-                         std::vector<float>& output_val,
-                         const bool full_batch) = 0;
+                         std::vector<float>& output_val) = 0;
     virtual void push_weights(
         const unsigned int filter_size,
         const unsigned int channels,
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights) = 0;
 
-    virtual void drain() {}
-    virtual void resume() {}
+    virtual void set_gpu_run(int running) {}
     virtual void wait_time_reset() {}
 };
 

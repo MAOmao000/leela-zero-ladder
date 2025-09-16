@@ -309,7 +309,7 @@ SearchResult UCTSearch::play_simulation(GameState& currstate,
                 float eval;
                 const auto had_children = currnode->has_children();
                 const auto success = currnode->create_children(
-                    m_network, m_nodes, currstate, eval, true, get_min_psa_ratio());
+                    m_network, m_nodes, currstate, eval, get_min_psa_ratio());
                 if (!had_children && success) {
                     result = SearchResult::from_eval(eval);
                     new_node = true;
@@ -710,6 +710,7 @@ bool UCTSearch::is_running() const {
 
 void UCTSearch::set_running(bool runnung) {
     std::lock_guard<std::mutex> lock(m_mutex);
+    m_network.set_gpu_run(Network::INITIAL);
     m_run.store(runnung);
 }
 
@@ -821,15 +822,6 @@ void UCTWorker::operator()() {
     std::chrono::system_clock::time_point start_time, end_time;
     int lagtime = 0;
     while(true) {
-        start_time = std::chrono::system_clock::now();
-        auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation(*currstate, m_root);
-        if (result.valid()) {
-            m_search->increment_playouts();
-        }
-        if (!m_search->is_running()) {
-            break;
-        }
         if (m_start) {
             Time elapsed;
             int elapsed_centis = Time::timediff_centis(*m_start, elapsed);
@@ -844,6 +836,15 @@ void UCTWorker::operator()() {
                 break;
             }
         }
+        start_time = std::chrono::system_clock::now();
+        auto currstate = std::make_unique<GameState>(m_rootstate);
+        auto result = m_search->play_simulation(*currstate, m_root);
+        if (result.valid()) {
+            m_search->increment_playouts();
+        }
+        if (!m_search->is_running()) {
+            break;
+        }
         end_time = std::chrono::system_clock::now();
         lagtime = static_cast<int>(
             std::chrono::duration_cast<std::chrono::microseconds>(
@@ -852,7 +853,6 @@ void UCTWorker::operator()() {
             lagtime = m_time_for_move / 2;
         }
     }
-    m_network.drain_evals();
 }
 
 void UCTSearch::increment_playouts() {
@@ -875,6 +875,8 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     myprintf("Thinking at most %.1f seconds...\n", time_for_move / 100.0f);
 
+    m_network.set_gpu_run(Network::INITIAL);
+
     // create a sorted list of legal moves (make sure we
     // play something legal and decent even in time trouble)
     m_root->prepare_root_node(m_network, color, m_nodes, m_rootstate);
@@ -883,6 +885,8 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_run.store(true);
     }
+
+    m_network.set_gpu_run(Network::SIMULATION);
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
@@ -905,7 +909,6 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     } else {
         tg.wait_all();
     }
-    m_network.resume_evals();
     // Reactivate all pruned root children.
     for (const auto& node : m_root->get_children()) {
         node->set_active(true);
@@ -962,6 +965,8 @@ void UCTSearch::ponder() {
 
     update_root();
 
+    m_network.set_gpu_run(Network::INITIAL);
+
     m_root->prepare_root_node(m_network, m_rootstate.board.get_to_move(),
                               m_nodes, m_rootstate);
 
@@ -969,6 +974,8 @@ void UCTSearch::ponder() {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_run.store(true);
     }
+
+    m_network.set_gpu_run(Network::SIMULATION);
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
@@ -989,7 +996,6 @@ void UCTSearch::ponder() {
     } else {
         tg.wait_all();
     }
-    m_network.resume_evals();
     // Display search info.
     myprintf("\n");
     dump_stats(m_rootstate, *m_root);

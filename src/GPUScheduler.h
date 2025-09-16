@@ -60,17 +60,14 @@ class GPUScheduler : public ForwardPipe {
     public:
         std::mutex mutex;
         std::condition_variable cv;
-        const bool full_batch;
         const std::vector<float>& in;
         std::vector<float>& out_p;
         std::vector<float>& out_v;
         ForwardQueueEntry(
             const std::vector<float>& input,
             std::vector<float>& output_pol,
-            std::vector<float>& output_val,
-            const bool full)
-                : full_batch(full),
-                in(input),
+            std::vector<float>& output_val)
+                : in(input),
                 out_p(output_pol),
                 out_v(output_val) {}
     };
@@ -94,8 +91,7 @@ public:
     bool forward(
         const std::vector<float>& input,
         std::vector<float>& output_pol,
-        std::vector<float>& output_val,
-        const bool full_batch
+        std::vector<float>& output_val
     ) override;
     void batch_worker(
         const size_t gnum,
@@ -104,10 +100,12 @@ public:
     void wait_time_reset() override {
         m_waittime = cfg_batch_wait_time;
     }
+    void set_gpu_run(int running) override {
+        m_running.store(running);
+        m_cv.notify_all();
+    }
 
 private:
-    void drain() override;
-    void resume() override;
     void push_input_convolution(
         const unsigned int filter_size,
         const unsigned int channels,
@@ -136,7 +134,6 @@ private:
         const std::shared_ptr<const ForwardPipeWeights> weights
     );
 
-    std::atomic<bool> m_draining{false};
     // start with 10 milliseconds : lock protected
     int m_waittime{10};
     // set to true when single (non-batch) eval is in progress
@@ -149,7 +146,7 @@ private:
 #endif
 
 protected: // Member variables used by GPUSheduler
-    bool m_running = true;
+    std::atomic<int> m_running{Network::INITIAL};
     std::vector<std::unique_ptr<OpenCL_Network<net_t>>> m_networks;
     std::mutex m_mutex;
     std::condition_variable m_cv;

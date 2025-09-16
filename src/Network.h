@@ -74,7 +74,7 @@ public:
     ~Network() = default;
 
     bool get_output(const GameState* state, const Ensemble ensemble,
-                    Network::Netresult& result, const bool full_batch,
+                    Network::Netresult& result,
                     const int symmetry = -1, const bool read_cache = true,
                     const bool write_cache = true, const bool force_selfcheck = false);
 
@@ -83,6 +83,9 @@ public:
     static constexpr auto OUTPUTS_POLICY = 2;
     static constexpr auto OUTPUTS_VALUE = 1;
     static constexpr auto VALUE_LAYER = 256;
+    static constexpr auto INITIAL = 1;
+    static constexpr auto SIMULATION = 2;
+    static constexpr auto TERMINATION = 3;
 
     void initialize(int playouts, const std::string& weightsfile);
 
@@ -104,10 +107,9 @@ public:
     void nncache_dump();
 #endif
 
-    void drain_evals();
-
-    // Flag the network to be open for business.
-    void resume_evals();
+    void set_gpu_run(int running) {
+        m_forward->set_gpu_run(running);
+    }
 
     NetworkType get_network_type() {
         return m_net_type;
@@ -129,7 +131,6 @@ private:
     bool get_output_internal(const GameState* state,
                              int symmetry,
                              Network::Netresult& result,
-                             const bool full_batch,
                              bool selfcheck = false);
     static void fill_input_plane_pair(const FullBoard& board,
                                       std::vector<float>::iterator black,
