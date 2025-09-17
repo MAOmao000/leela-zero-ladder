@@ -88,7 +88,9 @@ public:
         const unsigned int outputs,
         const std::shared_ptr<const ForwardPipeWeights> weights) = 0;
 
-    virtual void set_gpu_run(int running) {}
+    virtual void set_gpu_run(int running) {
+        (void) running;
+    }
     virtual void wait_time_reset() {}
 };
 
