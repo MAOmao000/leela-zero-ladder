@@ -956,7 +956,7 @@ void GPUScheduler<net_t>::batch_worker(
             }
         }
 #endif
-        if (m_running.load() == Network::TERMINATION) {
+        if (m_running.load() != Network::TERMINATION) {
             // run the NN evaluation
             if (cfg_backend == backend_t::OPENCL) {
                 m_networks[gnum]->forward(
