@@ -512,11 +512,7 @@ bool BackendTRT<net_t>::constructNetwork(
 
         // See. https://github.com/NVIDIA/TensorRT/issues/2282
         auto inShapeLayer = network->addShape(*batchSizeTensor);
-        auto castLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
-
-        shapeLayer = network->addUnary(
-            *castLayer->getOutput(0),
-            UnaryOperation::kABS);
+        shapeLayer = network->addCast(*inShapeLayer->getOutput(0), DataType::kINT32);
     }
 
     for (auto iter = std::begin(m_layers);
