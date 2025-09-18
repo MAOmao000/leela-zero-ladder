@@ -890,7 +890,7 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network,
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(),
             &start, time_for_move));
     }
 
@@ -979,7 +979,7 @@ void UCTSearch::ponder() {
 
     ThreadGroup tg(thread_pool);
     for (auto i = size_t{0}; i < cfg_num_threads; i++) {
-        tg.add_task(UCTWorker(m_rootstate, this, m_root.get(), m_network));
+        tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
     }
     if (cfg_analyze_tags.interval_centis()) {
         m_analysis_stop = false;
