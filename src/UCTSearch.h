@@ -146,7 +146,6 @@ private:
     std::atomic<int> m_playouts{0};
     std::atomic<int> m_numanalysis{0};
     std::atomic<bool> m_run{false};
-    std::atomic<bool> m_kill{false};
     int m_maxplayouts;
     int m_maxvisits;
     std::string m_think_output;
@@ -156,11 +155,13 @@ private:
     Network& m_network;
 
     std::mutex m_mutex;
-    std::mutex m_mutex_stop;
     std::condition_variable m_cv;
+    std::condition_variable m_cv_analysis_start;
     std::condition_variable m_cv_analysis_stop;
     bool m_analysis_out{true};
     bool m_analysis_stop{false};
+    bool m_analysis_run{false};
+    bool m_kill{false};
     std::thread m_analysis;
 };
 

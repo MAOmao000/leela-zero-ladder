@@ -125,13 +125,13 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
         while (true) {
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
-                m_cv.wait(lock, [this]() {
-                    return m_run.load() || m_kill.load();
+                m_cv_analysis_start.wait(lock, [this]() {
+                    return m_analysis_run || m_kill;
                 });
-                // first: m_run:true m_kill:false
+                // first: m_analysis_run:true m_kill:false
                 // quit:  m_run:true m_kill:true
             }
-            if (m_kill.load()) {
+            if (m_kill) {
                 return;
             }
             m_numanalysis.store(0);
@@ -154,7 +154,7 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
                 }
             }
             {
-                std::lock_guard<std::mutex> lock(m_mutex_stop);
+                std::lock_guard<std::mutex> lock(m_mutex);
                 m_analysis_stop = true;
             }
             m_cv_analysis_stop.notify_one();
@@ -166,9 +166,10 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
 UCTSearch::~UCTSearch() {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_run.store(true);
-        m_kill.store(true);
+        m_analysis_run = true;
+        m_kill = true;
     }
+    m_cv_analysis_start.notify_one();
     m_cv.notify_one();
     m_analysis.join();
 }
@@ -895,13 +896,17 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     }
 
     if (cfg_analyze_tags.interval_centis()) {
-        m_analysis_stop = false;
-        m_cv.notify_one();
-        tg.wait_all();
-        m_cv.notify_one();
         {
-            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_analysis_stop = false;
+            m_analysis_run = true;
+        }
+        m_cv_analysis_start.notify_one();
+        tg.wait_all();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
             m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
+            m_analysis_run = false;
         }
         if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
@@ -982,13 +987,17 @@ void UCTSearch::ponder() {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
     }
     if (cfg_analyze_tags.interval_centis()) {
-        m_analysis_stop = false;
-        m_cv.notify_one();
-        tg.wait_all();
-        m_cv.notify_one();
         {
-            std::unique_lock<std::mutex> lock(m_mutex_stop);
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_analysis_stop = false;
+            m_analysis_run = true;
+        }
+        m_cv_analysis_start.notify_one();
+        tg.wait_all();
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
             m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
+            m_analysis_run = false;
         }
         if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
