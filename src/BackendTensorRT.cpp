@@ -142,17 +142,6 @@ bool BackendTRT<net_t>::build(
     const int num_worker_threads,
     const int64_t batch_size) {
 
-    // Bump this when between program versions we want to forcibly drop old timing caches and plan caches.
-    std::string tune_desc = strprintf(
-        R"|("salt"(%s_%s_%s)"model %s"(%s,%d,%d))|",
-        PROGRAM_VERSION_MAJOR,
-        PROGRAM_VERSION_MINOR,
-        PROGRAM_VERSION_PATCH,
-        typeid(net_t) == typeid(float) ? "single" : "half",
-        "1.0",                    // model version
-        Network::INPUT_CHANNELS,  // number of input channels
-        batch_size
-    );
     auto builder
         = TrtUniquePtr<IBuilder>(createInferBuilder(cfg_logger.getTRTLogger()));
     if (!builder) {
@@ -202,7 +191,7 @@ bool BackendTRT<net_t>::build(
     auto ext_i = filename.find_last_of(".");
     std::string weightsfile = filename.substr(0, ext_i);
     network->setName(weightsfile.c_str());
-    if (!constructNetwork(network, tune_desc)) {
+    if (!constructNetwork(network)) {
         std::cerr << "TensorRT backend: failed to construct network" << std::endl;
         return false;
     }
@@ -239,23 +228,13 @@ bool BackendTRT<net_t>::build(
         std::string precision = typeid(net_t) == typeid(float) ? "single" : "half";
         std::string sep_char{std::filesystem::path::preferred_separator};
 
-        uint8_t tuneHash[32];
-        SHA2::get256(tune_desc.c_str(), tuneHash);
-        // Truncated to 6 bytes
-        char tuneIdent[6 * 2 + 1];
-        for(int i = 0; i < 6; i++) {
-            sprintf(tuneIdent + i * 2, "%02x", static_cast<unsigned char>(tuneHash[i]));
-        }
-        tuneIdent[sizeof(tuneIdent) - 1] = 0;
-
         if (cfg_cache_plan) {
             auto planCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_net-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_%s",
+                "%s%strt-%d_gpu-%s_net-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
-                tuneIdent,
                 network->getName(),
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
@@ -354,12 +333,11 @@ bool BackendTRT<net_t>::build(
 #endif
         } else {
             auto timingCacheFile = strprintf(
-                "%s%strt-%d_gpu-%s_tune-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_%s",
+                "%s%strt-%d_gpu-%s_%s_%s_%s_%dx%d_batch%" PRId64 "x%d_%s",
                 cacheDir.c_str(),
                 sep_char.c_str(),
                 getInferLibVersion(),
                 deviceIdent,
-                tuneIdent,
                 PROGRAM_VERSION_MAJOR,
                 PROGRAM_VERSION_MINOR,
                 PROGRAM_VERSION_PATCH,
@@ -493,8 +471,7 @@ bool BackendTRT<net_t>::build(
 
 template <typename net_t>
 bool BackendTRT<net_t>::constructNetwork(
-    TrtUniquePtr<INetworkDefinition>& network,
-    std::string& tune_desc) {
+    TrtUniquePtr<INetworkDefinition>& network) {
 
     ITensor* inputFeature = nullptr;
     ITensor* outputConv = nullptr;
@@ -536,14 +513,9 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv",
                 layer.outputs);
-            auto outputConvLayer = buildActivationLayer(
-                initialConvLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation",
+            auto outputConvLayer = network->addActivation(
+                *initialConvLayer->getOutput(0),
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && !layer.is_se_block) {
@@ -563,14 +535,9 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv1_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.first",
                 layer.outputs);
-            auto firstActivationConvLayer = buildActivationLayer(
-                firstConvLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.first",
+            auto firstActivationConvLayer = network->addActivation(
+                *firstConvLayer->getOutput(0),
                 ActivationType::kRELU);
             auto secondConvLayer = buildConvLayer(
                 firstActivationConvLayer->getOutput(0),
@@ -580,16 +547,11 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[3],
                 conv2_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.second",
                 layer.outputs);
             auto mergeLayer = network->addElementWise(
                 *outputConv, *secondConvLayer->getOutput(0), ElementWiseOperation::kSUM);
-            auto outputConvLayer = buildActivationLayer(
-                mergeLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.final",
+            auto outputConvLayer = network->addActivation(
+                *mergeLayer->getOutput(0),
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else if (layer.is_residual_block && layer.is_se_block) {
@@ -613,14 +575,9 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[1],
                 conv1_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.first",
                 layer.outputs);
-            auto firstActivationConvLayer = buildActivationLayer(
-                firstConvLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.first",
+            auto firstActivationConvLayer = network->addActivation(
+                *firstConvLayer->getOutput(0),
                 ActivationType::kRELU);
             auto secondConvLayer = buildConvLayer(
                 firstActivationConvLayer->getOutput(0),
@@ -630,13 +587,12 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[3],
                 conv2_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.second",
                 layer.outputs);
             // pool = tf.layers.average_pooling2d(residual, pool_size=go.N, strides=1, padding='valid')
-            auto gpoolLayer = applyGPoolLayer(
-                secondConvLayer->getOutput(0),
-                network);
+            auto gpoolLayer = network->addPoolingNd(
+                *secondConvLayer->getOutput(0),
+                PoolingType::kAVERAGE,
+                DimsHW{BOARD_SIZE, BOARD_SIZE});
             // fc1 = tf.layers.dense(pool, units=channels // 2)
             auto thirdMatMulLayer = buildConvLayer(
                 gpoolLayer->getOutput(0),
@@ -646,15 +602,10 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[5],
                 fc1_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.third",
                 layer.outputs / 2);
             // squeeze = tf.nn.relu(fc1)
-            auto thirdActivationMatLayer = buildActivationLayer(
-                thirdMatMulLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.third",
+            auto thirdActivationMatLayer = network->addActivation(
+                *thirdMatMulLayer->getOutput(0),
                 ActivationType::kRELU);
             // fc2 = tf.layers.dense(squeeze, units=2*channels)
             auto fourthMatMulLayer = buildConvLayer(
@@ -665,8 +616,6 @@ bool BackendTRT<net_t>::constructNetwork(
                 layer.weights_size[7],
                 fc2_biases[0],
                 network,
-                tune_desc,
-                layer.name + ".conv.fourth",
                 layer.outputs * 2);
             // gamma = tf.split(fc2, 2, axis=3)
             auto gammaLayer = network->addSlice(
@@ -685,11 +634,8 @@ bool BackendTRT<net_t>::constructNetwork(
             );
             biasLayer->setInput(2, *shapeLayer->getOutput(0));
             // sig = tf.nn.sigmoid(gamma)
-            auto sigLayer = buildActivationLayer(
-                gammaLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.sig",
+            auto sigLayer = network->addActivation(
+                *gammaLayer->getOutput(0),
                 ActivationType::kSIGMOID);
             // scale = tf.reshape(sig, [-1, 1, 1, channels])
             // excitation = tf.multiply(scale, residual) + bias
@@ -710,11 +656,8 @@ bool BackendTRT<net_t>::constructNetwork(
                 *excitationLayer->getOutput(0),
                 ElementWiseOperation::kSUM);
             // shared_output = tf.nn.relu(inputs + excitation)
-            auto outputConvLayer = buildActivationLayer(
-                mergeLayer->getOutput(0),
-                network,
-                tune_desc,
-                layer.name + ".activation.final",
+            auto outputConvLayer = network->addActivation(
+                *mergeLayer->getOutput(0),
                 ActivationType::kRELU);
             outputConv = outputConvLayer->getOutput(0);
         } else {
@@ -735,15 +678,10 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[1],
                     biases[0],
                     network,
-                    tune_desc,
-                    layer.name + ".conv",
                     layer.outputs);
                 // value_conv = tf.nn.relu(value_conv)
-                auto actValueLayer = buildActivationLayer(
-                    valueConvLayer->getOutput(0),
-                    network,
-                    tune_desc,
-                    layer.name + ".act",
+                auto actValueLayer = network->addActivation(
+                    *valueConvLayer->getOutput(0),
                     ActivationType::kRELU);
                 // value_conv = tf.reshape(value_conv, [-1, 1 * go.N * go.N])
                 int32_t const mmInputs = static_cast<int32_t>(
@@ -763,15 +701,10 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[3],
                     ip1_val_bias[0],
                     network,
-                    tune_desc,
-                    layer.name + ".val1.matmul",
                     Network::VALUE_LAYER);
                 // value_fc_hidden = tf.nn.relu(value_fc_hidden)
-                auto val1ActLayer = buildActivationLayer(
-                    val1MatMulLayer->getOutput(0),
-                    network,
-                    tune_desc,
-                    layer.name + ".val1.activation",
+                auto val1ActLayer = network->addActivation(
+                    *val1MatMulLayer->getOutput(0),
                     ActivationType::kRELU);
                 // value_fc_hidden = tf.layers.dense(value_fc_hidden, units=1)
                 auto val2MatMulLayer = buildConvLayer(
@@ -782,16 +715,11 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[5],
                     ip2_val_bias[0],
                     network,
-                    tune_desc,
-                    layer.name + ".val2.matmul",
                     1);
                 // value_fc_hidden = tf.reshape(value_fc_hidden, [-1])
                 // value_output = tf.nn.tanh(value_fc_hidden)
-                outValueLayer = buildActivationLayer(
-                    val2MatMulLayer->getOutput(0),
-                    network,
-                    tune_desc,
-                    layer.name + ".val.tanh",
+                outValueLayer = network->addActivation(
+                    *val2MatMulLayer->getOutput(0),
                     ActivationType::kTANH);
             } else {
                 auto ip_pol_weight = begin(layer.weights) + 2;
@@ -806,15 +734,10 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[1],
                     biases[0],
                     network,
-                    tune_desc,
-                    layer.name + ".conv",
                     layer.outputs);
                 // policy_conv = tf.nn.relu(policy_conv)
-                auto actPolicyLayer = buildActivationLayer(
-                    policyConvLayer->getOutput(0),
-                    network,
-                    tune_desc,
-                    layer.name + ".act",
+                auto actPolicyLayer = network->addActivation(
+                    *policyConvLayer->getOutput(0),
                     ActivationType::kRELU);
                 // policy_conv = tf.reshape(policy_conv, [-1, 2 * go.N * go.N])
                 int32_t const mmInputs = static_cast<int32_t>(
@@ -834,8 +757,6 @@ bool BackendTRT<net_t>::constructNetwork(
                     layer.weights_size[3],
                     ip_pol_bias[0],
                     network,
-                    tune_desc,
-                    layer.name + ".pol.matmul",
                     POTENTIAL_MOVES);
                 // policy_output = tf.nn.softmax(logits)
                 outPolicyLayer = network->addSoftMax(*polMatMulLayer->getOutput(0));
@@ -892,16 +813,7 @@ ILayer* BackendTRT<net_t>::buildConvLayer(
     int64_t biases_size,
     void* biases,
     TrtUniquePtr<INetworkDefinition>& network,
-    std::string& tune_desc,
-    std::string op_name,
     unsigned int outputs) {
-
-    tune_desc += strprintf(
-        R"|("%s"(%d,%d,%d))|",
-        op_name.c_str(),
-        filter_size,
-        filter_size,
-        outputs);
 
     auto data_type = (typeid(net_t) == typeid(float)) ? DataType::kFLOAT : DataType::kHALF;
     // For convenience, both I/O tensors have 3 dimentions (in addition to batch), so that
@@ -927,36 +839,6 @@ ILayer* BackendTRT<net_t>::buildConvLayer(
     convLayer->setDilationNd({2, {1, 1}});
     convLayer->setPaddingMode(PaddingMode::kSAME_UPPER);
     return convLayer;
-}
-
-template <typename net_t>
-ILayer* BackendTRT<net_t>::buildActivationLayer(
-    ITensor* input,
-    TrtUniquePtr<INetworkDefinition>& network,
-    std::string& tune_desc,
-    std::string op_name,
-    ActivationType act_type) {
-
-    tune_desc += strprintf(
-        R"|("%s"(%d))|",
-        op_name.c_str(),
-        (int)act_type);
-
-    auto activationLayer = network->addActivation(*input, act_type);
-    return activationLayer;
-}
-
-template <typename net_t>
-ILayer* BackendTRT<net_t>::applyGPoolLayer(
-    ITensor* input,
-    TrtUniquePtr<INetworkDefinition>& network) {
-
-    IPoolingLayer* gpoolMeanLayer
-        = network->addPoolingNd(
-            *input,
-            PoolingType::kAVERAGE,
-            DimsHW{BOARD_SIZE, BOARD_SIZE});
-    return gpoolMeanLayer;
 }
 
 template <typename net_t>

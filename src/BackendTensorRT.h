@@ -301,8 +301,7 @@ private:
 
     // Create full model using the TensorRT network definition API and build the engine.
     bool constructNetwork(
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string& tune_desc
+        TrtUniquePtr<nvinfer1::INetworkDefinition>& network
     );
 
     nvinfer1::ITensor* initInputs(
@@ -321,22 +320,7 @@ private:
         int64_t biases_size,
         void* biases,
         TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string& tune_desc,
-        std::string op_name,
         unsigned int outputs
-    );
-
-    nvinfer1::ILayer* buildActivationLayer(
-        nvinfer1::ITensor* input,
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network,
-        std::string& tune_desc,
-        std::string op_name,
-        nvinfer1::ActivationType act_type
-    );
-
-    nvinfer1::ILayer* applyGPoolLayer(
-        nvinfer1::ITensor* input,
-        TrtUniquePtr<nvinfer1::INetworkDefinition>& network
     );
 
     size_t get_layer_count() const {
