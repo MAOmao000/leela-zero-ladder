@@ -120,58 +120,14 @@ UCTSearch::UCTSearch(GameState& g, Network& network)
     set_visit_limit(cfg_max_visits);
 
     m_root = std::make_unique<UCTNode>(FastBoard::PASS, 0.0f);
-
-    auto analysis = [this]() {
-        while (true) {
-            {
-                std::unique_lock<std::mutex> lock(m_mutex);
-                m_cv_analysis_start.wait(lock, [this]() {
-                    return m_analysis_run || m_kill;
-                });
-                // first: m_analysis_run:true m_kill:false
-                // quit:  m_run:true m_kill:true
-            }
-            if (m_kill) {
-                return;
-            }
-            m_numanalysis.store(0);
-            while (true) {
-                {
-                    std::unique_lock<std::mutex> lock(m_mutex);
-                    m_cv.wait_for(
-                        lock, std::chrono::milliseconds(
-                            cfg_analyze_tags.interval_centis() * 10), [this]() {
-                                return !m_run.load();
-                    });
-                    // first: m_run:true
-                }
-                if (m_run.load()) {
-                    if (output_analysis(m_rootstate, *m_root)) {
-                        m_numanalysis++;
-                    }
-                } else {
-                    break;
-                }
-            }
-            {
-                std::lock_guard<std::mutex> lock(m_mutex);
-                m_analysis_stop = true;
-            }
-            m_cv_analysis_stop.notify_one();
-        }
-    };
-    m_analysis = std::thread(analysis);
 }
 
 UCTSearch::~UCTSearch() {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_analysis_run = true;
         m_kill = true;
     }
-    m_cv_analysis_start.notify_one();
     m_cv.notify_one();
-    m_analysis.join();
 }
 
 bool UCTSearch::advance_to_new_rootstate() {
@@ -896,18 +852,28 @@ int UCTSearch::think(const int color, const passflag_t passflag) {
     }
 
     if (cfg_analyze_tags.interval_centis()) {
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_analysis_stop = false;
-            m_analysis_run = true;
-        }
-        m_cv_analysis_start.notify_one();
+        ThreadGroup tg_analysis(thread_pool);
+        tg_analysis.add_task([this]() {
+            while (true) {
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_cv.wait_for(
+                        lock, std::chrono::milliseconds(
+                            cfg_analyze_tags.interval_centis() * 10), [this]() {
+                                return !m_run.load();
+                    });
+                }
+                if (m_run.load()) {
+                    if (output_analysis(m_rootstate, *m_root)) {
+                        m_numanalysis++;
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
         tg.wait_all();
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
-            m_analysis_run = false;
-        }
+        tg_analysis.wait_all();
         if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
         }
@@ -987,18 +953,28 @@ void UCTSearch::ponder() {
         tg.add_task(UCTWorker(m_rootstate, this, m_root.get()));
     }
     if (cfg_analyze_tags.interval_centis()) {
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_analysis_stop = false;
-            m_analysis_run = true;
-        }
-        m_cv_analysis_start.notify_one();
+        ThreadGroup tg_analysis(thread_pool);
+        tg_analysis.add_task([this]() {
+            while (true) {
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_cv.wait_for(
+                        lock, std::chrono::milliseconds(
+                            cfg_analyze_tags.interval_centis() * 10), [this]() {
+                                return !m_run.load();
+                    });
+                }
+                if (m_run.load()) {
+                    if (output_analysis(m_rootstate, *m_root)) {
+                        m_numanalysis++;
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
         tg.wait_all();
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv_analysis_stop.wait(lock, [this]() { return m_analysis_stop; });
-            m_analysis_run = false;
-        }
+        tg_analysis.wait_all();
         if (!m_numanalysis.load()) {
             output_analysis(m_rootstate, *m_root);
         }
